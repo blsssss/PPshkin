@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 
 export const DEMO_ACCOUNTS = {
-  guest: { userId: 9_000_000_001, firstName: 'Демо-гость' },
-  venue: { userId: 9_000_000_002, firstName: 'Демо-заведение' },
+  guest: { userId: -1001, firstName: 'Демо-гость' },
+  venue: { userId: -1002, firstName: 'Демо-заведение' },
 } as const;
 
 export type DemoRole = keyof typeof DEMO_ACCOUNTS;

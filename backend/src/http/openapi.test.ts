@@ -42,6 +42,33 @@ describe('OpenAPI document', () => {
     }
   });
 
+  it('gives every operation a unique operation id', () => {
+    const ids = operations.map(({ operation }) => operation.operationId);
+    expect(ids.every((id) => typeof id === 'string' && /^[a-z][A-Za-z]+$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('documents server errors everywhere and auth and rate limit errors where they apply', () => {
+    for (const { path, method, operation } of operations) {
+      const label = `${method.toUpperCase()} ${path}`;
+      const responses = operation.responses as Record<string, OpenAPIV3_1.ResponseObject>;
+      expect(responses['500'], label).toBeDefined();
+      if (path !== '/health') {
+        expect(responses['429']?.headers?.['Retry-After'], label).toBeDefined();
+      }
+      if (operation.security?.length) {
+        expect(responses['401']?.headers?.['WWW-Authenticate'], label).toBeDefined();
+      }
+      for (const [status, response] of Object.entries(responses)) {
+        if (status.startsWith('4') || status.startsWith('5')) {
+          expect(Object.keys(response.content ?? {}), `${label} ${status}`).toEqual([
+            'application/problem+json',
+          ]);
+        }
+      }
+    }
+  });
+
   it('protects every API operation except sign in', () => {
     const open = operations
       .filter(({ path }) => path.startsWith('/api/'))

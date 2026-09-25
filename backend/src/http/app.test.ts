@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
+import { expectContract } from '../../test/contract.ts';
 import { bearer, buildTestApp } from '../../test/services.ts';
 import { conflict } from '../shared/errors.ts';
-import { quietestLevel } from './app.ts';
+import { quietestLevel, trustProxyOption } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
@@ -21,13 +22,21 @@ describe('buildApp', () => {
     const instance = await start();
     const response = await instance.inject({ method: 'GET', url: '/health' });
     expect(response.statusCode).toBe(200);
+    expectContract(response, 'GET', '/health');
     expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it('ignores credentials on public routes', async () => {
+    const instance = await start();
+    const response = await instance.inject({ method: 'GET', url: '/health', headers: bearer('nope') });
+    expect(response.statusCode).toBe(200);
   });
 
   it('reports readiness when the database answers', async () => {
     const instance = await start();
     const response = await instance.inject({ method: 'GET', url: '/ready' });
     expect(response.statusCode).toBe(200);
+    expectContract(response, 'GET', '/ready');
     expect(response.json()).toEqual({ status: 'ready' });
   });
 
@@ -37,6 +46,7 @@ describe('buildApp', () => {
     });
     const response = await instance.inject({ method: 'GET', url: '/ready' });
     expect(response.statusCode).toBe(503);
+    expectContract(response, 'GET', '/ready');
     expect(response.headers['content-type']).toContain('application/problem+json');
     expect(response.json()).toMatchObject({ code: 'database_unavailable' });
   });
@@ -168,7 +178,33 @@ describe('buildApp', () => {
     expect(guest.statusCode).toBe(200);
     expect(venue.statusCode).toBe(200);
     expect(guestAgain.statusCode).toBe(429);
-    expect(guestAgain.json()).toMatchObject({ code: 'rate_limited' });
+    expect(guestAgain.json()).toMatchObject({
+      code: 'rate_limited',
+      detail: expect.stringContaining('retry') as unknown,
+    });
+    expect(guestAgain.headers['retry-after']).toBeDefined();
+  });
+
+  it('gives each reviewer of a shared demo account a separate rate limit bucket', async () => {
+    const instance = await start({
+      env: { RATE_LIMIT_PER_MINUTE: '1' },
+      extend: (server) => {
+        server.get('/limited', () => ({ ok: true }));
+      },
+    });
+    const from = (remoteAddress: string) =>
+      instance.inject({ method: 'GET', url: '/limited', headers: bearer('demo-guest-token'), remoteAddress });
+    expect((await from('10.0.0.1')).statusCode).toBe(200);
+    expect((await from('10.0.0.2')).statusCode).toBe(200);
+    expect((await from('10.0.0.1')).statusCode).toBe(429);
+  });
+
+  it('documents rate limited responses of the readiness probe', async () => {
+    const instance = await start({ env: { RATE_LIMIT_PER_MINUTE: '1' } });
+    await instance.inject({ method: 'GET', url: '/ready' });
+    const limited = await instance.inject({ method: 'GET', url: '/ready' });
+    expect(limited.statusCode).toBe(429);
+    expectContract(limited, 'GET', '/ready');
   });
 
   it('serves interactive API documentation', async () => {
@@ -184,5 +220,18 @@ describe('quietestLevel', () => {
     expect(quietestLevel('info', 'warn')).toBe('warn');
     expect(quietestLevel('silent', 'warn')).toBe('silent');
     expect(quietestLevel('error', 'warn')).toBe('error');
+  });
+});
+
+describe('trustProxyOption', () => {
+  it('turns a hop count into a trust function', () => {
+    const option = trustProxyOption(1);
+    expect(typeof option).toBe('function');
+    if (typeof option === 'function') {
+      expect(option('10.0.0.1', 0)).toBe(true);
+      expect(option('10.0.0.1', 1)).toBe(false);
+    }
+    expect(trustProxyOption(false)).toBe(false);
+    expect(trustProxyOption(['10.0.0.0/8'])).toEqual(['10.0.0.0/8']);
   });
 });

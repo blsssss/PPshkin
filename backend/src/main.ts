@@ -15,6 +15,13 @@ const pool = createPool(config.DATABASE_URL, {
 const services = createServices({ config, pool, clock: systemClock });
 const app = await buildApp({ config, services });
 
+if (config.DEMO_MODE) {
+  app.log.warn('demo mode is on: demo bearer tokens grant access to the demo accounts');
+}
+if (!config.MAX_BOT_TOKEN) {
+  app.log.warn('MAX_BOT_TOKEN is not set: sign in with MAX and the bot are disabled');
+}
+
 if (config.MIGRATE_ON_START) {
   const applied = await migrate(pool, await loadMigrations());
   app.log.info({ applied }, 'database migrations checked');

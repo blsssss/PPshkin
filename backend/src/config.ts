@@ -13,7 +13,28 @@ const commaList = z.string().transform((value) =>
 
 const emptyAsUndefined = (value: unknown) => (value === '' ? undefined : value);
 
-export const configSchema = z.object({
+const IP_OR_CIDR = /^[0-9a-f:.]+(\/\d{1,3})?$/i;
+
+const trustProxySetting = z.string().transform((raw, context): boolean | number | string[] => {
+  const value = raw.trim().toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (/^\d+$/.test(value)) return Number(value);
+  const entries = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  if (entries.length === 0 || !entries.every((item) => IP_OR_CIDR.test(item))) {
+    context.addIssue({
+      code: 'custom',
+      message: 'expected true, false, a hop count or a list of IPs and CIDRs',
+    });
+    return z.NEVER;
+  }
+  return entries;
+});
+
+const baseSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   HOST: z.string().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -21,7 +42,7 @@ export const configSchema = z.object({
   LOG_PRETTY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
-  TRUST_PROXY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
+  TRUST_PROXY: z.preprocess(emptyAsUndefined, trustProxySetting.default(false)),
   DATABASE_URL: z.string().min(1),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   MIGRATE_ON_START: z.preprocess(emptyAsUndefined, booleanFlag.default(true)),
@@ -29,10 +50,28 @@ export const configSchema = z.object({
   MAX_BOT_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(10).optional()),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
-  INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(604800).default(3600),
+  INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   DEMO_MODE: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   DEMO_GUEST_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
   DEMO_VENUE_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
+});
+
+export const configSchema = baseSchema.superRefine((config, context) => {
+  const hasDemoToken = Boolean(config.DEMO_GUEST_TOKEN ?? config.DEMO_VENUE_TOKEN);
+  if (config.DEMO_MODE && !hasDemoToken) {
+    context.addIssue({
+      code: 'custom',
+      path: ['DEMO_MODE'],
+      message: 'DEMO_MODE=true needs DEMO_GUEST_TOKEN or DEMO_VENUE_TOKEN',
+    });
+  }
+  if (!config.DEMO_MODE && hasDemoToken) {
+    context.addIssue({
+      code: 'custom',
+      path: ['DEMO_MODE'],
+      message: 'demo tokens are set but DEMO_MODE is not true',
+    });
+  }
 });
 
 export type Config = z.infer<typeof configSchema>;

@@ -43,9 +43,34 @@ describe('loadConfig', () => {
     expect(config.CORS_ORIGINS).toEqual([]);
   });
 
+  it('parses the trusted proxy setting', () => {
+    expect(loadConfig({ ...required, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(true);
+    expect(loadConfig({ ...required, TRUST_PROXY: '2' }).TRUST_PROXY).toBe(2);
+    expect(loadConfig({ ...required, TRUST_PROXY: '10.0.0.0/8, 127.0.0.1' }).TRUST_PROXY).toEqual([
+      '10.0.0.0/8',
+      '127.0.0.1',
+    ]);
+    expect(() => loadConfig({ ...required, TRUST_PROXY: 'everyone' })).toThrow(/TRUST_PROXY/);
+  });
+
+  it('keeps demo mode and demo tokens consistent', () => {
+    const token = 'demo-token-0123456789-abcdef';
+    expect(loadConfig({ ...required, DEMO_MODE: 'true', DEMO_GUEST_TOKEN: token }).DEMO_MODE).toBe(true);
+    expect(() => loadConfig({ ...required, DEMO_MODE: 'true' })).toThrow(/DEMO_MODE/);
+    expect(() => loadConfig({ ...required, DEMO_VENUE_TOKEN: token })).toThrow(/DEMO_MODE/);
+  });
+
+  it('caps the init data lifetime at one day', () => {
+    expect(() => loadConfig({ ...required, INIT_DATA_MAX_AGE_SECONDS: '604800' })).toThrow(
+      /INIT_DATA_MAX_AGE_SECONDS/,
+    );
+  });
+
   it('rejects short secrets', () => {
     expect(() => loadConfig({ ...required, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
-    expect(() => loadConfig({ ...required, DEMO_GUEST_TOKEN: 'short' })).toThrow(/DEMO_GUEST_TOKEN/);
+    expect(() => loadConfig({ ...required, DEMO_MODE: 'true', DEMO_GUEST_TOKEN: 'short' })).toThrow(
+      /DEMO_GUEST_TOKEN/,
+    );
   });
 
   it('reports every invalid variable', () => {

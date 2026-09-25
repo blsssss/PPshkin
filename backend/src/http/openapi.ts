@@ -2,6 +2,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, jsonSchemaTransformObject } from 'fastify-type-provider-zod';
+import { STANDARD_ERROR_HEADERS } from './schemas/common.ts';
 
 export const API_VERSION = '1.0.0';
 
@@ -39,8 +40,23 @@ function collectRefs(node: unknown, into: Set<string>): void {
   });
 }
 
+function addStandardHeaders(paths: unknown): void {
+  if (!isObject(paths)) return;
+  for (const item of Object.values(paths)) {
+    if (!isObject(item)) continue;
+    for (const operation of Object.values(item)) {
+      if (!isObject(operation) || !isObject(operation.responses)) continue;
+      for (const [status, headers] of Object.entries(STANDARD_ERROR_HEADERS)) {
+        const response = operation.responses[status];
+        if (isObject(response)) response.headers = headers;
+      }
+    }
+  }
+}
+
 export function tidyDocument<T extends object>(document: T): T {
   dropSafeIntegerBounds(document);
+  addStandardHeaders((document as Json).paths);
   const root = document as Json;
   const components = isObject(root.components) ? root.components : undefined;
   const schemas = components && isObject(components.schemas) ? components.schemas : undefined;
@@ -64,7 +80,7 @@ export const API_TAGS = [
   { name: 'me', description: 'Профиль текущего пользователя' },
 ];
 
-export async function registerOpenApi(app: FastifyInstance, serverUrl: string) {
+export async function registerOpenApi(app: FastifyInstance) {
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
@@ -74,7 +90,7 @@ export async function registerOpenApi(app: FastifyInstance, serverUrl: string) {
         description:
           'HTTP API мини-приложения ППшкин в MAX. Гость ведёт дневник питания и получает персональные предложения заведений, заведение управляет меню, горящими позициями и бронями.',
       },
-      servers: [{ url: serverUrl }],
+      servers: [{ url: '/', description: 'Текущий хост' }],
       tags: API_TAGS,
       components: {
         securitySchemes: {

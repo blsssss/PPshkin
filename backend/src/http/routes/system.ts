@@ -3,7 +3,7 @@ import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { HealthService } from '../../services/health.ts';
 import { problem, sendProblem } from '../problem.ts';
-import { errorResponses } from '../schemas/common.ts';
+import { probeErrorResponses, success } from '../schemas/common.ts';
 
 export const systemRoutes: FastifyPluginCallbackZod<{
   health: HealthService;
@@ -15,9 +15,13 @@ export const systemRoutes: FastifyPluginCallbackZod<{
       logLevel: probeLogLevel,
       config: { rateLimit: false },
       schema: {
+        operationId: 'getHealth',
         tags: ['system'],
-        summary: 'Liveness probe',
-        response: { 200: z.object({ status: z.literal('ok') }) },
+        summary: 'Проверка, что процесс жив',
+        response: {
+          200: success('Процесс работает', z.object({ status: z.literal('ok') })),
+          ...probeErrorResponses(),
+        },
       },
     },
     () => ({ status: 'ok' as const }),
@@ -28,9 +32,13 @@ export const systemRoutes: FastifyPluginCallbackZod<{
     {
       logLevel: probeLogLevel,
       schema: {
+        operationId: 'getReadiness',
         tags: ['system'],
-        summary: 'Readiness probe, checks the database',
-        response: { 200: z.object({ status: z.literal('ready') }), ...errorResponses(503) },
+        summary: 'Готовность к работе, проверяет базу данных',
+        response: {
+          200: success('Сервис готов', z.object({ status: z.literal('ready') })),
+          ...probeErrorResponses(429, 503),
+        },
       },
     },
     async (_request, reply) => {

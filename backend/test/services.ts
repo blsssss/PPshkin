@@ -8,6 +8,7 @@ import { notFound } from '../src/shared/errors.ts';
 export const TEST_TOKENS: Record<string, AuthContext> = {
   'guest-token': { userId: 101, via: 'session', demoRole: null },
   'venue-token': { userId: 202, via: 'session', demoRole: null },
+  'demo-guest-token': { userId: -1001, via: 'demo', demoRole: 'guest' },
 };
 
 export function fakeServices(overrides: Partial<Services> = {}): Services {

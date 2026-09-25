@@ -22,8 +22,12 @@ export function problem(status: number, code: string, detail: string, errors?: E
   };
 }
 
-export function sendProblem(reply: FastifyReply, body: Problem) {
-  return reply.status(body.status).type('application/problem+json').send(body);
+export function sendProblem(
+  reply: FastifyReply,
+  body: Problem,
+  headers: Readonly<Record<string, string>> = {},
+) {
+  return reply.status(body.status).headers(headers).type('application/problem+json').send(body);
 }
 
 function validationDetails(error: FastifyError): ErrorDetail[] {
@@ -51,7 +55,7 @@ export function toProblem(error: FastifyError | AppError | Error): Problem {
   const status = fastifyError.statusCode;
   if (status !== undefined && status >= 400 && status < 500) {
     const code = (fastifyError.code ?? 'bad_request').toLowerCase();
-    return problem(status, code, error.message);
+    return problem(status, code, error.message || (STATUS_CODES[status] ?? 'Request failed'));
   }
   return problem(500, 'internal_error', 'Internal server error');
 }
@@ -59,10 +63,12 @@ export function toProblem(error: FastifyError | AppError | Error): Problem {
 export function registerProblemHandlers(app: FastifyInstance) {
   app.setErrorHandler((error: FastifyError | AppError, request, reply) => {
     const body = toProblem(error);
-    if (body.status >= 500) {
+    if (body.status === 503) {
+      request.log.warn({ code: body.code }, body.detail);
+    } else if (body.status >= 500) {
       request.log.error({ err: error }, 'request failed');
     }
-    return sendProblem(reply, body);
+    return sendProblem(reply, body, error instanceof AppError ? error.headers : {});
   });
   app.setNotFoundHandler((request, reply) =>
     sendProblem(reply, problem(404, 'route_not_found', `Route ${request.method} ${request.url} not found`)),

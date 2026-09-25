@@ -5,9 +5,10 @@ import Fastify, { type FastifyServerOptions } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type { Config } from '../config.ts';
 import type { Services } from '../services/index.ts';
-import { registerAuthentication } from './auth.ts';
+import { tooManyRequests } from '../shared/errors.ts';
+import { rateLimitKey, registerAuthentication } from './auth.ts';
 import { registerOpenApi } from './openapi.ts';
-import { problem, registerProblemHandlers } from './problem.ts';
+import { registerProblemHandlers } from './problem.ts';
 import { apiRoutes } from './routes/index.ts';
 import { systemRoutes } from './routes/system.ts';
 
@@ -31,39 +32,40 @@ export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   };
 }
 
-export function publicUrl(config: Config): string {
-  return config.PUBLIC_BASE_URL ?? `http://localhost:${config.PORT}`;
+export function trustProxyOption(
+  setting: Config['TRUST_PROXY'],
+): boolean | string[] | ((address: string, hop: number) => boolean) {
+  return typeof setting === 'number' ? (_address, hop) => hop < setting : setting;
 }
 
 export async function buildApp({ config, services, logger }: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
-    trustProxy: config.TRUST_PROXY,
+    trustProxy: trustProxyOption(config.TRUST_PROXY),
     bodyLimit: 1024 * 1024,
   });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerProblemHandlers(app);
-  registerAuthentication(app, services.auth);
 
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin: config.CORS_ORIGINS.length > 0 ? config.CORS_ORIGINS : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Authorization', 'Content-Type'],
+    exposedHeaders: ['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
     maxAge: 600,
   });
+  registerAuthentication(app, services.auth);
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_PER_MINUTE,
     timeWindow: '1 minute',
-    keyGenerator: (request) => (request.auth ? `user:${request.auth.userId}` : `ip:${request.ip}`),
-    errorResponseBuilder: (_request, context) => ({
-      ...problem(429, 'rate_limited', `Too many requests, retry in ${context.after}`),
-      statusCode: 429,
-    }),
+    keyGenerator: rateLimitKey,
+    errorResponseBuilder: (_request, context) =>
+      Object.assign(tooManyRequests(`Too many requests, retry in ${context.after}`), { statusCode: 429 }),
   });
-  await registerOpenApi(app, publicUrl(config));
+  await registerOpenApi(app);
 
   await app.register(systemRoutes, {
     health: services.health,

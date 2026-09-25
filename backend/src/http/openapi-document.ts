@@ -15,7 +15,6 @@ export async function renderOpenApiYaml(): Promise<string> {
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL: 'postgres://unused',
-    PUBLIC_BASE_URL: 'http://localhost:3000',
   });
   const app = await buildApp({ config, services: unavailableServices() });
   try {
