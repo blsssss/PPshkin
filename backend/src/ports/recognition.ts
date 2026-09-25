@@ -41,3 +41,8 @@ export interface MenuParser {
   fromPhoto(image: Buffer): Promise<MenuParseResult>;
   fromText(text: string): Promise<MenuParseResult>;
 }
+
+export interface Recognition {
+  dishes: DishRecognizer;
+  menus: MenuParser;
+}

@@ -6,6 +6,8 @@ import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { maxUserJson, signInitData } from '../../test/init-data.ts';
 import { testConfig } from '../../test/services.ts';
 import { createServices } from '../container.ts';
+import { disabledRecognition } from '../recognition/index.ts';
+import { createBackgroundTasks } from '../shared/background.ts';
 import { buildApp } from './app.ts';
 
 const BOT_TOKEN = 'flow-bot-token-0123456789';
@@ -16,7 +18,14 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   const config = testConfig({ MAX_BOT_TOKEN: BOT_TOKEN, DEMO_MODE: 'true', DEMO_GUEST_TOKEN: DEMO_TOKEN });
-  app = await buildApp({ config, services: createServices({ config, pool, clock }) });
+  const services = createServices({
+    config,
+    pool,
+    clock,
+    recognition: disabledRecognition(),
+    background: createBackgroundTasks({ error: () => undefined }),
+  });
+  app = await buildApp({ config, services });
   await app.ready();
 });
 

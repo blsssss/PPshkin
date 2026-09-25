@@ -11,6 +11,7 @@ import { registerOpenApi } from './openapi.ts';
 import { registerProblemHandlers } from './problem.ts';
 import { apiRoutes } from './routes/index.ts';
 import { systemRoutes } from './routes/system.ts';
+import { registerUploads } from './uploads.ts';
 
 export interface AppOptions {
   config: Config;
@@ -65,6 +66,7 @@ export async function buildApp({ config, services, logger }: AppOptions) {
     errorResponseBuilder: (_request, context) =>
       Object.assign(tooManyRequests(`Too many requests, retry in ${context.after}`), { statusCode: 429 }),
   });
+  await registerUploads(app);
   await registerOpenApi(app);
 
   await app.register(systemRoutes, {
