@@ -21,6 +21,7 @@ export const configSchema = z.object({
   LOG_PRETTY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
+  TRUST_PROXY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
 });
 
 export type Config = z.infer<typeof configSchema>;

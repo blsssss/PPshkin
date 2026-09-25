@@ -25,7 +25,7 @@ export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
 export async function buildApp({ config, logger }: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
-    trustProxy: true,
+    trustProxy: config.TRUST_PROXY,
     bodyLimit: 1024 * 1024,
     disableRequestLogging: config.NODE_ENV === 'test',
   });

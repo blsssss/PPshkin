@@ -95,6 +95,36 @@ describe('buildApp', () => {
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
 
+  it('ignores forwarded addresses unless the proxy is trusted', async () => {
+    const instance = await start({ RATE_LIMIT_PER_MINUTE: '1' }, (server) => {
+      server.get('/ip', (request) => ({ ip: request.ip }));
+    });
+    const first = await instance.inject({
+      method: 'GET',
+      url: '/ip',
+      headers: { 'x-forwarded-for': '10.0.0.1' },
+    });
+    const second = await instance.inject({
+      method: 'GET',
+      url: '/ip',
+      headers: { 'x-forwarded-for': '10.0.0.2' },
+    });
+    expect(first.json<{ ip: string }>().ip).not.toBe('10.0.0.1');
+    expect(second.statusCode).toBe(429);
+  });
+
+  it('uses forwarded addresses behind a trusted proxy', async () => {
+    const instance = await start({ TRUST_PROXY: 'true' }, (server) => {
+      server.get('/ip', (request) => ({ ip: request.ip }));
+    });
+    const response = await instance.inject({
+      method: 'GET',
+      url: '/ip',
+      headers: { 'x-forwarded-for': '10.0.0.1' },
+    });
+    expect(response.json<{ ip: string }>().ip).toBe('10.0.0.1');
+  });
+
   it('limits request rate with a problem response', async () => {
     const instance = await start({ RATE_LIMIT_PER_MINUTE: '2' }, (server) => {
       server.get('/limited', () => ({ ok: true }));

@@ -12,6 +12,7 @@ describe('loadConfig', () => {
       LOG_PRETTY: false,
       CORS_ORIGINS: [],
       RATE_LIMIT_PER_MINUTE: 300,
+      TRUST_PROXY: false,
     });
   });
 
