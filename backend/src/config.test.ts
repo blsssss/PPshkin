@@ -17,7 +17,12 @@ describe('loadConfig', () => {
       TRUST_PROXY: false,
       DATABASE_POOL_SIZE: 10,
       MIGRATE_ON_START: true,
+      SESSION_TTL_HOURS: 12,
+      INIT_DATA_MAX_AGE_SECONDS: 3600,
+      DEMO_MODE: false,
     });
+    expect(config.MAX_BOT_TOKEN).toBeUndefined();
+    expect(config.PUBLIC_BASE_URL).toBeUndefined();
   });
 
   it('parses numbers, flags and comma separated lists', () => {
@@ -36,6 +41,11 @@ describe('loadConfig', () => {
     const config = loadConfig({ ...required, LOG_PRETTY: '', CORS_ORIGINS: '' });
     expect(config.LOG_PRETTY).toBe(false);
     expect(config.CORS_ORIGINS).toEqual([]);
+  });
+
+  it('rejects short secrets', () => {
+    expect(() => loadConfig({ ...required, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
+    expect(() => loadConfig({ ...required, DEMO_GUEST_TOKEN: 'short' })).toThrow(/DEMO_GUEST_TOKEN/);
   });
 
   it('reports every invalid variable', () => {

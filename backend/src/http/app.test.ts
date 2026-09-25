@@ -1,30 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadConfig } from '../config.ts';
-import type { Queryable } from '../db/pool.ts';
+import { bearer, buildTestApp } from '../../test/services.ts';
 import { conflict } from '../shared/errors.ts';
-import { buildApp, quietestLevel } from './app.ts';
+import { quietestLevel } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
-const healthyDb: Queryable = {
-  query: () => Promise.resolve({ rows: [], rowCount: 1, command: 'SELECT', oid: 0, fields: [] }),
-};
-
-async function start(
-  env: Record<string, string> = {},
-  extend?: (instance: FastifyInstance) => void,
-  db: Queryable = healthyDb,
-) {
-  const config = loadConfig({
-    NODE_ENV: 'test',
-    LOG_LEVEL: 'silent',
-    DATABASE_URL: 'postgres://unused',
-    ...env,
-  });
-  app = await buildApp({ config, deps: { db } });
-  extend?.(app);
-  await app.ready();
+async function start(options: Parameters<typeof buildTestApp>[0] = {}) {
+  app = await buildTestApp(options);
   return app;
 }
 
@@ -49,11 +32,12 @@ describe('buildApp', () => {
   });
 
   it('reports unavailability when the database is down', async () => {
-    const instance = await start({}, undefined, {
-      query: () => Promise.reject(new Error('connection refused')),
+    const instance = await start({
+      services: { health: { databaseReachable: () => Promise.resolve(false) } },
     });
     const response = await instance.inject({ method: 'GET', url: '/ready' });
     expect(response.statusCode).toBe(503);
+    expect(response.headers['content-type']).toContain('application/problem+json');
     expect(response.json()).toMatchObject({ code: 'database_unavailable' });
   });
 
@@ -73,10 +57,12 @@ describe('buildApp', () => {
   });
 
   it('maps application errors to their status and code', async () => {
-    const instance = await start({}, (server) => {
-      server.get('/boom', () => {
-        throw conflict('already_exists', 'Already exists');
-      });
+    const instance = await start({
+      extend: (server) => {
+        server.get('/boom', () => {
+          throw conflict('already_exists', 'Already exists');
+        });
+      },
     });
     const response = await instance.inject({ method: 'GET', url: '/boom' });
     expect(response.statusCode).toBe(409);
@@ -84,10 +70,12 @@ describe('buildApp', () => {
   });
 
   it('hides internal error messages', async () => {
-    const instance = await start({}, (server) => {
-      server.get('/crash', () => {
-        throw new Error('database password leaked');
-      });
+    const instance = await start({
+      extend: (server) => {
+        server.get('/crash', () => {
+          throw new Error('database password leaked');
+        });
+      },
     });
     const response = await instance.inject({ method: 'GET', url: '/crash' });
     expect(response.statusCode).toBe(500);
@@ -96,8 +84,10 @@ describe('buildApp', () => {
   });
 
   it('reports malformed JSON bodies as client errors', async () => {
-    const instance = await start({}, (server) => {
-      server.post('/echo', (request) => request.body);
+    const instance = await start({
+      extend: (server) => {
+        server.post('/echo', (request) => request.body);
+      },
     });
     const response = await instance.inject({
       method: 'POST',
@@ -110,7 +100,7 @@ describe('buildApp', () => {
   });
 
   it('allows only configured CORS origins', async () => {
-    const instance = await start({ CORS_ORIGINS: 'https://app.example' });
+    const instance = await start({ env: { CORS_ORIGINS: 'https://app.example' } });
     const allowed = await instance.inject({
       method: 'GET',
       url: '/health',
@@ -126,8 +116,11 @@ describe('buildApp', () => {
   });
 
   it('ignores forwarded addresses unless the proxy is trusted', async () => {
-    const instance = await start({ RATE_LIMIT_PER_MINUTE: '1' }, (server) => {
-      server.get('/ip', (request) => ({ ip: request.ip }));
+    const instance = await start({
+      env: { RATE_LIMIT_PER_MINUTE: '1' },
+      extend: (server) => {
+        server.get('/ip', (request) => ({ ip: request.ip }));
+      },
     });
     const first = await instance.inject({
       method: 'GET',
@@ -144,8 +137,11 @@ describe('buildApp', () => {
   });
 
   it('uses forwarded addresses behind a trusted proxy', async () => {
-    const instance = await start({ TRUST_PROXY: 'true' }, (server) => {
-      server.get('/ip', (request) => ({ ip: request.ip }));
+    const instance = await start({
+      env: { TRUST_PROXY: 'true' },
+      extend: (server) => {
+        server.get('/ip', (request) => ({ ip: request.ip }));
+      },
     });
     const response = await instance.inject({
       method: 'GET',
@@ -155,16 +151,31 @@ describe('buildApp', () => {
     expect(response.json<{ ip: string }>().ip).toBe('10.0.0.1');
   });
 
-  it('limits request rate with a problem response', async () => {
-    const instance = await start({ RATE_LIMIT_PER_MINUTE: '2' }, (server) => {
-      server.get('/limited', () => ({ ok: true }));
+  it('limits request rate per user rather than per address when authenticated', async () => {
+    const instance = await start({
+      env: { RATE_LIMIT_PER_MINUTE: '1' },
+      extend: (server) => {
+        server.get('/limited', () => ({ ok: true }));
+      },
     });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      expect((await instance.inject({ method: 'GET', url: '/limited' })).statusCode).toBe(200);
-    }
-    const response = await instance.inject({ method: 'GET', url: '/limited' });
-    expect(response.statusCode).toBe(429);
-    expect(response.json()).toMatchObject({ code: 'rate_limited' });
+    const guest = await instance.inject({ method: 'GET', url: '/limited', headers: bearer('guest-token') });
+    const venue = await instance.inject({ method: 'GET', url: '/limited', headers: bearer('venue-token') });
+    const guestAgain = await instance.inject({
+      method: 'GET',
+      url: '/limited',
+      headers: bearer('guest-token'),
+    });
+    expect(guest.statusCode).toBe(200);
+    expect(venue.statusCode).toBe(200);
+    expect(guestAgain.statusCode).toBe(429);
+    expect(guestAgain.json()).toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('serves interactive API documentation', async () => {
+    const instance = await start();
+    const response = await instance.inject({ method: 'GET', url: '/docs/json' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ openapi: '3.1.0', info: { title: 'PPshkin API' } });
   });
 });
 

@@ -18,17 +18,23 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "openapi": "node src/scripts/export-openapi.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
     "@fastify/helmet": "13.1.1",
     "@fastify/rate-limit": "11.2.0",
+    "@fastify/swagger": "9.9.0",
+    "@fastify/swagger-ui": "6.1.1",
     "fastify": "5.12.5",
+    "fastify-type-provider-zod": "7.0.0",
+    "openapi-types": "12.1.3",
     "pg": "8.23.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0",
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.6",
     "@types/pg": "8.23.1",
@@ -38,6 +44,7 @@
     "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "yaml": "2.9.1"
   }
 }
