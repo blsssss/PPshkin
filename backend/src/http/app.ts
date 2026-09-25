@@ -3,10 +3,16 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import type { Config } from '../config.ts';
-import { problem, registerProblemHandlers } from './problem.ts';
+import type { Queryable } from '../db/pool.ts';
+import { problem, registerProblemHandlers, sendProblem } from './problem.ts';
+
+export interface AppDependencies {
+  db: Queryable;
+}
 
 export interface AppOptions {
   config: Config;
+  deps: AppDependencies;
   logger?: FastifyServerOptions['logger'];
 }
 
@@ -22,12 +28,11 @@ export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ config, logger }: AppOptions) {
+export async function buildApp({ config, deps, logger }: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
     trustProxy: config.TRUST_PROXY,
     bodyLimit: 1024 * 1024,
-    disableRequestLogging: config.NODE_ENV === 'test',
   });
 
   registerProblemHandlers(app);
@@ -49,6 +54,16 @@ export async function buildApp({ config, logger }: AppOptions) {
   });
 
   app.get('/health', { config: { rateLimit: false }, logLevel: 'warn' }, () => ({ status: 'ok' }));
+
+  app.get('/ready', { config: { rateLimit: false }, logLevel: 'warn' }, async (request, reply) => {
+    try {
+      await deps.db.query('select 1');
+      return { status: 'ready' };
+    } catch (error) {
+      request.log.warn({ err: error }, 'database is not reachable');
+      return sendProblem(reply, problem(503, 'database_unavailable', 'Database is not reachable'));
+    }
+  });
 
   return app;
 }

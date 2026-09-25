@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from './config.ts';
 
+const required = { DATABASE_URL: 'postgres://user:pass@localhost:5432/db' };
+
 describe('loadConfig', () => {
-  it('applies defaults for an empty environment', () => {
-    const config = loadConfig({});
+  it('applies defaults when only required variables are set', () => {
+    const config = loadConfig(required);
     expect(config).toMatchObject({
       NODE_ENV: 'development',
       HOST: '0.0.0.0',
@@ -13,11 +15,14 @@ describe('loadConfig', () => {
       CORS_ORIGINS: [],
       RATE_LIMIT_PER_MINUTE: 300,
       TRUST_PROXY: false,
+      DATABASE_POOL_SIZE: 10,
+      MIGRATE_ON_START: true,
     });
   });
 
   it('parses numbers, flags and comma separated lists', () => {
     const config = loadConfig({
+      ...required,
       PORT: '8080',
       LOG_PRETTY: 'yes',
       CORS_ORIGINS: 'https://a.example, https://b.example ,',
@@ -28,7 +33,7 @@ describe('loadConfig', () => {
   });
 
   it('treats empty strings as missing values', () => {
-    const config = loadConfig({ LOG_PRETTY: '', CORS_ORIGINS: '' });
+    const config = loadConfig({ ...required, LOG_PRETTY: '', CORS_ORIGINS: '' });
     expect(config.LOG_PRETTY).toBe(false);
     expect(config.CORS_ORIGINS).toEqual([]);
   });
@@ -42,6 +47,7 @@ describe('loadConfig', () => {
       const issues = (error as ConfigError).issues.join('\n');
       expect(issues).toContain('PORT');
       expect(issues).toContain('NODE_ENV');
+      expect(issues).toContain('DATABASE_URL');
     }
   });
 });

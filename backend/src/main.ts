@@ -1,8 +1,16 @@
 import { loadConfig } from './config.ts';
+import { loadMigrations, migrate } from './db/migrate.ts';
+import { createPool } from './db/pool.ts';
 import { buildApp } from './http/app.ts';
 
 const config = loadConfig(process.env);
-const app = await buildApp({ config });
+const pool = createPool(config.DATABASE_URL, config.DATABASE_POOL_SIZE);
+const app = await buildApp({ config, deps: { db: pool } });
+
+if (config.MIGRATE_ON_START) {
+  const applied = await migrate(pool, await loadMigrations());
+  app.log.info({ applied }, 'database migrations checked');
+}
 
 let closing = false;
 const shutdown = async (signal: NodeJS.Signals) => {
@@ -10,6 +18,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
   closing = true;
   app.log.info({ signal }, 'shutting down');
   await app.close();
+  await pool.end();
   process.exit(0);
 };
 

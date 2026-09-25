@@ -22,6 +22,9 @@ export const configSchema = z.object({
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   TRUST_PROXY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
+  DATABASE_URL: z.string().min(1),
+  DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
+  MIGRATE_ON_START: z.preprocess(emptyAsUndefined, booleanFlag.default(true)),
 });
 
 export type Config = z.infer<typeof configSchema>;

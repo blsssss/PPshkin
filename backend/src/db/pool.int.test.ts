@@ -1,0 +1,45 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { maybeOne, one, withTransaction } from './pool.ts';
+
+const pool = testPool();
+
+beforeEach(async () => {
+  await resetDatabase(pool);
+});
+
+afterAll(async () => {
+  await closeTestPool();
+});
+
+describe('database helpers', () => {
+  it('parses bigint columns as numbers', async () => {
+    const row = await one<{ value: number }>(pool, 'select 9007199254740991::bigint as value');
+    expect(row.value).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('rejects bigint values outside the safe range', async () => {
+    await expect(pool.query('select 9007199254740993::bigint as value')).rejects.toThrow(RangeError);
+  });
+
+  it('commits a successful transaction', async () => {
+    await withTransaction(pool, async (client) => {
+      await client.query('insert into users (id) values (1)');
+    });
+    expect(await maybeOne(pool, 'select id from users where id = 1')).toEqual({ id: 1 });
+  });
+
+  it('rolls back a failed transaction', async () => {
+    await expect(
+      withTransaction(pool, async (client) => {
+        await client.query('insert into users (id) values (2)');
+        throw new Error('abort');
+      }),
+    ).rejects.toThrow('abort');
+    expect(await maybeOne(pool, 'select id from users where id = 2')).toBeNull();
+  });
+
+  it('fails loudly when a single row is expected but missing', async () => {
+    await expect(one(pool, 'select id from users where id = -1')).rejects.toThrow(/exactly one row/);
+  });
+});
