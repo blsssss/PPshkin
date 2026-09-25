@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine3.24 AS base
+FROM node:26.9.0-alpine3.24 AS base
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 
@@ -11,7 +11,7 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:24.21.0-alpine3.24 AS runtime
+FROM node:26.9.0-alpine3.24 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
