@@ -1,14 +1,28 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../config.ts';
+import type { Queryable } from '../db/pool.ts';
 import { conflict } from '../shared/errors.ts';
-import { buildApp } from './app.ts';
+import { buildApp, quietestLevel } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
-async function start(env: Record<string, string> = {}, extend?: (instance: FastifyInstance) => void) {
-  const config = loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...env });
-  app = await buildApp({ config });
+const healthyDb: Queryable = {
+  query: () => Promise.resolve({ rows: [], rowCount: 1, command: 'SELECT', oid: 0, fields: [] }),
+};
+
+async function start(
+  env: Record<string, string> = {},
+  extend?: (instance: FastifyInstance) => void,
+  db: Queryable = healthyDb,
+) {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    LOG_LEVEL: 'silent',
+    DATABASE_URL: 'postgres://unused',
+    ...env,
+  });
+  app = await buildApp({ config, deps: { db } });
   extend?.(app);
   await app.ready();
   return app;
@@ -25,6 +39,22 @@ describe('buildApp', () => {
     const response = await instance.inject({ method: 'GET', url: '/health' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it('reports readiness when the database answers', async () => {
+    const instance = await start();
+    const response = await instance.inject({ method: 'GET', url: '/ready' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ready' });
+  });
+
+  it('reports unavailability when the database is down', async () => {
+    const instance = await start({}, undefined, {
+      query: () => Promise.reject(new Error('connection refused')),
+    });
+    const response = await instance.inject({ method: 'GET', url: '/ready' });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: 'database_unavailable' });
   });
 
   it('sets security headers', async () => {
@@ -135,5 +165,13 @@ describe('buildApp', () => {
     const response = await instance.inject({ method: 'GET', url: '/limited' });
     expect(response.statusCode).toBe(429);
     expect(response.json()).toMatchObject({ code: 'rate_limited' });
+  });
+});
+
+describe('quietestLevel', () => {
+  it('never makes probes louder than the configured level', () => {
+    expect(quietestLevel('info', 'warn')).toBe('warn');
+    expect(quietestLevel('silent', 'warn')).toBe('silent');
+    expect(quietestLevel('error', 'warn')).toBe('error');
   });
 });
