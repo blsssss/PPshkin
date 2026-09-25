@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+**/*.test.ts
+eslint.config.js
+vitest.config.ts
+.prettierrc.json
+.prettierignore
+Dockerfile
+.dockerignore
