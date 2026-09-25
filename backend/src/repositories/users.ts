@@ -48,20 +48,18 @@ export interface UserIdentity {
 export async function upsert(db: Queryable, identity: UserIdentity): Promise<User> {
   const row = await one<UserRow>(
     db,
-    `with upserted as (
-       insert into users (id, first_name, username)
-       values ($1, $2, $3)
-       on conflict (id) do update
-         set first_name = coalesce(excluded.first_name, users.first_name),
-             username = coalesce(excluded.username, users.username),
-             updated_at = now()
-         where users.first_name is distinct from coalesce(excluded.first_name, users.first_name)
-            or users.username is distinct from coalesce(excluded.username, users.username)
-       returning ${USER_COLUMNS}
-     )
-     select ${USER_COLUMNS} from upserted
-     union all
-     select ${USER_COLUMNS} from users where id = $1 and not exists (select 1 from upserted)`,
+    `insert into users (id, first_name, username)
+     values ($1, $2, $3)
+     on conflict (id) do update
+       set first_name = coalesce(excluded.first_name, users.first_name),
+           username = coalesce(excluded.username, users.username),
+           updated_at = case
+             when users.first_name is distinct from coalesce(excluded.first_name, users.first_name)
+               or users.username is distinct from coalesce(excluded.username, users.username)
+             then now()
+             else users.updated_at
+           end
+     returning ${USER_COLUMNS}`,
     [identity.id, identity.firstName, identity.username],
   );
   return mapUser(row);

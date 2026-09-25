@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { loadMigrations, migrate } from '../src/db/migrate.ts';
 import { createPool } from '../src/db/pool.ts';
-import { TEST_DATABASE_URL } from './database.ts';
+import { assertTestDatabase, TEST_DATABASE_URL } from './database.ts';
 
 async function ensureDatabase(url: string) {
   const target = new URL(url);
@@ -21,8 +21,9 @@ async function ensureDatabase(url: string) {
 }
 
 export default async function setup() {
+  assertTestDatabase(TEST_DATABASE_URL);
   await ensureDatabase(TEST_DATABASE_URL);
-  const pool = createPool(TEST_DATABASE_URL, 1);
+  const pool = createPool(TEST_DATABASE_URL, { max: 1, onError: () => undefined });
   try {
     await pool.query('drop schema public cascade');
     await pool.query('create schema public');

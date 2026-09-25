@@ -1,12 +1,25 @@
 import pg from 'pg';
 
-pg.types.setTypeParser(pg.types.builtins.INT8, (value) => {
+function safeInteger(value: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) {
     throw new RangeError(`int8 value ${value} exceeds the safe integer range`);
   }
   return parsed;
-});
+}
+
+function safeIntegerArray(value: string): (number | null)[] {
+  const inner = value.slice(1, -1);
+  if (inner === '') return [];
+  return inner.split(',').map((item) => (item === 'NULL' ? null : safeInteger(item)));
+}
+
+type TypeId = Parameters<typeof pg.types.getTypeParser>[0];
+const INT8_ARRAY_OID = 1016 as TypeId;
+
+pg.types.setTypeParser(pg.types.builtins.INT8, safeInteger);
+pg.types.setTypeParser(INT8_ARRAY_OID, safeIntegerArray);
+pg.types.setTypeParser(pg.types.builtins.NUMERIC, Number);
 
 export interface Queryable {
   query<Row extends pg.QueryResultRow>(text: string, values?: unknown[]): Promise<pg.QueryResult<Row>>;
@@ -15,8 +28,22 @@ export interface Queryable {
 export type Pool = pg.Pool;
 export type PoolClient = pg.PoolClient;
 
-export function createPool(connectionString: string, max = 10): Pool {
-  return new pg.Pool({ connectionString, max, application_name: 'ppshkin' });
+export interface PoolOptions {
+  max?: number;
+  onError: (error: Error) => void;
+}
+
+export function createPool(connectionString: string, { max = 10, onError }: PoolOptions): Pool {
+  const pool = new pg.Pool({
+    connectionString,
+    max,
+    application_name: 'ppshkin',
+    connectionTimeoutMillis: 5_000,
+    statement_timeout: 15_000,
+    idle_in_transaction_session_timeout: 30_000,
+  });
+  pool.on('error', onError);
+  return pool;
 }
 
 export async function withTransaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -25,12 +52,15 @@ export async function withTransaction<T>(pool: Pool, work: (client: PoolClient) 
     await client.query('begin');
     const result = await work(client);
     await client.query('commit');
+    client.release();
     return result;
   } catch (error) {
-    await client.query('rollback').catch(() => undefined);
+    const rolledBack = await client.query('rollback').then(
+      () => true,
+      () => false,
+    );
+    client.release(rolledBack ? undefined : true);
     throw error;
-  } finally {
-    client.release();
   }
 }
 
@@ -54,4 +84,8 @@ export async function maybeOne<Row extends pg.QueryResultRow>(
 ): Promise<Row | null> {
   const result = await db.query<Row>(text, values);
   return result.rows[0] ?? null;
+}
+
+export function jsonb(value: unknown): string {
+  return JSON.stringify(value);
 }

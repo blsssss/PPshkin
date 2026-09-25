@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../config.ts';
 import type { Queryable } from '../db/pool.ts';
 import { conflict } from '../shared/errors.ts';
-import { buildApp } from './app.ts';
+import { buildApp, quietestLevel } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
@@ -165,5 +165,13 @@ describe('buildApp', () => {
     const response = await instance.inject({ method: 'GET', url: '/limited' });
     expect(response.statusCode).toBe(429);
     expect(response.json()).toMatchObject({ code: 'rate_limited' });
+  });
+});
+
+describe('quietestLevel', () => {
+  it('never makes probes louder than the configured level', () => {
+    expect(quietestLevel('info', 'warn')).toBe('warn');
+    expect(quietestLevel('silent', 'warn')).toBe('silent');
+    expect(quietestLevel('error', 'warn')).toBe('error');
   });
 });

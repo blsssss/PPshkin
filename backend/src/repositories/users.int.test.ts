@@ -57,6 +57,13 @@ describe('users repository', () => {
     expect(user?.dislikedTags).toEqual(['fish']);
   });
 
+  it('handles concurrent first contacts of the same user', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => users.upsert(pool, { id: 11, firstName: 'Ян', username: null })),
+    );
+    expect(new Set(results.map((user) => user.id))).toEqual(new Set([11]));
+  });
+
   it('returns null for an unknown user', async () => {
     expect(await users.findById(pool, 404)).toBeNull();
   });

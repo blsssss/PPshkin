@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { TEST_DATABASE_URL, testPool } from '../../test/database.ts';
-import { checksum, loadMigrations, migrate, MigrationChecksumError, type Migration } from './migrate.ts';
+import { checksum, loadMigrations, migrate, MigrationError, type Migration } from './migrate.ts';
 
 const SCHEMA = 'migrate_spec';
 const isolated = new pg.Pool({
@@ -59,7 +59,21 @@ describe('migrate', () => {
   it('refuses to run when an applied migration was edited', async () => {
     await migrate(isolated, [first]);
     const edited = migration('0001_first', 'create table alpha (id bigint primary key)');
-    await expect(migrate(isolated, [edited])).rejects.toBeInstanceOf(MigrationChecksumError);
+    await expect(migrate(isolated, [edited])).rejects.toThrow(/changed after it had been applied/);
+  });
+
+  it('refuses to run against a database that has migrations this build does not know', async () => {
+    await migrate(isolated, [first, second]);
+    const error = await migrate(isolated, [first]).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(MigrationError);
+    expect(error).toMatchObject({ version: '0002_second' });
+  });
+
+  it('refuses to apply a migration older than one already applied', async () => {
+    await migrate(isolated, [first, second]);
+    const late = migration('0001_late', 'create table late (id int)');
+    await expect(migrate(isolated, [first, late, second])).rejects.toThrow(/older than the already applied/);
+    expect(await tables()).not.toContain('late');
   });
 
   it('rolls back a failing migration completely', async () => {

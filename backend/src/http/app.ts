@@ -16,6 +16,12 @@ export interface AppOptions {
   logger?: FastifyServerOptions['logger'];
 }
 
+const LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const;
+
+export function quietestLevel(first: Config['LOG_LEVEL'], second: Config['LOG_LEVEL']): Config['LOG_LEVEL'] {
+  return LEVEL_ORDER.indexOf(first) >= LEVEL_ORDER.indexOf(second) ? first : second;
+}
+
 export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   return {
     level: config.LOG_LEVEL,
@@ -53,9 +59,11 @@ export async function buildApp({ config, deps, logger }: AppOptions) {
     }),
   });
 
-  app.get('/health', { config: { rateLimit: false }, logLevel: 'warn' }, () => ({ status: 'ok' }));
+  const probeLogLevel = quietestLevel(config.LOG_LEVEL, 'warn');
 
-  app.get('/ready', { config: { rateLimit: false }, logLevel: 'warn' }, async (request, reply) => {
+  app.get('/health', { config: { rateLimit: false }, logLevel: probeLogLevel }, () => ({ status: 'ok' }));
+
+  app.get('/ready', { logLevel: probeLogLevel }, async (request, reply) => {
     try {
       await deps.db.query('select 1');
       return { status: 'ready' };

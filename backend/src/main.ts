@@ -4,7 +4,12 @@ import { createPool } from './db/pool.ts';
 import { buildApp } from './http/app.ts';
 
 const config = loadConfig(process.env);
-const pool = createPool(config.DATABASE_URL, config.DATABASE_POOL_SIZE);
+const pool = createPool(config.DATABASE_URL, {
+  max: config.DATABASE_POOL_SIZE,
+  onError: (error) => {
+    app.log.warn({ err: error }, 'idle database client failed');
+  },
+});
 const app = await buildApp({ config, deps: { db: pool } });
 
 if (config.MIGRATE_ON_START) {
