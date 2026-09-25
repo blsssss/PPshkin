@@ -1,0 +1,380 @@
+openapi: 3.1.0
+info:
+  title: PPshkin API
+  version: 1.0.0
+  description: HTTP API мини-приложения ППшкин в MAX. Гость ведёт дневник питания
+    и получает персональные предложения заведений, заведение управляет меню,
+    горящими позициями и бронями.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Сессионный токен из POST /api/v1/auth/max или тестовый токен
+        демо-учётки (только при DEMO_MODE=true).
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+        detail:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+            required:
+              - path
+              - message
+            additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - code
+        - detail
+      additionalProperties: false
+      description: Описание ошибки по RFC 9457
+    GeoPoint:
+      type: object
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+      required:
+        - lat
+        - lon
+      additionalProperties: false
+      description: Координаты WGS 84
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: MAX user id
+        firstName:
+          type:
+            - string
+            - "null"
+        username:
+          type:
+            - string
+            - "null"
+        timezone:
+          type: string
+        kcalTarget:
+          type: integer
+          description: Daily calorie guideline
+        goal:
+          anyOf:
+            - type: string
+              enum:
+                - lose
+                - maintain
+                - gain
+            - type: "null"
+        dislikedTags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        location:
+          anyOf:
+            - $ref: "#/components/schemas/GeoPoint"
+            - type: "null"
+          description: Last shared location, rounded to about 1 km
+      required:
+        - id
+        - firstName
+        - username
+        - timezone
+        - kcalTarget
+        - goal
+        - dislikedTags
+        - location
+      additionalProperties: false
+    Session:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "Токен для заголовка Authorization: Bearer"
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        startParam:
+          description: Подписанный параметр startapp, с которым открыто мини-приложение
+          type:
+            - string
+            - "null"
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required:
+        - token
+        - expiresAt
+        - startParam
+        - user
+      additionalProperties: false
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Проверка, что процесс жив
+      tags:
+        - system
+      responses:
+        "200":
+          description: Процесс работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - ok
+                required:
+                  - status
+                additionalProperties: false
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ready:
+    get:
+      operationId: getReadiness
+      summary: Готовность к работе, проверяет базу данных
+      tags:
+        - system
+      responses:
+        "200":
+          description: Сервис готов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - ready
+                required:
+                  - status
+                additionalProperties: false
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: &a1
+            Retry-After:
+              description: Через сколько секунд можно повторить запрос
+              schema:
+                type: integer
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/auth/max:
+    post:
+      operationId: signInWithMax
+      summary: Вход по initData мини-приложения MAX
+      tags:
+        - auth
+      description: "Проверяет подпись initData по алгоритму MAX (HMAC-SHA256 с ключом
+        WebAppData и токеном бота) и срок давности, создаёт пользователя при
+        первом входе и выдаёт сессионный токен. Коды ошибок:
+        init_data_malformed, init_data_bad_signature, init_data_no_user (401,
+        отправьте initData без изменений), init_data_expired (401, переоткройте
+        мини-приложение), auth_unavailable (503, вход через MAX не настроен на
+        сервере). Токен из ответа передаётся в заголовке Authorization: Bearer.
+        Ответ 401 с кодом invalid_token на других методах означает, что сессия
+        истекла и нужно войти заново."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                initData:
+                  type: string
+                  minLength: 1
+                  maxLength: 8192
+                  description: Строка window.WebApp.initData из MAX Bridge без изменений
+              required:
+                - initData
+      responses:
+        "200":
+          description: Сессия создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: &a2
+            WWW-Authenticate:
+              description: Схема аутентификации Bearer
+              schema:
+                type: string
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/me:
+    get:
+      operationId: getMe
+      summary: Профиль текущего пользователя
+      tags:
+        - me
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Профиль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+servers:
+  - url: /
+    description: Текущий хост
+tags:
+  - name: system
+    description: Состояние сервиса
+  - name: auth
+    description: Вход через MAX
+  - name: me
+    description: Профиль текущего пользователя
