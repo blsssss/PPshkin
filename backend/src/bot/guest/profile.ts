@@ -1,5 +1,5 @@
 import { PROFILE_LIMITS } from '../../domain/profile.ts';
-import { GOALS, TAG_LABELS, type Goal } from '../../domain/vocabulary.ts';
+import { GOALS, isTag, onlyKnownTags, TAG_LABELS, type Goal } from '../../domain/vocabulary.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
 import type { Profile, ProfileService } from '../../services/profile.ts';
 import { answerStale, byAction, parseId, payload } from '../callbacks.ts';
@@ -19,6 +19,9 @@ import {
   OFFERS_QUESTION,
   profileText,
 } from '../texts.ts';
+import { splitTags } from './offer-keyboards.ts';
+import { OFFER_NOTICES } from './offer-texts.ts';
+import { dislikeMessage, withoutTag } from './offers.ts';
 
 export function isGoal(value: string | undefined): value is Goal {
   return GOALS.some((goal) => goal === value);
@@ -109,6 +112,25 @@ export function createProfileModule({ services, states }: BotKit): BotModule {
     }
   }
 
+  async function addDislikedTag(ctx: BotContext, [value = '', offered]: string[]): Promise<void> {
+    if (!isTag(value)) {
+      await answerStale(ctx);
+      return;
+    }
+    const current = ctx.user.dislikedTags;
+    const known = current.includes(value);
+    if (!known && current.length >= PROFILE_LIMITS.dislikedTags) {
+      await ctx.answer({ notification: OFFER_NOTICES.dislikedFull });
+      return;
+    }
+    const disliked = known
+      ? current
+      : (await profile.update(ctx.user.id, { dislikedTags: [...current, value] })).user.dislikedTags;
+    const queue = ctx.state.offerQueue;
+    if (queue !== null) await ctx.saveState({ ...ctx.state, offerQueue: withoutTag(queue, value) });
+    await ctx.answer({ message: dislikeMessage(onlyKnownTags([...splitTags(offered), value]), disliked) });
+  }
+
   return {
     commands: {
       profile: async (ctx) => {
@@ -127,6 +149,7 @@ export function createProfileModule({ services, states }: BotKit): BotModule {
             await ctx.answer({ message: { text: OFFERS_QUESTION, buttons: offersButtons('pf') } });
           },
         }),
+        tag: byAction({ add: addDislikedTag }),
         tags: byAction({
           reset: async (ctx) => {
             await ctx.answer({

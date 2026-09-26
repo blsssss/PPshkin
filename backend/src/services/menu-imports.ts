@@ -1,4 +1,5 @@
 import { withTransaction, type Pool } from '../db/pool.ts';
+import { STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
 import type { MenuImport, MenuItem } from '../domain/models.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
@@ -27,16 +28,14 @@ interface MenuImportsDependencies {
   background: BackgroundTasks;
 }
 
-const STALE_AFTER_MS = 30 * 60_000;
 const DAILY_IMPORT_LIMIT = 20;
 
 const NO_ANSWER = 'Сервис распознавания не ответил, попробуйте позже';
-const TOO_SLOW = 'Не успели распознать меню, попробуйте фото получше или вставьте текст';
 const NOTHING_FOUND = 'Не нашли позиций в меню, попробуйте фото получше или вставьте текст';
 
 const UNAVAILABLE_MESSAGES: Record<UnavailableReason, string> = {
   disabled: 'Распознавание меню временно недоступно, добавьте позиции вручную',
-  timeout: TOO_SLOW,
+  timeout: STALE_IMPORT_ERROR,
   quota_exceeded: NO_ANSWER,
   provider_error: NO_ANSWER,
   invalid_response: NO_ANSWER,
@@ -54,13 +53,13 @@ function outcomeOf(result: MenuParseResult): menuImports.ImportOutcome {
 }
 
 function processingSince(now: Date): Date {
-  return new Date(now.getTime() - STALE_AFTER_MS);
+  return new Date(now.getTime() - STALE_IMPORT_MS);
 }
 
 function asOf(menuImport: MenuImport, now: Date): MenuImport {
-  const deadline = menuImport.createdAt.getTime() + STALE_AFTER_MS;
+  const deadline = menuImport.createdAt.getTime() + STALE_IMPORT_MS;
   if (menuImport.status !== 'processing' || now.getTime() <= deadline) return menuImport;
-  return { ...menuImport, status: 'failed', error: TOO_SLOW, completedAt: new Date(deadline) };
+  return { ...menuImport, status: 'failed', error: STALE_IMPORT_ERROR, completedAt: new Date(deadline) };
 }
 
 function importNotFound() {
