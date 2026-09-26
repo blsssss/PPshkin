@@ -3,7 +3,8 @@ import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { TINY_PNG } from '../../test/multipart.ts';
 import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
-import type { Tag } from '../domain/vocabulary.ts';
+import { MEAL_LIMITS } from '../domain/meals.ts';
+import { TAGS, type Tag } from '../domain/vocabulary.ts';
 import type { DishEstimate, DishRecognition, DishRecognizer } from '../ports/recognition.ts';
 import * as meals from '../repositories/meals.ts';
 import * as users from '../repositories/users.ts';
@@ -481,16 +482,25 @@ describe('meal recognition', () => {
     });
   });
 
-  it('fits recognized values into the meal table limits', async () => {
+  it('fits recognized values into the manual entry limits', async () => {
     const dishes = fakeRecognizer(
       recognized([
         estimate('  ', 0.9, {
           kcalMin: -40.4,
           kcalMax: -10,
           proteinG: -1,
+          fatG: Number.NaN,
           tags: ['grain', 'unknown' as Tag, 'grain'],
         }),
-        estimate('Т'.repeat(300), 0.9, { kcalMin: 12000.6, kcalMax: 15000, confidence: 1.4 }),
+        estimate('Т'.repeat(300), 0.9, {
+          kcalMin: 12000.6,
+          kcalMax: 15000,
+          proteinG: 520,
+          fatG: 700.5,
+          carbsG: 1200,
+          tags: TAGS,
+          confidence: 1.4,
+        }),
       ]),
     );
     const result = await diaryWith(dishes).logFromPhoto(GUEST, TINY_PNG);
@@ -501,10 +511,63 @@ describe('meal recognition', () => {
       kcalMin: 0,
       kcalMax: 0,
       proteinG: 0,
+      fatG: 0,
       tags: ['grain'],
     });
-    expect(result.meals[1]).toMatchObject({ kcalMin: 10000, kcalMax: 10000, confidence: 1 });
-    expect(result.meals[1]?.title).toHaveLength(200);
+    expect(result.meals[1]).toMatchObject({
+      kcalMin: MEAL_LIMITS.kcal,
+      kcalMax: MEAL_LIMITS.kcal,
+      proteinG: MEAL_LIMITS.grams,
+      fatG: MEAL_LIMITS.grams,
+      carbsG: MEAL_LIMITS.grams,
+      tags: TAGS.slice(0, MEAL_LIMITS.tags),
+      confidence: 1,
+    });
+    expect(result.meals[1]?.title).toHaveLength(MEAL_LIMITS.titleLength);
+  });
+
+  it('returns uncertain candidates that can be confirmed unchanged as manual entries', async () => {
+    const dishes = fakeRecognizer(
+      recognized([
+        estimate('Большой сет', 0.3, {
+          kcalMin: 4800,
+          kcalMax: 5600,
+          proteinG: 520,
+          fatG: 510,
+          carbsG: 900,
+          tags: TAGS,
+        }),
+      ]),
+    );
+    const diary = diaryWith(dishes);
+    const result = await diary.logFromPhoto(GUEST, TINY_PNG);
+    expect(result.status).toBe('uncertain');
+    if (result.status !== 'uncertain') return;
+    const [candidate] = result.candidates;
+    expect(candidate).toEqual({
+      title: 'Большой сет',
+      portionG: 250,
+      kcalMin: 4800,
+      kcalMax: MEAL_LIMITS.kcal,
+      proteinG: MEAL_LIMITS.grams,
+      fatG: MEAL_LIMITS.grams,
+      carbsG: MEAL_LIMITS.grams,
+      tags: TAGS.slice(0, MEAL_LIMITS.tags),
+      confidence: 0.3,
+    });
+    if (!candidate) return;
+    const { title, kcalMin, kcalMax, proteinG, fatG, carbsG, tags } = candidate;
+    const confirmed = await diary.addManual(GUEST, { title, kcalMin, kcalMax, proteinG, fatG, carbsG, tags });
+    expect(confirmed).toMatchObject({
+      title,
+      kcalMin,
+      kcalMax,
+      proteinG,
+      fatG,
+      carbsG,
+      tags,
+      source: 'manual',
+    });
   });
 
   it('does not call the recognizer without consent or for a missing user', async () => {

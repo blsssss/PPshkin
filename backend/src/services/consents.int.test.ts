@@ -1,9 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { withTransaction, type PoolClient } from '../db/pool.ts';
 import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
 import * as users from '../repositories/users.ts';
-import { createConsentsService } from './consents.ts';
+import { createConsentsService, type ConsentState } from './consents.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
@@ -24,6 +25,25 @@ async function history(userId: number): Promise<HistoryRow[]> {
     [userId],
   );
   return rows;
+}
+
+async function lockWaiters(client: PoolClient): Promise<number> {
+  await client.query('select pg_stat_clear_snapshot()');
+  const { rows } = await client.query<{ waiting: number }>(
+    `select count(*)::int as waiting from pg_stat_activity
+      where datname = current_database() and wait_event_type = 'Lock'`,
+  );
+  return rows[0]?.waiting ?? 0;
+}
+
+async function grantAllAtOnce(count: number, grant: () => Promise<ConsentState>): Promise<ConsentState[]> {
+  const pending = await withTransaction(pool, async (holder) => {
+    await holder.query('select id from users where id = 1 for update');
+    const started = Array.from({ length: count }, grant);
+    await expect.poll(() => lockWaiters(holder), { interval: 5 }).toBe(count);
+    return started;
+  });
+  return Promise.all(pending);
 }
 
 beforeEach(async () => {
@@ -177,16 +197,31 @@ describe('consents service', () => {
     });
   });
 
-  it('keeps one active record when the same user grants concurrently', async () => {
+  it('writes a single record when the same version is granted concurrently', async () => {
+    const results = await grantAllAtOnce(3, () => consents.grant(1, 'personal_data', VERSION, 'miniapp'));
+    const state = { granted: true, version: VERSION, grantedAt: new Date('2026-09-25T09:00:00Z') };
+    expect(results).toEqual([state, state, state]);
+    expect(await history(1)).toEqual([
+      {
+        kind: 'personal_data',
+        version: VERSION,
+        channel: 'miniapp',
+        granted_at: new Date('2026-09-25T09:00:00Z'),
+        revoked_at: null,
+      },
+    ]);
+  });
+
+  it('replaces an outdated record once when the current version is granted concurrently', async () => {
     const version = CONSENT_DOCUMENTS.personalized_offers.version;
     await pool.query(
       `insert into consents (user_id, kind, version, channel) values (1, 'personalized_offers', '2025-01-01', 'bot')`,
     );
-    const results = await Promise.allSettled(
-      Array.from({ length: 4 }, () => consents.grant(1, 'personalized_offers', version, 'miniapp')),
-    );
-    expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
-    const active = (await history(1)).filter((row) => row.revoked_at === null);
-    expect(active).toEqual([expect.objectContaining({ version })]);
+    await grantAllAtOnce(3, () => consents.grant(1, 'personalized_offers', version, 'miniapp'));
+    const rows = await history(1);
+    expect(rows.map((row) => [row.version, row.revoked_at === null])).toEqual([
+      ['2025-01-01', false],
+      [version, true],
+    ]);
   });
 });

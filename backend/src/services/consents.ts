@@ -78,15 +78,11 @@ export function createConsentsService({ pool, clock }: ConsentsDependencies): Co
           'The consent text has changed, show the current version and ask again',
         );
       }
-      return withTransaction(pool, async (client) => {
-        const active = await consents.listActive(client, userId);
-        if (active.some((consent) => consent.kind === kind && consent.version === version)) {
-          return stateOf(kind, active);
-        }
-        const granted = await consents.grant(client, userId, kind, version, channel, clock.now());
-        if (!granted) throw notFound('user_not_found', 'User not found');
-        return stateOf(kind, [granted]);
-      });
+      const granted = await withTransaction(pool, (client) =>
+        consents.grant(client, userId, kind, version, channel, clock.now()),
+      );
+      if (!granted) throw notFound('user_not_found', 'User not found');
+      return stateOf(kind, [granted]);
     },
 
     async revoke(userId, kind) {

@@ -181,17 +181,21 @@ export const DiarySummarySchema = z
 
 export const MealCandidateSchema = z
   .object({
-    title: z.string(),
+    title: z.string().min(1).max(MEAL_LIMITS.titleLength),
     portionG: z.number().nullable().describe('Оценка порции, г'),
-    kcalMin: z.number().int(),
-    kcalMax: z.number().int(),
-    proteinG: z.number(),
-    fatG: z.number(),
-    carbsG: z.number(),
-    tags: z.array(z.enum(TAGS)),
+    kcalMin: KcalValue,
+    kcalMax: KcalValue,
+    proteinG: Grams,
+    fatG: Grams,
+    carbsG: Grams,
+    tags: mealFields.tags,
     confidence: z.number().min(0).max(1),
   })
-  .meta({ id: 'MealCandidate', description: 'Вариант распознавания, который гость может подтвердить' });
+  .meta({
+    id: 'MealCandidate',
+    description:
+      'Вариант распознавания, который гость может подтвердить. Значения укладываются в ограничения ManualMeal, поэтому title, kcalMin, kcalMax, proteinG, fatG, carbsG и tags можно отправить в POST /api/v1/diary/meals без изменений',
+  });
 
 const BasisSchema = z.string().describe('Короткое пояснение распознавания для гостя');
 

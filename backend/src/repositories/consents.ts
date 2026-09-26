@@ -36,6 +36,13 @@ export async function grant(
 ): Promise<Consent | null> {
   const owner = await maybeOne(db, 'select id from users where id = $1 for update', [userId]);
   if (!owner) return null;
+  const active = await maybeOne<ConsentRow>(
+    db,
+    `select ${CONSENT_COLUMNS} from consents
+      where user_id = $1 and kind = $2 and revoked_at is null`,
+    [userId, kind],
+  );
+  if (active?.version === version) return mapConsent(active);
   await revoke(db, userId, kind, at);
   const row = await one<ConsentRow>(
     db,

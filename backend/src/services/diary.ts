@@ -24,7 +24,6 @@ export const DESCRIPTION_MAX_LENGTH = 500;
 const MINUTE_MS = 60_000;
 const EATEN_AT_PAST_MS = 7 * 24 * 60 * MINUTE_MS;
 const EATEN_AT_FUTURE_MS = 5 * MINUTE_MS;
-const STORED_KCAL_MAX = 10_000;
 const UNTITLED_DISH = 'Блюдо';
 
 export type DiaryMeal = Meal & { slot: MealSlot };
@@ -88,8 +87,6 @@ const within = (value: number, min: number, max: number) => value >= min && valu
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
 
-const nonNegative = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0);
-
 const positiveOrNull = (value: number | null) =>
   value !== null && Number.isFinite(value) && value > 0 ? value : null;
 
@@ -135,17 +132,17 @@ function requireRecent(eatenAt: Date, now: Date): void {
   }
 }
 
-function storable(estimate: DishEstimate): DishEstimate {
-  const kcalMin = clamp(Math.round(estimate.kcalMin), 0, STORED_KCAL_MAX);
+function confirmable(estimate: DishEstimate): DishEstimate {
+  const kcalMin = clamp(Math.round(estimate.kcalMin), 0, MEAL_LIMITS.kcal);
   return {
     title: estimate.title.trim().slice(0, MEAL_LIMITS.titleLength).trim() || UNTITLED_DISH,
     portionG: positiveOrNull(estimate.portionG),
     kcalMin,
-    kcalMax: clamp(Math.round(estimate.kcalMax), kcalMin, STORED_KCAL_MAX),
-    proteinG: nonNegative(estimate.proteinG),
-    fatG: nonNegative(estimate.fatG),
-    carbsG: nonNegative(estimate.carbsG),
-    tags: onlyKnownTags(estimate.tags),
+    kcalMax: clamp(Math.round(estimate.kcalMax), kcalMin, MEAL_LIMITS.kcal),
+    proteinG: clamp(estimate.proteinG, 0, MEAL_LIMITS.grams),
+    fatG: clamp(estimate.fatG, 0, MEAL_LIMITS.grams),
+    carbsG: clamp(estimate.carbsG, 0, MEAL_LIMITS.grams),
+    tags: onlyKnownTags(estimate.tags).slice(0, MEAL_LIMITS.tags),
     confidence: clamp(estimate.confidence, 0, 1),
   };
 }
@@ -189,7 +186,7 @@ export function createDiaryService({ pool, dishes, clock, consents }: DiaryDepen
   ): Promise<MealLogResult> {
     if (recognition.status === 'unavailable') return { status: 'unavailable', reason: recognition.reason };
     if (recognition.status === 'not_food') return { status: 'not_food', basis: recognition.basis };
-    const estimates = recognition.items.map(storable);
+    const estimates = recognition.items.map(confirmable);
     const confident = estimates.filter((estimate) => estimate.confidence >= MIN_CONFIDENCE);
     if (confident.length === 0) {
       return { status: 'uncertain', candidates: estimates, basis: recognition.basis };

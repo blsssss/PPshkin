@@ -780,6 +780,8 @@ components:
       properties:
         title:
           type: string
+          minLength: 1
+          maxLength: 200
         portionG:
           description: Оценка порции, г
           type:
@@ -787,15 +789,26 @@ components:
             - "null"
         kcalMin:
           type: integer
+          minimum: 0
+          maximum: 5000
         kcalMax:
           type: integer
+          minimum: 0
+          maximum: 5000
         proteinG:
           type: number
+          minimum: 0
+          maximum: 500
         fatG:
           type: number
+          minimum: 0
+          maximum: 500
         carbsG:
           type: number
+          minimum: 0
+          maximum: 500
         tags:
+          maxItems: 10
           type: array
           items:
             type: string
@@ -850,7 +863,10 @@ components:
         - tags
         - confidence
       additionalProperties: false
-      description: Вариант распознавания, который гость может подтвердить
+      description: Вариант распознавания, который гость может подтвердить. Значения
+        укладываются в ограничения ManualMeal, поэтому title, kcalMin, kcalMax,
+        proteinG, fatG, carbsG и tags можно отправить в POST /api/v1/diary/meals
+        без изменений
     MealLogResult:
       oneOf:
         - type: object
