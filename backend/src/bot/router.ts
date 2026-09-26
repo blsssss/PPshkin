@@ -2,7 +2,7 @@ import type { Queryable } from '../db/pool.ts';
 import type { User } from '../domain/models.ts';
 import { UserUnreachableError } from '../integrations/max/errors.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
-import type { IncomingEvent, Messenger, UpdateHandler } from '../ports/messenger.ts';
+import type { IncomingEvent, Messenger, OutgoingMessage, UpdateHandler } from '../ports/messenger.ts';
 import * as users from '../repositories/users.ts';
 import type { Services } from '../services/index.ts';
 import type { Clock } from '../shared/clock.ts';
@@ -62,8 +62,13 @@ function createRecentSet(limit: number) {
       const [oldest] = items;
       if (oldest !== undefined) items.delete(oldest);
     },
+    delete: (item: string) => items.delete(item),
     has: (item: string) => items.has(item),
   };
+}
+
+function hasButtons(message: OutgoingMessage): boolean {
+  return (message.buttons ?? []).length > 0;
 }
 
 export function createRouter(options: RouterOptions): UpdateHandler {
@@ -93,7 +98,7 @@ export function createRouter(options: RouterOptions): UpdateHandler {
         if (event.type !== 'callback' || answered) return;
         await messenger.answerCallback(event.callbackId, answer);
         answered = true;
-        if (pressed !== null && answer.message && (answer.message.buttons ?? []).length === 0) {
+        if (pressed !== null && answer.message && !hasButtons(answer.message)) {
           retiredKeyboards.add(pressed);
         }
       },
@@ -111,6 +116,7 @@ export function createRouter(options: RouterOptions): UpdateHandler {
         if (target !== null) {
           try {
             await messenger.editMessage(target, message);
+            if (hasButtons(message)) retiredKeyboards.delete(target);
             return { messageId: target };
           } catch (error) {
             if (error instanceof UserUnreachableError) throw error;

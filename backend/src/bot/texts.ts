@@ -2,6 +2,7 @@ import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
 import type { Macros } from '../domain/models.ts';
 import type { Goal } from '../domain/vocabulary.ts';
 import { escapeMarkdown } from '../integrations/max/messenger.ts';
+import { clip } from '../recognition/normalize.ts';
 import { plural } from '../shared/plural.ts';
 
 export const MESSAGE_LIMIT = 4000;
@@ -64,7 +65,6 @@ export const NOTICES = {
   consentAlready: 'Согласие уже получено',
   fixWaiting: 'Жду исправление',
   mealDeleted: 'Запись удалена',
-  recorded: 'Записано',
   tryAgain: 'Не получилось, попробуйте ещё раз',
 } as const;
 
@@ -203,6 +203,8 @@ export const FIX_PROMPT =
 export const FIX_INVALID =
   'Не понял. Напишите название и калории, например: Борщ 300, или только калории: 300';
 export const MEAL_DELETED = 'Запись удалена.';
+export const MEAL_RECORDED = 'Записано.';
+export const INPUT_CANCELLED = 'Хорошо, отменил. Пришлите фото блюда или напишите, что съели.';
 
 export const FIXED_HEADER = 'Исправил:';
 
@@ -244,7 +246,7 @@ export function capitalize(text: string): string {
 
 export function truncate(text: string, limit: number): string {
   const trimmed = text.trim();
-  return trimmed.length <= limit ? trimmed : `${trimmed.slice(0, limit - 1).trimEnd()}…`;
+  return Array.from(trimmed).length <= limit ? trimmed : `${clip(trimmed, limit - 1)}…`;
 }
 
 export function kcalRange(kcalMin: number, kcalMax: number): string {

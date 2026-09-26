@@ -191,6 +191,48 @@ describe('bot runtime', () => {
     expect(api.setCommands).not.toHaveBeenCalled();
   });
 
+  it('stops without waiting for a start that hangs while MAX is unreachable', async () => {
+    const { promise: me, resolve } = Promise.withResolvers<typeof BOT>();
+    const api = workingApi({ getMe: vi.fn(() => me) });
+    const { bot, logger } = runtime(POLLING, api);
+
+    bot.start();
+    const waiting = bot.handle(stopped);
+    await vi.waitFor(() => {
+      expect(api.getMe).toHaveBeenCalledTimes(1);
+    });
+
+    await bot.stop();
+    await expect(waiting).rejects.toThrow('The bot stopped before it started');
+
+    resolve(BOT);
+    await me;
+    await new Promise((settled) => setImmediate(settled));
+    expect(api.listSubscriptions).not.toHaveBeenCalled();
+    expect(api.getUpdates).not.toHaveBeenCalled();
+    expect(api.setCommands).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('gives up quietly when the start fails after the shutdown began', async () => {
+    const { promise: me, reject } = Promise.withResolvers<typeof BOT>();
+    const api = workingApi({ getMe: vi.fn(() => me) });
+    const { bot, logger, sleep } = runtime(POLLING, api);
+
+    bot.start();
+    await vi.waitFor(() => {
+      expect(api.getMe).toHaveBeenCalledTimes(1);
+    });
+    await bot.stop();
+
+    reject(new MaxApiError(0, 'network.error', 'MAX request failed without a response'));
+    await me.catch(() => undefined);
+    await new Promise((settled) => setImmediate(settled));
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+    expect(api.getMe).toHaveBeenCalledTimes(1);
+  });
+
   it('does not keep a transport that started after the shutdown began', async () => {
     const { promise: subscriptions, resolve } = Promise.withResolvers<[]>();
     const api = workingApi({ listSubscriptions: vi.fn(() => subscriptions) });

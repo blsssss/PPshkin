@@ -150,7 +150,7 @@ describe('bot router', () => {
     await chat.press('ml:manual', 'mid.old');
     chat.world.clock.advance(FLOW_TTL_MS - 1);
 
-    expect(texts(await chat.send('Плов'))).toEqual([
+    expect(texts(await chat.send('Плов 9000'))).toEqual([
       'Не понял. Напишите название и калории числом, например: Сырники 350',
     ]);
   });
@@ -373,6 +373,55 @@ describe('bot router', () => {
       expect.objectContaining({ kind: 'send', text: 'Жду...' }),
       expect.objectContaining({ kind: 'edit', text: 'Результат' }),
     ]);
+  });
+
+  it('keeps the buttons of a result that replaced a placeholder on the pressed message', async () => {
+    const chat = consentedChat({
+      createHandler: withModule({
+        callbacks: {
+          zz: async (ctx, [step]) => {
+            if (step === 'next') {
+              await ctx.answer({ notification: 'Дальше' });
+              return;
+            }
+            await ctx.placeholder('Жду...');
+            const buttons =
+              step === 'menu' ? [[{ kind: 'callback' as const, text: 'Дальше', payload: 'zz:next' }]] : [];
+            await ctx.settle({ text: 'Результат', buttons });
+          },
+        },
+      }),
+    });
+
+    expect(await chat.press('zz:menu', 'mid.old')).toEqual([
+      expect.objectContaining({
+        kind: 'answer',
+        message: expect.objectContaining({ text: 'Жду...' }) as unknown,
+      }),
+      expect.objectContaining({ kind: 'edit', messageId: 'mid.old', text: 'Результат' }),
+    ]);
+    expect(answers(await chat.press('zz:next'))[0]?.notification).toBe('Дальше');
+
+    await chat.press('zz:plain', 'mid.plain');
+    expect(answers(await chat.press('zz:plain', 'mid.plain'))[0]?.notification).toBe('Эта кнопка уже нажата');
+  });
+
+  it('shows a working consent button in place of a placeholder on the pressed message', async () => {
+    const chat = consentedChat();
+    chat.world.recognizeText.mockImplementation(() => {
+      chat.world.consents.clear();
+      return Promise.reject(forbidden('consent_required', 'Consent to personal data processing is required'));
+    });
+    const [question] = sent(await chat.send('ёжик в тумане'));
+
+    const [reminder] = (await chat.press('ml:text:yes')).flatMap((item) =>
+      item.kind === 'edit' ? [item] : [],
+    );
+    expect(reminder).toMatchObject({ messageId: question?.messageId, text: CONSENT_REMINDER });
+    expect(payloads(reminder)).toEqual(['cs:pd:ok', 'cs:pd:more']);
+
+    const consent = await chat.press('cs:pd:ok');
+    expect(answers(consent)[0]?.message?.text).toContain('Согласие получено, спасибо!');
   });
 
   it('settles without a placeholder by sending a new message', async () => {

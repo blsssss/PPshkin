@@ -93,6 +93,9 @@ describe('bot texts', () => {
     ]);
     expect(truncate(' Борщ ', 10)).toBe('Борщ');
     expect(truncate('Очень длинное название блюда', 10)).toBe('Очень дли…');
+    expect(truncate('Суп🍲дня', 5)).toBe('Суп🍲…');
+    expect(truncate('🍲🍲🍲', 3)).toBe('🍲🍲🍲');
+    expect(truncate('Торт 🎂🎂🎂', 7).isWellFormed()).toBe(true);
     expect(capitalize('сырники')).toBe('Сырники');
   });
 

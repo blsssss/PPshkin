@@ -21,6 +21,7 @@ import {
   FIX_INVALID,
   FIX_PROMPT,
   FIXED_HEADER,
+  INPUT_CANCELLED,
   kcalRange,
   limitedLines,
   loggedHeader,
@@ -30,6 +31,7 @@ import {
   MANUAL_INVALID,
   MANUAL_PROMPT,
   MEAL_DELETED,
+  MEAL_RECORDED,
   NOT_FOOD_PHOTO,
   NOT_FOOD_TEXT,
   NOTICES,
@@ -59,8 +61,10 @@ const TODAY_LIMIT = 20;
 const DISHES_LIMIT = 5;
 const MULTI_DISH_ORIGIN = 'm';
 const TODAY_ORIGIN = 't';
+const FIXED_ORIGIN = 'f';
 const ID_SEPARATOR = '.';
 const CANDIDATE_INDEX = /^[0-9]$/;
+const DIGIT = /\d/;
 
 function mealLine(meal: Pick<DiaryMeal, 'title' | 'kcalMin' | 'kcalMax'>): string {
   return `${bold(truncate(meal.title, TITLE_IN_LIST_LIMIT))}, ${kcalRange(meal.kcalMin, meal.kcalMax)}`;
@@ -96,13 +100,18 @@ function withManualEntry(text: string): OutgoingMessage {
   return { text, buttons: [manualButton()] };
 }
 
-function mealButtons(meals: readonly DiaryMeal[]): Button[][] {
+function withCancel(text: string, ...input: readonly (string | number)[]): OutgoingMessage {
+  return { text, buttons: [[callback(BUTTONS.cancel, payload('ml', 'cancel', ...input))]] };
+}
+
+function mealButtons(meals: readonly DiaryMeal[], fixed: boolean): Button[][] {
   const ids = meals.map((meal) => meal.id).join(ID_SEPARATOR);
+  const confirm = payload('ml', 'ok', ids, ...(fixed ? [FIXED_ORIGIN] : []));
   const [first] = meals;
   if (meals.length === 1 && first) {
     return [
       [
-        callback(BUTTONS.correct, payload('ml', 'ok', ids)),
+        callback(BUTTONS.correct, confirm),
         callback(BUTTONS.fix, payload('ml', 'fix', first.id)),
         callback(BUTTONS.remove, payload('ml', 'del', first.id)),
       ],
@@ -116,12 +125,12 @@ function mealButtons(meals: readonly DiaryMeal[]): Button[][] {
         callback(`${BUTTONS.remove}: ${title}`, payload('ml', 'del', meal.id, MULTI_DISH_ORIGIN)),
       ];
     }),
-    [callback(BUTTONS.allCorrect, payload('ml', 'ok', ids))],
+    [callback(BUTTONS.allCorrect, confirm)],
   ];
 }
 
 function mealsMessage(meals: readonly DiaryMeal[], day: DiaryDay, fixed = false): OutgoingMessage {
-  return { text: mealsText(meals, day, fixed), buttons: mealButtons(meals) };
+  return { text: mealsText(meals, day, fixed), buttons: mealButtons(meals, fixed) };
 }
 
 function uncertainMessage(candidates: readonly MealCandidate[]): OutgoingMessage {
@@ -192,6 +201,20 @@ function parseIds(value: string | undefined): number[] | null {
 function candidateInput(candidate: MealCandidate): ManualMealInput {
   const { title, kcalMin, kcalMax, proteinG, fatG, carbsG, tags } = candidate;
   return { title, kcalMin, kcalMax, proteinG, fatG, carbsG, tags };
+}
+
+async function cancelInput(ctx: BotContext, pending: boolean): Promise<void> {
+  if (pending) await ctx.saveState({ ...ctx.state, flow: null });
+  await ctx.answer({ message: { text: INPUT_CANCELLED } });
+}
+
+async function rejectInput(ctx: BotContext, text: string, hint: OutgoingMessage): Promise<boolean> {
+  if (!DIGIT.test(text)) {
+    await ctx.saveState({ ...ctx.state, flow: null });
+    return false;
+  }
+  await ctx.reply(hint);
+  return true;
 }
 
 export function createMealsModule({ services, messenger, logger }: BotKit): BotModule {
@@ -283,7 +306,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
     }
   }
 
-  async function confirmLogged(ctx: BotContext, [value]: string[]): Promise<void> {
+  async function confirmLogged(ctx: BotContext, [value, origin]: string[]): Promise<void> {
     const ids = parseIds(value);
     if (!ids) {
       await answerStale(ctx);
@@ -291,8 +314,8 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
     }
     const day = await diary.day(ctx.user.id);
     const meals = day.meals.filter((meal) => ids.includes(meal.id));
-    if (meals.length === 0) await ctx.answer({ notification: NOTICES.recorded });
-    else await ctx.answer({ message: { text: mealsText(meals, day) } });
+    const text = meals.length === 0 ? MEAL_RECORDED : mealsText(meals, day, origin === FIXED_ORIGIN);
+    await ctx.answer({ message: { text } });
   }
 
   async function startFix(ctx: BotContext, [value]: string[]): Promise<void> {
@@ -303,7 +326,21 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
     }
     await ctx.saveState({ ...ctx.state, flow: startFlow({ name: 'meal_fix', mealId }, ctx.now) });
     await ctx.answer({ notification: NOTICES.fixWaiting });
-    await ctx.reply({ text: FIX_PROMPT });
+    await ctx.reply(withCancel(FIX_PROMPT, 'fix', mealId));
+  }
+
+  async function cancelFix(ctx: BotContext, [value]: string[]): Promise<void> {
+    const mealId = parseId(value);
+    if (mealId === null) {
+      await answerStale(ctx);
+      return;
+    }
+    const flow = ctx.state.flow;
+    await cancelInput(ctx, flow?.name === 'meal_fix' && flow.mealId === mealId);
+  }
+
+  async function cancelManual(ctx: BotContext): Promise<void> {
+    await cancelInput(ctx, ctx.state.flow?.name === 'meal_manual');
   }
 
   async function removeMeal(ctx: BotContext, [value, origin]: string[]): Promise<void> {
@@ -341,7 +378,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
 
   async function startManual(ctx: BotContext): Promise<void> {
     await ctx.saveState({ ...ctx.state, flow: startFlow({ name: 'meal_manual' }, ctx.now) });
-    await ctx.answer({ message: { text: MANUAL_PROMPT } });
+    await ctx.answer({ message: withCancel(MANUAL_PROMPT, 'manual') });
   }
 
   async function acceptText(ctx: BotContext): Promise<void> {
@@ -380,6 +417,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
         del: removeMeal,
         pick: pickCandidate,
         manual: startManual,
+        cancel: byAction({ fix: cancelFix, manual: cancelManual }),
         text: byAction({ yes: acceptText, no: declineText }),
       }),
     },
@@ -388,10 +426,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
         const flow = ctx.state.flow;
         if (flow?.name !== 'meal_fix' || message.text === null) return false;
         const input = parseFixInput(message.text);
-        if (!input) {
-          await ctx.reply({ text: FIX_INVALID });
-          return true;
-        }
+        if (!input) return rejectInput(ctx, message.text, withCancel(FIX_INVALID, 'fix', flow.mealId));
         await ctx.saveState({ ...ctx.state, flow: null });
         const meal = await diary.update(ctx.user.id, flow.mealId, input);
         await ctx.reply(mealsMessage([meal], await diary.day(ctx.user.id), true));
@@ -400,10 +435,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
       meal_manual: async (ctx, message) => {
         if (ctx.state.flow?.name !== 'meal_manual' || message.text === null) return false;
         const entry = parseManualEntry(message.text);
-        if (!entry) {
-          await ctx.reply({ text: MANUAL_INVALID });
-          return true;
-        }
+        if (!entry) return rejectInput(ctx, message.text, withCancel(MANUAL_INVALID, 'manual'));
         await ctx.saveState({ ...ctx.state, flow: null });
         await ctx.reply(await logManual(ctx, entry));
         return true;

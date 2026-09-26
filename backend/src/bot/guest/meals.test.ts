@@ -5,6 +5,7 @@ import {
   CHAT_ID,
   estimate,
   GUEST_ID,
+  guestWorld,
   labels,
   payloads,
   sent,
@@ -24,6 +25,8 @@ function consentedChat(options: Parameters<typeof botChat>[0] = {}): BotChat {
 function edits(outgoing: readonly Outgoing[]) {
   return outgoing.flatMap((item) => (item.kind === 'edit' ? [item] : []));
 }
+
+const CANCELLED = 'Хорошо, отменил. Пришлите фото блюда или напишите, что съели.';
 
 const SINGLE_LOGGED = [
   'Записал: **Борщ со сметаной**, 300-360 ккал',
@@ -300,10 +303,31 @@ describe('logged meal buttons', () => {
     expect(chat.world.meals).toHaveLength(1);
   });
 
-  it('acknowledges a confirmation of meals that are gone', async () => {
-    const { chat } = await loggedChat();
+  it('closes the buttons of meals that are gone', async () => {
+    const { chat, messageId } = await loggedChat();
     chat.world.meals.splice(0);
-    expect(answers(await chat.press('ml:ok:1'))[0]?.notification).toBe('Записано');
+
+    expect(await chat.press('ml:ok:1')).toEqual([
+      {
+        kind: 'answer',
+        messageId,
+        notification: null,
+        message: { text: 'Записано.', buttons: [], images: [] },
+      },
+    ]);
+    expect(answers(await chat.press('ml:ok:1', messageId))[0]?.notification).toBe('Эта кнопка уже нажата');
+  });
+
+  it('closes the buttons of a meal logged before the local midnight', async () => {
+    const chat = consentedChat({ world: guestWorld({ now: '2026-09-26T20:58:00Z' }) });
+    chat.world.recognizePhoto.mockImplementation(() => chat.world.logged({}));
+    await chat.photo();
+    chat.world.clock.advance(5 * 60_000);
+
+    const confirmed = await chat.press('ml:ok:1');
+
+    expect(answers(confirmed)[0]?.message).toEqual({ text: 'Записано.', buttons: [], images: [] });
+    expect(chat.world.meals).toHaveLength(1);
   });
 
   it('deletes the meal and says so in place', async () => {
@@ -327,14 +351,20 @@ describe('logged meal buttons', () => {
 
     const fix = await chat.press('ml:fix:1');
     expect(answers(fix)[0]?.notification).toBe('Жду исправление');
-    expect(texts(fix)).toEqual([
-      'Напишите название и калории, например: Борщ 300. Если название верное, достаточно числа: 300',
+    expect(sent(fix)).toEqual([
+      expect.objectContaining({
+        text: 'Напишите название и калории, например: Борщ 300. Если название верное, достаточно числа: 300',
+        buttons: [[{ type: 'callback', text: 'Отмена', payload: 'ml:cancel:fix:1' }]],
+      }),
     ]);
     expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_fix', mealId: 1 });
 
-    expect(texts(await chat.send('как-то так'))).toEqual([
+    const [invalid] = sent(await chat.send('Борщ 9000'));
+    expect(invalid?.text).toBe(
       'Не понял. Напишите название и калории, например: Борщ 300, или только калории: 300',
-    ]);
+    );
+    expect(payloads(invalid)).toEqual(['ml:cancel:fix:1']);
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_fix', mealId: 1 });
 
     const fixed = sent(await chat.send('Борщ 300'));
     expect(fixed[0]?.text).toBe(
@@ -344,12 +374,56 @@ describe('logged meal buttons', () => {
         'Сегодня около 300 из 2000 ккал, осталось около 1700 ккал',
       ].join('\n'),
     );
-    expect(payloads(fixed[0])).toEqual(['ml:ok:1', 'ml:fix:1', 'ml:del:1']);
+    expect(payloads(fixed[0])).toEqual(['ml:ok:1:f', 'ml:fix:1', 'ml:del:1']);
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
 
     await chat.press('ml:fix:1');
-    const kcalOnly = sent(await chat.send('250 ккал'));
-    expect(kcalOnly[0]?.text).toContain('Исправил: **Борщ**, около 250 ккал');
+    const [kcalOnly] = sent(await chat.send('250 ккал'));
+    expect(kcalOnly?.text).toContain('Исправил: **Борщ**, около 250 ккал');
+
+    const confirmed = await chat.press('ml:ok:1:f', kcalOnly?.messageId);
+    expect(answers(confirmed)[0]?.message).toEqual({ text: kcalOnly?.text, buttons: [], images: [] });
+  });
+
+  it('lets other food through while a correction is awaited', async () => {
+    const { chat } = await loggedChat();
+    chat.world.recognizeText.mockImplementation(() => chat.world.logged({ title: 'Борщ' }));
+    await chat.press('ml:fix:1');
+
+    const recognized = await chat.send('съел борщ со сметаной');
+
+    expect(chat.world.recognizeText).toHaveBeenCalledWith('съел борщ со сметаной');
+    expect(edits(recognized)[0]?.text).toContain('Записал: **Борщ**');
+    expect(chat.world.meals.map((meal) => meal.title)).toEqual(['Борщ со сметаной', 'Борщ']);
+
+    await chat.press('ml:fix:1');
+    expect(texts(await chat.send('Сырники с вареньем'))).toEqual([
+      'Записать «Сырники с вареньем» в дневник?',
+    ]);
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_text_confirm' });
+  });
+
+  it('cancels a correction and logs the next text as a new meal', async () => {
+    const { chat } = await loggedChat();
+    const [prompt] = sent(await chat.press('ml:fix:1'));
+
+    const older = await chat.press('ml:cancel:fix:2', 'mid.old');
+    expect(answers(older)[0]?.message?.text).toBe(CANCELLED);
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_fix', mealId: 1 });
+
+    const cancelled = await chat.press('ml:cancel:fix:1', prompt?.messageId);
+    expect(answers(cancelled)).toEqual([
+      {
+        kind: 'answer',
+        messageId: prompt?.messageId,
+        notification: null,
+        message: { text: CANCELLED, buttons: [], images: [] },
+      },
+    ]);
+    expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+
+    await chat.send('Сырники 350');
+    expect(chat.world.meals.map((meal) => meal.title)).toEqual(['Борщ со сметаной', 'Сырники']);
   });
 
   it('reports a correction of a meal that was deleted meanwhile', async () => {
@@ -392,16 +466,24 @@ describe('logged meal buttons', () => {
     ]);
   });
 
-  it.each(['ml:ok:x', 'ml:ok:1.2.3.4.5.6', 'ml:fix:0', 'ml:del:-1', 'ml:pick:9', 'ml:unknown', 'ml'])(
-    'treats %s as a stale button',
-    async (payload) => {
-      const chat = consentedChat();
-      const replies = await chat.press(payload, 'mid.old');
-      expect(replies).toEqual([
-        { kind: 'answer', messageId: 'mid.old', notification: 'Кнопка устарела', message: null },
-      ]);
-    },
-  );
+  it.each([
+    'ml:ok:x',
+    'ml:ok:1.2.3.4.5.6',
+    'ml:fix:0',
+    'ml:del:-1',
+    'ml:pick:9',
+    'ml:cancel',
+    'ml:cancel:zz',
+    'ml:cancel:fix:x',
+    'ml:unknown',
+    'ml',
+  ])('treats %s as a stale button', async (payload) => {
+    const chat = consentedChat();
+    const replies = await chat.press(payload, 'mid.old');
+    expect(replies).toEqual([
+      { kind: 'answer', messageId: 'mid.old', notification: 'Кнопка устарела', message: null },
+    ]);
+  });
 });
 
 describe('text messages', () => {
@@ -489,6 +571,46 @@ describe('text messages', () => {
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
   });
 
+  it('keeps the buttons of the result that replaced the question', async () => {
+    const chat = consentedChat();
+    chat.world.recognizeText.mockImplementation(() => chat.world.logged({ title: 'Ёжик' }));
+    const [question] = sent(await chat.send('ёжик в тумане'));
+    await chat.press('ml:text:yes');
+
+    expect(answers(await chat.press('ml:fix:1', question?.messageId))[0]?.notification).toBe(
+      'Жду исправление',
+    );
+    expect(answers(await chat.press('ml:del:1', question?.messageId))[0]?.message?.text).toBe(
+      'Запись удалена.',
+    );
+    expect(chat.world.meals).toHaveLength(0);
+
+    const [again] = sent(await chat.send('ёжик в тумане'));
+    await chat.press('ml:text:yes', again?.messageId);
+    const confirmed = await chat.press('ml:ok:2', again?.messageId);
+    expect(answers(confirmed)[0]?.message).toEqual({
+      text: expect.stringContaining('Записал: **Ёжик**') as unknown,
+      buttons: [],
+      images: [],
+    });
+  });
+
+  it('logs a candidate picked on the result that replaced the question', async () => {
+    const chat = consentedChat();
+    chat.world.recognizeText.mockResolvedValue({
+      status: 'uncertain',
+      candidates: [estimate({ title: 'Плов', confidence: 0.3 })],
+      basis: '',
+    });
+    const [question] = sent(await chat.send('ёжик в тумане'));
+    await chat.press('ml:text:yes');
+
+    const picked = await chat.press('ml:pick:0', question?.messageId);
+
+    expect(answers(picked)[0]?.message?.text).toContain('Записал: **Плов**');
+    expect(chat.world.meals).toMatchObject([{ title: 'Плов' }]);
+  });
+
   it('shows help when the guest says no', async () => {
     const chat = consentedChat();
     await chat.send('что-то непонятное');
@@ -529,15 +651,40 @@ describe('text messages', () => {
     await chat.photo();
 
     const manual = await chat.press('ml:manual');
-    expect(answers(manual)[0]?.message?.text).toBe('Напишите название и калории, например: Сырники 350');
+    expect(answers(manual)[0]?.message).toEqual({
+      text: 'Напишите название и калории, например: Сырники 350',
+      buttons: [[{ type: 'callback', text: 'Отмена', payload: 'ml:cancel:manual' }]],
+      images: [],
+    });
     expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_manual' });
 
-    expect(texts(await chat.send('Плов'))).toEqual([
-      'Не понял. Напишите название и калории числом, например: Сырники 350',
-    ]);
+    const [invalid] = sent(await chat.send('Плов 9000'));
+    expect(invalid?.text).toBe('Не понял. Напишите название и калории числом, например: Сырники 350');
+    expect(payloads(invalid)).toEqual(['ml:cancel:manual']);
     const logged = await chat.send('Плов 450');
     expect(texts(logged)[0]).toContain('Записал: **Плов**, около 450 ккал');
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+  });
+
+  it('handles text without a number during manual entry as usual text', async () => {
+    const chat = consentedChat();
+    await chat.press('ml:manual', 'mid.old');
+
+    expect(texts(await chat.send('Плов'))).toEqual(['Записать «Плов» в дневник?']);
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_text_confirm', text: 'Плов' });
+  });
+
+  it('cancels manual entry', async () => {
+    const chat = consentedChat();
+    await chat.press('ml:manual', 'mid.old');
+
+    const cancelled = await chat.press('ml:cancel:manual');
+
+    expect(answers(cancelled)[0]?.message).toEqual({ text: CANCELLED, buttons: [], images: [] });
+    expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+    expect(answers(await chat.press('ml:cancel:manual', 'mid.old'))[0]?.notification).toBe(
+      'Эта кнопка уже нажата',
+    );
   });
 
   it('lets a photo through while waiting for manual entry', async () => {

@@ -64,8 +64,9 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
   let transport: MaxTransport | undefined;
   let running: Promise<void> | undefined;
 
-  async function launch(): Promise<UpdateHandler> {
+  async function launch(): Promise<UpdateHandler | null> {
     const me = await api.getMe();
+    if (stopped()) return null;
     const messenger = createMaxMessenger(api, { botUsername: me.username, botUserId: me.user_id });
     const bot = createBot({
       pool,
@@ -87,6 +88,10 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
       webhookSecret: settings.webhook?.secret,
     });
     await started.start();
+    if (stopped()) {
+      await started.stop();
+      return null;
+    }
     transport = started;
     return handler;
   }
@@ -103,12 +108,13 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
     while (!stopped()) {
       try {
         const handler = await launch();
-        if (stopped()) return;
+        if (handler === null) return;
         ready.resolve(handler);
         logger.info({ mode: settings.mode }, 'max bot started');
         await registerCommands();
         return;
       } catch (error) {
+        if (stopped()) return;
         logger.error({ err: error, retryInMs: RETRY_DELAY_MS }, 'max bot failed to start, retrying');
         await sleepUnlessAborted(sleep, RETRY_DELAY_MS, lifetime.signal).catch(() => undefined);
       }
@@ -126,7 +132,6 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
     async stop() {
       lifetime.abort();
       ready.reject(new Error('The bot stopped before it started'));
-      await running;
       await transport?.stop();
     },
   };
