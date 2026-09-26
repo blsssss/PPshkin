@@ -1,9 +1,12 @@
 import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
+import type { Notifier } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
+import { createAnalyticsService } from './services/analytics.ts';
 import { createAuthService } from './services/auth.ts';
+import { createBookingsService } from './services/bookings.ts';
 import { createCatalogService } from './services/catalog.ts';
 import { createConsentsService } from './services/consents.ts';
 import { createDealsService } from './services/deals.ts';
@@ -27,8 +30,16 @@ export interface ContainerOptions {
   background: BackgroundTasks;
 }
 
+const silentNotifier: Notifier = {
+  bookingCreated: () => Promise.resolve(),
+  bookingCancelled: () => Promise.resolve(),
+  bookingRedeemed: () => Promise.resolve(),
+  bookingExpired: () => Promise.resolve(),
+};
+
 export function createServices({ config, pool, clock, recognition, background }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
+  const bookings = createBookingsService({ pool, clock, consents, notifier: silentNotifier, background });
   return {
     health: createHealthService(pool),
     auth: createAuthService(
@@ -55,5 +66,7 @@ export function createServices({ config, pool, clock, recognition, background }:
     catalog: createCatalogService({ pool, clock }),
     recommendations: createRecommendationsService({ pool, clock, consents }),
     insights: createInsightsService({ pool, clock, consents }),
+    bookings,
+    analytics: createAnalyticsService({ pool, clock, bookings }),
   };
 }
