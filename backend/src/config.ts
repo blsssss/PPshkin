@@ -49,6 +49,18 @@ const baseSchema = z.object({
   MIGRATE_ON_START: z.preprocess(emptyAsUndefined, booleanFlag.default(true)),
   PUBLIC_BASE_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
   MAX_BOT_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(10).optional()),
+  BOT_MODE: z.preprocess(emptyAsUndefined, z.enum(['polling', 'webhook', 'off']).default('polling')),
+  MAX_API_BASE_URL: z.preprocess(
+    emptyAsUndefined,
+    z.url({ protocol: /^https?$/ }).default('https://platform-api2.max.ru'),
+  ),
+  MAX_WEBHOOK_SECRET: z.preprocess(
+    emptyAsUndefined,
+    z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{5,256}$/, 'expected 5 to 256 latin letters, digits, "_" or "-"')
+      .optional(),
+  ),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
@@ -75,6 +87,11 @@ const baseSchema = z.object({
   ),
 });
 
+function isHttpsWithoutPort(url: string): boolean {
+  const authority = /^https:\/\/([^/?#]*)/i.exec(url)?.[1];
+  return authority !== undefined && !/:\d*$/.test(authority);
+}
+
 export const configSchema = baseSchema.superRefine((config, context) => {
   const hasDemoToken = Boolean(config.DEMO_GUEST_TOKEN ?? config.DEMO_VENUE_TOKEN);
   if (config.DEMO_MODE && !hasDemoToken) {
@@ -90,6 +107,22 @@ export const configSchema = baseSchema.superRefine((config, context) => {
       path: ['DEMO_MODE'],
       message: 'demo tokens are set but DEMO_MODE is not true',
     });
+  }
+  if (config.BOT_MODE === 'webhook') {
+    const missing = (['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL'] as const).filter(
+      (name) => config[name] === undefined,
+    );
+    for (const name of missing) {
+      context.addIssue({ code: 'custom', path: [name], message: `BOT_MODE=webhook needs ${name}` });
+    }
+    const publicUrl = config.PUBLIC_BASE_URL;
+    if (publicUrl !== undefined && !isHttpsWithoutPort(publicUrl)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PUBLIC_BASE_URL'],
+        message: 'BOT_MODE=webhook needs an https PUBLIC_BASE_URL without an explicit port',
+      });
+    }
   }
 });
 
