@@ -1,16 +1,20 @@
 import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
+import type { Recognition } from './ports/recognition.ts';
 import { createAuthService } from './services/auth.ts';
 import { createHealthService } from './services/health.ts';
 import type { Services } from './services/index.ts';
 import { createUsersService } from './services/users.ts';
+import type { BackgroundTasks } from './shared/background.ts';
 import type { Clock } from './shared/clock.ts';
 
 export interface ContainerOptions {
   config: Config;
   pool: Pool;
   clock: Clock;
+  recognition: Recognition;
+  background: BackgroundTasks;
 }
 
 export function createServices({ config, pool, clock }: ContainerOptions): Services {

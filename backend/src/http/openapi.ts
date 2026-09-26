@@ -3,6 +3,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, jsonSchemaTransformObject } from 'fastify-type-provider-zod';
 import { STANDARD_ERROR_HEADERS } from './schemas/common.ts';
+import { IMAGE_UPLOAD_BODY } from './uploads.ts';
 
 export const API_VERSION = '1.0.0';
 
@@ -103,7 +104,14 @@ export async function registerOpenApi(app: FastifyInstance) {
         },
       },
     },
-    transform: jsonSchemaTransform,
+    transform: (input) => {
+      const output = jsonSchemaTransform(input);
+      if (!input.route.config?.imageUpload) return output;
+      return {
+        ...output,
+        schema: { ...output.schema, consumes: ['multipart/form-data'], body: IMAGE_UPLOAD_BODY },
+      };
+    },
     transformObject: (input) => tidyDocument(jsonSchemaTransformObject(input)),
   });
   await app.register(swaggerUi, { routePrefix: '/docs' });

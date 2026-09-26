@@ -3,6 +3,8 @@ import { createServices } from './container.ts';
 import { loadMigrations, migrate } from './db/migrate.ts';
 import { createPool } from './db/pool.ts';
 import { buildApp } from './http/app.ts';
+import { disabledRecognition } from './recognition/index.ts';
+import { createBackgroundTasks } from './shared/background.ts';
 import { systemClock } from './shared/clock.ts';
 
 const config = loadConfig(process.env);
@@ -12,7 +14,18 @@ const pool = createPool(config.DATABASE_URL, {
     app.log.warn({ err: error }, 'idle database client failed');
   },
 });
-const services = createServices({ config, pool, clock: systemClock });
+const background = createBackgroundTasks({
+  error: (object, message) => {
+    app.log.error(object, message);
+  },
+});
+const services = createServices({
+  config,
+  pool,
+  clock: systemClock,
+  recognition: disabledRecognition(),
+  background,
+});
 const app = await buildApp({ config, services });
 
 if (config.DEMO_MODE) {
@@ -32,7 +45,9 @@ const shutdown = async (signal: NodeJS.Signals) => {
   if (closing) return;
   closing = true;
   app.log.info({ signal }, 'shutting down');
+  background.stop();
   await app.close();
+  await background.idle(10_000);
   await pool.end();
   process.exit(0);
 };
