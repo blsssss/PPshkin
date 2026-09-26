@@ -198,7 +198,6 @@ export function DiaryScreen() {
           <DaySummary day={day.data} />
           <LogPanel
             state={logger.state}
-            date={day.data.date}
             onClose={logger.reset}
             onDescribe={() => {
               logger.reset();

@@ -89,7 +89,6 @@ function LoggedMeal({ meal, date }: { meal: Meal; date: string }) {
 
 export function LogPanel({
   state,
-  date,
   onClose,
   onDescribe,
   onPhotoAgain,
@@ -97,7 +96,6 @@ export function LogPanel({
   onCandidate,
 }: {
   state: LoggerState;
-  date: string;
   onClose: () => void;
   onDescribe: () => void;
   onPhotoAgain: () => void;
@@ -163,7 +161,7 @@ export function LogPanel({
           <h2 className={styles.panelTitle}>Записали</h2>
           <ul className={styles.loggedList}>
             {result.meals.map((meal) => (
-              <LoggedMeal key={meal.id} meal={meal} date={date} />
+              <LoggedMeal key={meal.id} meal={meal} date={result.day.date} />
             ))}
           </ul>
           <p className={styles.muted}>Как оценили: {result.basis}</p>

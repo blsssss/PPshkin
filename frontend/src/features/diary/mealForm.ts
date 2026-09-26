@@ -7,6 +7,7 @@ type ManualMealInput = Schemas['ManualMealInput'];
 type MealPatchInput = Schemas['MealPatchInput'];
 
 export const MAX_PAST_DAYS = 7;
+export const MAX_MEAL_TAGS = 10;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -96,7 +97,7 @@ function kcalValue(text: string): number | string {
   const trimmed = text.trim();
   if (!/^\d+$/.test(trimmed)) return 'Введите целое число ккал';
   const value = Number(trimmed);
-  if (value > 10_000) return 'Не больше 10000 ккал';
+  if (value > 5000) return 'Не больше 5000 ккал';
   return value;
 }
 
@@ -104,7 +105,9 @@ function macroValue(text: string): number | null | string {
   const trimmed = text.trim().replace(',', '.');
   if (trimmed.length === 0) return null;
   if (!/^\d+(\.\d)?$/.test(trimmed)) return 'Число не меньше 0, один знак после запятой';
-  return Number(trimmed);
+  const value = Number(trimmed);
+  if (value > 500) return 'Не больше 500 г';
+  return value;
 }
 
 interface ValidMeal {
@@ -126,6 +129,7 @@ export function validateMeal(
 ): { meal: ValidMeal | null; errors: Partial<Record<MealField, string>> } {
   const errors: Partial<Record<MealField, string>> = {};
   const title = form.title.trim();
+  if (form.tags.length > MAX_MEAL_TAGS) errors.tags = `Не больше ${String(MAX_MEAL_TAGS)} тегов`;
   if (title.length === 0) errors.title = 'Введите название';
   else if (title.length > 200) errors.title = 'Не больше 200 символов';
 
