@@ -1,4 +1,6 @@
+import { Counter } from '@maxhub/max-ui';
 import { Link, useLocation } from 'react-router';
+import { useBookings } from '../features/bookings/queries.ts';
 import { PixelIcon, type PixelIconName } from '../shared/ui/PixelIcon.tsx';
 import { cx } from '../shared/ui/cx.ts';
 import styles from './TabBar.module.css';
@@ -25,20 +27,29 @@ function isTabActive(tab: Pick<Tab, 'sections'>, pathname: string): boolean {
 
 export function TabBar() {
   const { pathname } = useLocation();
+  const active = useBookings('active').data?.length ?? 0;
   return (
     <nav className={styles.bar} aria-label="Разделы" data-tabbar="">
       <div className={styles.inner}>
         {TABS.map((tab) => {
-          const active = isTabActive(tab, pathname);
+          const current = isTabActive(tab, pathname);
+          const count = tab.to === '/bookings' ? active : 0;
           return (
             <Link
               key={tab.to}
               to={tab.to}
-              aria-label={tab.ariaLabel}
-              aria-current={active ? 'page' : undefined}
-              className={cx(styles.tab, active && styles.active)}
+              aria-label={count > 0 ? `${tab.label}, активных: ${String(count)}` : tab.ariaLabel}
+              aria-current={current ? 'page' : undefined}
+              className={cx(styles.tab, current && styles.active)}
             >
-              <PixelIcon name={tab.icon} size={22} />
+              <span className={styles.icon}>
+                <PixelIcon name={tab.icon} size={22} />
+                {count > 0 && (
+                  <span className={styles.counter}>
+                    <Counter value={count} variant="attention" />
+                  </span>
+                )}
+              </span>
               <span className={styles.label}>{tab.label}</span>
             </Link>
           );
