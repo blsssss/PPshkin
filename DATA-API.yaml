@@ -1,0 +1,313 @@
+version: "1.0"
+solution:
+  name: ППшкин
+  team: Mikkkin
+  repository: https://github.com/blsssss/PPshkin
+baseUrl: https://hackathon.easymythic.dev
+openapi: openapi.yaml
+accounts:
+  - role: guest
+    userId: -1001
+    description: Демо-гость с историей питания за 5 дней
+    auth:
+      type: bearer
+      header: Authorization
+      token: ${DEMO_GUEST_TOKEN}
+  - role: venue
+    userId: -1002
+    description: Владелец тестовой кофейни «Зерно» (id 900001)
+    auth:
+      type: bearer
+      header: Authorization
+      token: ${DEMO_VENUE_TOKEN}
+testData:
+  - path: backend/testdata/venues.json
+    description: Тестовые заведения Казани, меню и шаблоны акций
+  - path: backend/testdata/demo-guest.json
+    description: Профиль и шаблон дневника демо-гостя
+  - path: backend/testdata/accounts.json
+    description: Тестовые учётки и роли
+checks:
+  - id: health
+    title: Сервис отвечает на проверку работоспособности
+    method: GET
+    path: /health
+    role: anonymous
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [status]
+  - id: unauthorized
+    title: Запрос без токена отклоняется с ошибкой в формате problem+json
+    method: GET
+    path: /api/v1/me
+    role: anonymous
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 401
+        contentType: application/problem+json
+        requiredFields: [type, title, status, code, detail]
+  - id: guest-profile
+    title: Профиль демо-гостя с ориентиром калорийности и согласиями
+    method: GET
+    path: /api/v1/me
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [id, kcalTarget, consents]
+  - id: guest-diary-today
+    title: Дневник питания за сегодня с остатком калорий
+    method: GET
+    path: /api/v1/diary/today
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [date, targetKcal, totals, remainingKcal, meals]
+  - id: guest-meal-manual
+    title: Запись приёма пищи вручную
+    method: POST
+    path: /api/v1/diary/meals
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: { title: Капучино, kcal: 120 }
+    expect:
+      - status: 201
+        contentType: application/json
+        requiredFields: [id, title, kcalMin, kcalMax, slot]
+  - id: guest-meal-invalid
+    title: Приём пищи с пустым названием отклоняется
+    method: POST
+    path: /api/v1/diary/meals
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: { title: "" }
+    expect:
+      - status: 400
+        contentType: application/problem+json
+        requiredFields: [code]
+  - id: guest-meal-text
+    title: Оценка приёма пищи по текстовому описанию
+    method: POST
+    path: /api/v1/diary/meals/text
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: { description: "съел борщ и кусок хлеба" }
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [status]
+  - id: guest-insights
+    title: Профиль пищевого поведения по дневнику
+    method: GET
+    path: /api/v1/insights
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [readiness, mealsUntilReady, topTags]
+  - id: guest-recommendations
+    title: Подбор блюда рядом под остаток калорий
+    method: GET
+    path: /api/v1/recommendations
+    role: guest
+    params:
+      path: {}
+      query: { lat: 55.7887, lon: 49.1221, limit: 3 }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [status, slot, remainingKcal, items]
+  - id: guest-venues
+    title: Заведения рядом
+    method: GET
+    path: /api/v1/venues
+    role: guest
+    params:
+      path: {}
+      query: { lat: 55.7887, lon: 49.1221 }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: guest-deals
+    title: Горящие позиции рядом
+    method: GET
+    path: /api/v1/deals
+    role: guest
+    params:
+      path: {}
+      query: { lat: 55.7887, lon: 49.1221 }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: guest-venue-card
+    title: Карточка кофейни «Пенка» с меню и акциями
+    method: GET
+    path: /api/v1/venues/{id}
+    role: guest
+    params:
+      path: { id: 900002 }
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [venue, menu, deals]
+  - id: guest-booking-create
+    title: Бронь капучино в кофейне «Пенка»
+    method: POST
+    path: /api/v1/bookings
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: { menuItemId: 910201 }
+    expect:
+      - status: 201
+        contentType: application/json
+        requiredFields: [id, code, status, expiresAt]
+      - status: 409
+        contentType: application/problem+json
+        requiredFields: [code]
+  - id: guest-bookings
+    title: Действующие брони гостя
+    method: GET
+    path: /api/v1/bookings
+    role: guest
+    params:
+      path: {}
+      query: { status: active }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: venue-profile
+    title: Профиль демо-заведения
+    method: GET
+    path: /api/v1/venue
+    role: venue
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [id, name, isDemo]
+  - id: venue-menu
+    title: Меню заведения
+    method: GET
+    path: /api/v1/venue/menu
+    role: venue
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: venue-deals
+    title: Действующие горящие позиции заведения
+    method: GET
+    path: /api/v1/venue/deals
+    role: venue
+    params:
+      path: {}
+      query: { status: active }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: venue-bookings
+    title: Действующие брони заведения
+    method: GET
+    path: /api/v1/venue/bookings
+    role: venue
+    params:
+      path: {}
+      query: { status: active }
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items]
+  - id: venue-redeem-unknown
+    title: Погашение несуществующего кода брони отклоняется
+    method: POST
+    path: /api/v1/venue/bookings/redeem
+    role: venue
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: { code: AAAAAA }
+    expect:
+      - status: 404
+        contentType: application/problem+json
+        requiredFields: [code]
+  - id: venue-analytics
+    title: Статистика заведения за последние 7 дней
+    method: GET
+    path: /api/v1/venue/analytics
+    role: venue
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [offersShown, bookingsRedeemed, revenueRub, byDay]

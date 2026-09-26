@@ -96,6 +96,10 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up --detach --wait --wait-timeout 120
       - run: curl --fail --silent --show-error http://127.0.0.1:3000/health
+      - name: the local demo guest token lists at least six demo venues
+        shell: bash
+        run: |
+          curl --fail --silent -H "Authorization: Bearer local-demo-guest-token-not-secret" "http://127.0.0.1:3000/api/v1/venues?lat=55.7887&lon=49.1221" | jq -e '.items | length >= 6'
       - run: curl --fail --silent --show-error http://127.0.0.1:8080/ --output /dev/null
       - run: curl --fail --silent --show-error http://127.0.0.1:8080/health
       - if: always()
