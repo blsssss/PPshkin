@@ -76,7 +76,7 @@ interface ResolvedPeriod {
   days: number;
 }
 
-function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
+function assertDates(period: AnalyticsPeriod): void {
   const problems: ErrorDetail[] = (['from', 'to'] as const)
     .filter((field) => {
       const value = period[field];
@@ -84,6 +84,9 @@ function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
     })
     .map((field) => ({ path: field, message: 'must be a calendar date in YYYY-MM-DD format' }));
   if (problems.length > 0) throw badRequest('validation_failed', 'Request validation failed', problems);
+}
+
+function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
   const to = period.to ?? today;
   const from = period.from ?? addDays(to, 1 - DEFAULT_ANALYTICS_DAYS);
   const days = (Date.parse(to) - Date.parse(from)) / DAY_MS + 1;
@@ -125,6 +128,7 @@ function sumDays(days: readonly analytics.DayActivity[]): Totals {
 export function createAnalyticsService({ pool, clock }: AnalyticsDependencies): AnalyticsService {
   return {
     async get(ownerId, period) {
+      assertDates(period);
       const venue = await requireOwnedVenue(pool, ownerId);
       const { from, to, days } = resolvePeriod(period, localDate(clock.now(), venue.timezone));
       const windows = Array.from({ length: days }, (_, index) => {

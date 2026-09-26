@@ -153,6 +153,17 @@ describe('creating bookings', () => {
     expect(notifier.bookingCreated).toHaveBeenCalledExactlyOnceWith({ booking: view.booking, venue });
   });
 
+  it('answers even when the notification fails and logs the failure', async () => {
+    notifier.bookingCreated.mockRejectedValueOnce(new Error('MAX is unavailable'));
+    const view = await service.create(GUEST, { menuItemId: eclair.id });
+    expect(view.booking.status).toBe('active');
+    await background.idle();
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ task: `bookingCreated-${view.booking.id}` }),
+      'background task failed',
+    );
+  });
+
   it('books at the menu price without a deal and keeps the deal stock', async () => {
     const view = await service.create(GUEST, { menuItemId: eclair.id });
     expect(view.booking).toMatchObject({ dealId: null, priceRub: 200, expiresAt: later(HOUR) });
@@ -783,6 +794,9 @@ describe('venue bookings', () => {
         code: 'validation_failed',
       },
     );
+    await expect(service.listForVenue(GUEST, { status: 'history', date: 'today' })).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
     await expect(service.listForVenue(GUEST, { status: 'active' })).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',

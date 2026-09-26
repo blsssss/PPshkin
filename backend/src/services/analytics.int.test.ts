@@ -244,6 +244,7 @@ describe('venue analytics', () => {
         { path: 'to', message: 'must be a calendar date in YYYY-MM-DD format' },
       ],
     });
+    await expect(service.get(GUEST, { to: 'today' })).rejects.toMatchObject({ code: 'validation_failed' });
     await expect(service.get(GUEST, {})).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
   });
 });

@@ -264,12 +264,12 @@ export function createBookingsService({
     },
 
     async listForVenue(ownerId, { status, date }) {
-      const venue = await requireOwnedVenue(pool, ownerId);
       if (date !== undefined && !isLocalDate(date)) {
         throw badRequest('validation_failed', 'Request validation failed', [
           { path: 'date', message: 'must be a calendar date in YYYY-MM-DD format' },
         ]);
       }
+      const venue = await requireOwnedVenue(pool, ownerId);
       await expire({ venueId: venue.id });
       const created = date === undefined ? null : dayRange(date, venue.timezone);
       const found =
