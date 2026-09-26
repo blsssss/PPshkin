@@ -272,7 +272,7 @@ describe('staff start link', () => {
     const [reply] = sent(await chat.start('r_K7M2QX'));
 
     expect(reply?.text).toMatch(/^Эта ссылка для сотрудников заведения\.\n\n\*\*Что я умею\*\*/);
-    expect(payloads(reply)).toEqual(['cmd:today', 'cmd:profile']);
+    expect(payloads(reply)).toEqual(['cmd:eat', 'cmd:today', 'cmd:profile']);
   });
 
   it('opens the link after the personal data consent', async () => {
