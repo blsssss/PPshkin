@@ -66,4 +66,11 @@ describe('venues repository', () => {
     expect(await venues.findByOwner(pool, 404)).toBeNull();
     expect(await venues.findById(pool, 404)).toBeNull();
   });
+
+  it('finds venues by ids in id order', async () => {
+    const baumana = await venues.insert(pool, 1, fields, createdAt);
+    const arena = await venues.insert(pool, 2, { ...fields, location: KAZAN_ARENA }, createdAt);
+    expect(await venues.findByIds(pool, [arena!.id, 404, baumana!.id])).toEqual([baumana, arena]);
+    expect(await venues.findByIds(pool, [])).toEqual([]);
+  });
 });

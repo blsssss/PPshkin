@@ -1,12 +1,14 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { Services } from '../../services/index.ts';
 import { authRoutes } from './auth.ts';
+import { bookingsRoutes } from './bookings.ts';
 import { catalogRoutes } from './catalog.ts';
 import { consentsRoutes } from './consents.ts';
 import { diaryRoutes } from './diary.ts';
 import { insightsRoutes } from './insights.ts';
 import { meRoutes } from './me.ts';
 import { recommendationsRoutes } from './recommendations.ts';
+import { venueBookingsRoutes } from './venue-bookings.ts';
 import { venueRoutes } from './venue.ts';
 
 export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (app, { services }) => {
@@ -23,4 +25,6 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
   await app.register(catalogRoutes, { catalog: services.catalog });
   await app.register(recommendationsRoutes, { recommendations: services.recommendations });
   await app.register(insightsRoutes, { insights: services.insights });
+  await app.register(bookingsRoutes, { bookings: services.bookings });
+  await app.register(venueBookingsRoutes, { bookings: services.bookings, analytics: services.analytics });
 };
