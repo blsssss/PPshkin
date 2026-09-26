@@ -2,7 +2,7 @@ import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import type { RecommendationsService } from '../../services/recommendations.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
 import { describeErrors, ERROR_NOTES } from '../error-notes.ts';
-import { errorResponses, IdParams, noContent, success } from '../schemas/common.ts';
+import { errorResponses, IdParams, noContent, queryPoint, success } from '../schemas/common.ts';
 import {
   DeclineOfferBody,
   RecommendationsQuery,
@@ -46,8 +46,8 @@ export const recommendationsRoutes: FastifyPluginCallbackZod<{ recommendations: 
       },
     },
     async (request) => {
-      const { lat, lon, limit } = request.query;
-      const location = lat !== undefined && lon !== undefined ? { lat, lon } : null;
+      const location = queryPoint(request.query);
+      const { limit } = request.query;
       return toRecommendations(
         await recommendations.recommend(userId(request), { location, limit, channel: 'miniapp' }),
       );

@@ -7,6 +7,7 @@ import { loadCandidates } from '../repositories/candidates.ts';
 import * as offers from '../repositories/offers.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, conflict, notFound, type ErrorDetail } from '../shared/errors.ts';
+import { pointProblems } from '../shared/geo.ts';
 import { boundingBox } from './catalog.ts';
 import { dealStatus, type DealView } from './deals.ts';
 import { loadEatingState } from './insights.ts';
@@ -62,12 +63,7 @@ function requestProblems({ location, limit }: RecommendationRequest): ErrorDetai
   if (!(Number.isInteger(limit) && within(limit, 1, MAX_RECOMMENDATIONS))) {
     problems.push({ path: 'limit', message: `must be an integer from 1 to ${MAX_RECOMMENDATIONS}` });
   }
-  if (location && !within(location.lat, -90, 90)) {
-    problems.push({ path: 'lat', message: 'must be from -90 to 90' });
-  }
-  if (location && !within(location.lon, -180, 180)) {
-    problems.push({ path: 'lon', message: 'must be from -180 to 180' });
-  }
+  if (location) problems.push(...pointProblems(location));
   return problems;
 }
 

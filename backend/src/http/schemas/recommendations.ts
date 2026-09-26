@@ -6,22 +6,16 @@ import {
   type RecommendationsResult,
   type RecommendedOffer,
 } from '../../services/recommendations.ts';
+import { blankAsMissing, PointQueryFields, pointTogether } from './common.ts';
 import { DealSchema, toDeal } from './deals.ts';
 import { MenuItemSchema, toMenuItem } from './menu.ts';
 import { toVenue, VenueSchema } from './venues.ts';
 
 const DEFAULT_RECOMMENDATIONS = 5;
 
-const blankAsMissing = (value: unknown) => (value === '' ? undefined : value);
-
 export const RecommendationsQuery = z
   .object({
-    lat: z
-      .preprocess(blankAsMissing, z.coerce.number().min(-90).max(90).optional())
-      .describe('Широта точки, вместе с lon'),
-    lon: z
-      .preprocess(blankAsMissing, z.coerce.number().min(-180).max(180).optional())
-      .describe('Долгота точки, вместе с lat'),
+    ...PointQueryFields,
     limit: z
       .preprocess(
         blankAsMissing,
@@ -29,10 +23,7 @@ export const RecommendationsQuery = z
       )
       .describe('Сколько блюд подобрать'),
   })
-  .refine((query) => (query.lat === undefined) === (query.lon === undefined), {
-    message: 'Pass lat and lon together',
-    path: ['lon'],
-  });
+  .check(pointTogether);
 
 export const DeclineOfferBody = z.object({
   reason: z

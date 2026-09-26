@@ -234,6 +234,11 @@ describe('buildBehaviorProfile', () => {
     expect(profile.proteinShare).toBe(0.2);
   });
 
+  it('caps the protein share at 1 when protein outweighs the estimated calories', () => {
+    expect(profileOf([buildMeal(daysAgo(1), { ...kcal(100), proteinG: 50 })]).proteinShare).toBe(1);
+    expect(profileOf([buildMeal(daysAgo(1), { ...kcal(100), proteinG: 27 })]).proteinShare).toBe(1);
+  });
+
   it('leaves the protein share empty without protein data or calories', () => {
     expect(profileOf([buildMeal(daysAgo(1))]).proteinShare).toBeNull();
     expect(profileOf([buildMeal(daysAgo(1), { ...kcal(0), proteinG: 0 })]).proteinShare).toBeNull();

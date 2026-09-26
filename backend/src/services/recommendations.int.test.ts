@@ -371,6 +371,15 @@ describe('recommendations', () => {
       status: 400,
       details: [{ path: 'lat' }, { path: 'lon' }],
     });
+    await expect(
+      service.recommend(GUEST, request({ limit: 0, location: { lat: 55.79, lon: -181 } })),
+    ).rejects.toMatchObject({
+      status: 400,
+      details: [
+        { path: 'limit', message: 'must be an integer from 1 to 10' },
+        { path: 'lon', message: 'must be from -180 to 180' },
+      ],
+    });
     await expect(service.recommend(404, request())).rejects.toMatchObject({
       status: 404,
       code: 'user_not_found',

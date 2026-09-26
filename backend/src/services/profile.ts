@@ -5,6 +5,7 @@ import { onlyKnownTags, type Goal, type Tag } from '../domain/vocabulary.ts';
 import * as users from '../repositories/users.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, notFound, unprocessable, type ErrorDetail } from '../shared/errors.ts';
+import { pointProblems } from '../shared/geo.ts';
 import { isValidTimeZone } from '../shared/time.ts';
 import type { ConsentStatus, ConsentsService } from './consents.ts';
 
@@ -66,13 +67,6 @@ function patchProblems(patch: ProfilePatch, dislikedTags: Tag[] | undefined): Er
   if (timezone !== undefined && !within(timezone.length, 1, PROFILE_LIMITS.timezoneLength)) {
     problems.push({ path: 'timezone', message: `must be 1-${PROFILE_LIMITS.timezoneLength} characters` });
   }
-  return problems;
-}
-
-function pointProblems({ lat, lon }: GeoPoint): ErrorDetail[] {
-  const problems: ErrorDetail[] = [];
-  if (!within(lat, -90, 90)) problems.push({ path: 'lat', message: 'must be from -90 to 90' });
-  if (!within(lon, -180, 180)) problems.push({ path: 'lon', message: 'must be from -180 to 180' });
   return problems;
 }
 

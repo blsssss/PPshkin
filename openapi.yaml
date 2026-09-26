@@ -4669,7 +4669,7 @@ paths:
           in: query
           name: lat
           required: false
-          description: Широта точки, вместе с lon
+          description: Широта точки поиска, вместе с lon
         - schema:
             type: number
             minimum: -180
@@ -4677,7 +4677,7 @@ paths:
           in: query
           name: lon
           required: false
-          description: Долгота точки, вместе с lat
+          description: Долгота точки поиска, вместе с lat
         - schema:
             default: 5
             type: integer

@@ -4,8 +4,10 @@ import { fixedClock } from '../../test/clock.ts';
 import { expectContract } from '../../test/contract.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { testConfig } from '../../test/services.ts';
+import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { createServices } from '../container.ts';
 import { createRecognition } from '../recognition/index.ts';
+import * as users from '../repositories/users.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
 import { buildApp } from './app.ts';
 
@@ -57,6 +59,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetDatabase(pool);
+  for (const account of Object.values(DEMO_ACCOUNTS)) {
+    await users.upsert(pool, { id: account.userId, firstName: account.firstName, username: null });
+  }
 });
 
 afterAll(async () => {
@@ -211,5 +216,23 @@ describe('recommendations flow against the database', () => {
     });
     expect(estimate.statusCode).toBe(200);
     expect(estimate.json()).toEqual({ kcalTarget: 1800, bmrKcal: 1320, maintenanceKcal: 1815 });
+  });
+
+  it('serves insights when a diary entry has more protein than calories', async () => {
+    const consent = await send('PUT', '/api/v1/consents/personal_data', '/api/v1/consents/{kind}', guest, {
+      version: '2026-09-25',
+    });
+    expect(consent.statusCode).toBe(200);
+    const logged = await send('POST', '/api/v1/diary/meals', '/api/v1/diary/meals', guest, {
+      title: 'Протеиновый коктейль',
+      kcal: 100,
+      proteinG: 50,
+      eatenAt: '2026-09-26T10:00:00Z',
+    });
+    expect(logged.statusCode).toBe(201);
+
+    const insights = await send('GET', '/api/v1/insights', '/api/v1/insights', guest);
+    expect(insights.statusCode).toBe(200);
+    expect(insights.json()).toMatchObject({ mealsCount: 1, proteinShare: 1 });
   });
 });

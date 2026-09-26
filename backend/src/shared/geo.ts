@@ -1,4 +1,5 @@
 import type { GeoPoint } from '../domain/models.ts';
+import type { ErrorDetail } from './errors.ts';
 
 const EARTH_RADIUS_M = 6_371_000;
 
@@ -20,4 +21,11 @@ export function roundCoordinate(value: number, decimals = 2): number {
 
 export function coarsePoint(point: GeoPoint): GeoPoint {
   return { lat: roundCoordinate(point.lat), lon: roundCoordinate(point.lon) };
+}
+
+export function pointProblems({ lat, lon }: GeoPoint): ErrorDetail[] {
+  const problems: ErrorDetail[] = [];
+  if (!(lat >= -90 && lat <= 90)) problems.push({ path: 'lat', message: 'must be from -90 to 90' });
+  if (!(lon >= -180 && lon <= 180)) problems.push({ path: 'lon', message: 'must be from -180 to 180' });
+  return problems;
 }
