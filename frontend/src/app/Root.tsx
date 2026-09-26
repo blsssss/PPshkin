@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { platform, ready } from '../max/bridge.ts';
 import { ErrorBoundary } from '../shared/ui/ErrorBoundary.tsx';
+import { PortalRoot } from '../shared/ui/PortalRoot.tsx';
 import { ToastProvider } from '../shared/ui/Toast.tsx';
 
 function createQueryClient(): QueryClient {
@@ -23,11 +24,13 @@ export function Root({ children }: { children: ReactNode }) {
 
   return (
     <MaxUI platform={platform() === 'ios' ? 'ios' : 'android'} className="ppsh-app" resetBody>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <ErrorBoundary>{children}</ErrorBoundary>
-        </ToastProvider>
-      </QueryClientProvider>
+      <PortalRoot>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </ToastProvider>
+        </QueryClientProvider>
+      </PortalRoot>
     </MaxUI>
   );
 }
