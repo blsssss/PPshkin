@@ -157,6 +157,17 @@ export async function listAvailable(db: Queryable, venueId: number): Promise<Men
   return rows.map(mapMenuItem);
 }
 
+export async function listAvailableInVenues(db: Queryable, venueIds: readonly number[]): Promise<MenuItem[]> {
+  if (venueIds.length === 0) return [];
+  const { rows } = await db.query<MenuItemRow>(
+    `select ${MENU_ITEM_COLUMNS} from menu_items
+      where venue_id = any($1::bigint[]) and archived_at is null and is_available
+      order by id`,
+    [venueIds],
+  );
+  return rows.map(mapMenuItem);
+}
+
 export async function findByIds(db: Queryable, ids: readonly number[]): Promise<MenuItem[]> {
   if (ids.length === 0) return [];
   const { rows } = await db.query<MenuItemRow>(

@@ -72,6 +72,16 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       deals: notStubbed('catalog.deals'),
       deal: notStubbed('catalog.deal'),
     },
+    recommendations: {
+      recommend: notStubbed('recommendations.recommend'),
+      decline: notStubbed('recommendations.decline'),
+    },
+    insights: {
+      get: notStubbed('insights.get'),
+      estimateTarget: () => {
+        throw new Error('insights.estimateTarget is not stubbed');
+      },
+    },
     ...overrides,
   };
 }

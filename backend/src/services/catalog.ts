@@ -61,7 +61,7 @@ const collator = new Intl.Collator('ru');
 const toDegrees = (angle: number) => (angle * 180) / Math.PI;
 const toRadians = (angle: number) => (angle * Math.PI) / 180;
 
-function boundingBox(center: GeoPoint, radiusM: number): venues.GeoBox {
+export function boundingBox(center: GeoPoint, radiusM: number): venues.GeoBox {
   const angular = radiusM / EARTH_RADIUS_M;
   const lat = toRadians(center.lat);
   const minLat = lat - angular;

@@ -114,3 +114,44 @@ describe('loadMigrations', () => {
     expect(versions[0]).toBe('0001_init');
   });
 });
+
+describe('project migrations', () => {
+  async function declineReasonColumn() {
+    const { rows } = await isolated.query<{ data_type: string }>(
+      `select data_type from information_schema.columns
+        where table_schema = $1 and table_name = 'offers' and column_name = 'decline_reason'`,
+      [SCHEMA],
+    );
+    return rows;
+  }
+
+  it('build the whole schema on an empty database', async () => {
+    const project = await loadMigrations();
+    expect(await migrate(isolated, project)).toEqual(project.map((item) => item.version));
+    expect(await declineReasonColumn()).toEqual([{ data_type: 'text' }]);
+  });
+
+  it('add decline reasons to a database that already has offers', async () => {
+    const [init, ...later] = await loadMigrations();
+    await migrate(isolated, [init!]);
+    await isolated.query(
+      `insert into users (id) values (1);
+       insert into venues (id, name, address, category, lat, lon)
+       values (1, 'Зерно', 'ул. Баумана, 36', 'coffee', 55.79, 49.12);
+       insert into menu_items (id, venue_id, name, category, price_rub, kcal, nutrition_source)
+       values (1, 1, 'Эклер', 'dessert', 200, 330, 'venue');
+       insert into offers (user_id, venue_id, menu_item_id, channel, score, explanation, status)
+       values (1, 1, 1, 'bot', 0.5, '{"headline": "Можно позволить десерт"}', 'declined')`,
+    );
+
+    expect(await migrate(isolated, [init!, ...later])).toEqual(later.map((item) => item.version));
+    const { rows } = await isolated.query('select status, explanation, decline_reason from offers');
+    expect(rows).toEqual([
+      { status: 'declined', explanation: { headline: 'Можно позволить десерт' }, decline_reason: null },
+    ]);
+    await isolated.query(`update offers set decline_reason = 'not_today'`);
+    await expect(isolated.query(`update offers set decline_reason = 'too_expensive'`)).rejects.toMatchObject({
+      code: '23514',
+    });
+  });
+});

@@ -10,9 +10,11 @@ import { createDealsService } from './services/deals.ts';
 import { createDiaryService } from './services/diary.ts';
 import { createHealthService } from './services/health.ts';
 import type { Services } from './services/index.ts';
+import { createInsightsService } from './services/insights.ts';
 import { createMenuImportsService } from './services/menu-imports.ts';
 import { createMenuService } from './services/menu.ts';
 import { createProfileService } from './services/profile.ts';
+import { createRecommendationsService } from './services/recommendations.ts';
 import { createVenuesService } from './services/venues.ts';
 import type { BackgroundTasks } from './shared/background.ts';
 import type { Clock } from './shared/clock.ts';
@@ -51,5 +53,7 @@ export function createServices({ config, pool, clock, recognition, background }:
     menuImports: createMenuImportsService({ pool, clock, menus: recognition.menus, background }),
     deals: createDealsService({ pool, clock }),
     catalog: createCatalogService({ pool, clock }),
+    recommendations: createRecommendationsService({ pool, clock }),
+    insights: createInsightsService({ pool, clock }),
   };
 }

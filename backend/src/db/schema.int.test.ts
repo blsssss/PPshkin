@@ -104,6 +104,20 @@ describe('schema integrity', () => {
     ).rejects.toMatchObject({ code: '23514' });
   });
 
+  it('accepts only known reasons for declining an offer', async () => {
+    const item = await menuItem(first);
+    const decline = (reason: string | null) =>
+      pool.query(
+        `insert into offers (venue_id, menu_item_id, channel, score, explanation, status, decline_reason)
+         values ($1, $2, 'miniapp', 0.5, '{}', 'declined', $3)`,
+        [first, item, reason],
+      );
+    await decline('not_today');
+    await decline('dislike');
+    await decline(null);
+    await expect(decline('too_expensive')).rejects.toMatchObject({ code: '23514' });
+  });
+
   it('deletes a venue together with its menu, deals and bookings', async () => {
     const item = await menuItem(first);
     await deal(first, item);

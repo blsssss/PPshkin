@@ -4,7 +4,9 @@ import { authRoutes } from './auth.ts';
 import { catalogRoutes } from './catalog.ts';
 import { consentsRoutes } from './consents.ts';
 import { diaryRoutes } from './diary.ts';
+import { insightsRoutes } from './insights.ts';
 import { meRoutes } from './me.ts';
+import { recommendationsRoutes } from './recommendations.ts';
 import { venueRoutes } from './venue.ts';
 
 export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (app, { services }) => {
@@ -19,4 +21,6 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
     deals: services.deals,
   });
   await app.register(catalogRoutes, { catalog: services.catalog });
+  await app.register(recommendationsRoutes, { recommendations: services.recommendations });
+  await app.register(insightsRoutes, { insights: services.insights });
 };
