@@ -11,14 +11,38 @@ export const TEST_TOKENS: Record<string, AuthContext> = {
   'demo-guest-token': { userId: -1001, via: 'demo', demoRole: 'guest' },
 };
 
+const notStubbed = (method: string) => () => Promise.reject(new Error(`${method} is not stubbed`));
+
 export function fakeServices(overrides: Partial<Services> = {}): Services {
   return {
     health: { databaseReachable: () => Promise.resolve(true) },
     auth: {
-      signInWithMax: () => Promise.reject(new Error('signInWithMax is not stubbed')),
+      signInWithMax: notStubbed('auth.signInWithMax'),
       resolveBearer: (token) => Promise.resolve(TEST_TOKENS[token] ?? null),
     },
-    users: { get: () => Promise.reject(notFound('user_not_found', 'User not found')) },
+    profile: {
+      get: () => Promise.reject(notFound('user_not_found', 'User not found')),
+      update: notStubbed('profile.update'),
+      setLocation: notStubbed('profile.setLocation'),
+      clearLocation: notStubbed('profile.clearLocation'),
+    },
+    consents: {
+      status: notStubbed('consents.status'),
+      list: notStubbed('consents.list'),
+      grant: notStubbed('consents.grant'),
+      revoke: notStubbed('consents.revoke'),
+      requirePersonalData: notStubbed('consents.requirePersonalData'),
+    },
+    diary: {
+      day: notStubbed('diary.day'),
+      summary: notStubbed('diary.summary'),
+      addManual: notStubbed('diary.addManual'),
+      logFromPhoto: notStubbed('diary.logFromPhoto'),
+      logFromText: notStubbed('diary.logFromText'),
+      update: notStubbed('diary.update'),
+      remove: notStubbed('diary.remove'),
+    },
+    account: { deleteAccount: notStubbed('account.deleteAccount') },
     ...overrides,
   };
 }

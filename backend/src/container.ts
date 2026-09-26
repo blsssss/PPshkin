@@ -2,10 +2,13 @@ import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
 import type { Recognition } from './ports/recognition.ts';
+import { createAccountService } from './services/account.ts';
 import { createAuthService } from './services/auth.ts';
+import { createConsentsService } from './services/consents.ts';
+import { createDiaryService } from './services/diary.ts';
 import { createHealthService } from './services/health.ts';
 import type { Services } from './services/index.ts';
-import { createUsersService } from './services/users.ts';
+import { createProfileService } from './services/profile.ts';
 import type { BackgroundTasks } from './shared/background.ts';
 import type { Clock } from './shared/clock.ts';
 
@@ -17,7 +20,8 @@ export interface ContainerOptions {
   background: BackgroundTasks;
 }
 
-export function createServices({ config, pool, clock }: ContainerOptions): Services {
+export function createServices({ config, pool, clock, recognition }: ContainerOptions): Services {
+  const consents = createConsentsService({ pool, clock });
   return {
     health: createHealthService(pool),
     auth: createAuthService(
@@ -33,6 +37,9 @@ export function createServices({ config, pool, clock }: ContainerOptions): Servi
       },
       clock,
     ),
-    users: createUsersService(pool),
+    profile: createProfileService({ pool, clock, consents }),
+    consents,
+    diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
+    account: createAccountService({ pool, clock }),
   };
 }

@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { expectContract } from '../../../test/contract.ts';
-import { bearer, buildTestApp } from '../../../test/services.ts';
+import { bearer, buildTestApp, fakeServices } from '../../../test/services.ts';
 import type { User } from '../../domain/models.ts';
+import type { ConsentStatus } from '../../services/consents.ts';
 import { unauthorized } from '../../shared/errors.ts';
 
 let app: FastifyInstance | undefined;
@@ -26,6 +27,16 @@ const user: User = {
   updatedAt: new Date('2026-09-20T10:00:00Z'),
 };
 
+const consentStatus: ConsentStatus = {
+  personalData: { granted: true, version: '2026-09-25', grantedAt: new Date('2026-09-25T09:00:00Z') },
+  personalizedOffers: { granted: false, version: null, grantedAt: null },
+};
+
+const consentStatusJson = {
+  personalData: { granted: true, version: '2026-09-25', grantedAt: '2026-09-25T09:00:00.000Z' },
+  personalizedOffers: { granted: false, version: null, grantedAt: null },
+};
+
 const signInService = {
   auth: {
     signInWithMax: (initData: string) =>
@@ -38,6 +49,11 @@ const signInService = {
           })
         : Promise.reject(unauthorized('init_data_bad_signature', 'bad')),
     resolveBearer: () => Promise.resolve(null),
+  },
+  consents: {
+    ...fakeServices().consents,
+    status: (id: number) =>
+      id === user.id ? Promise.resolve(consentStatus) : Promise.reject(new Error('unexpected user')),
   },
 };
 
@@ -64,6 +80,8 @@ describe('POST /api/v1/auth/max', () => {
         goal: 'maintain',
         dislikedTags: ['fish'],
         location: null,
+        locationUpdatedAt: null,
+        consents: consentStatusJson,
       },
     });
   });
@@ -135,14 +153,43 @@ describe('GET /api/v1/me', () => {
     }
   });
 
-  it('returns the profile of the authenticated user', async () => {
+  it('returns the profile of the authenticated user with consents', async () => {
     app = await buildTestApp({
-      services: { users: { get: (id) => Promise.resolve({ ...user, id }) } },
+      services: {
+        profile: {
+          ...fakeServices().profile,
+          get: (id) =>
+            Promise.resolve({
+              user: {
+                ...user,
+                id,
+                location: { lat: 55.79, lon: 49.12 },
+                locationUpdatedAt: new Date('2026-09-25T08:00:00Z'),
+              },
+              consents: consentStatus,
+            }),
+        },
+      },
     });
     const response = await app.inject({ method: 'GET', url: '/api/v1/me', headers: bearer('guest-token') });
     expect(response.statusCode).toBe(200);
     expectContract(response, 'GET', '/api/v1/me');
-    expect(response.json()).toMatchObject({ id: 101, kcalTarget: 1800, dislikedTags: ['fish'] });
+    expect(response.json()).toMatchObject({
+      id: 101,
+      kcalTarget: 1800,
+      dislikedTags: ['fish'],
+      location: { lat: 55.79, lon: 49.12 },
+      locationUpdatedAt: '2026-09-25T08:00:00.000Z',
+      consents: consentStatusJson,
+    });
+  });
+
+  it('answers 404 when the account was deleted', async () => {
+    app = await buildTestApp();
+    const response = await app.inject({ method: 'GET', url: '/api/v1/me', headers: bearer('guest-token') });
+    expect(response.statusCode).toBe(404);
+    expectContract(response, 'GET', '/api/v1/me');
+    expect(response.json()).toMatchObject({ code: 'user_not_found' });
   });
 
   it('keeps CORS headers on authentication failures', async () => {

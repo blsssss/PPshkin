@@ -13,6 +13,269 @@ components:
       description: Сессионный токен из POST /api/v1/auth/max или тестовый токен
         демо-учётки (только при DEMO_MODE=true).
   schemas:
+    GeoPointInput:
+      type: object
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+      required:
+        - lat
+        - lon
+      description: Координаты WGS 84
+    ProfilePatchInput:
+      type: object
+      properties:
+        kcalTarget:
+          type: integer
+          minimum: 1000
+          maximum: 5000
+          description: Ориентир калорийности на день, ккал
+        goal:
+          anyOf:
+            - type: string
+              enum:
+                - lose
+                - maintain
+                - gain
+            - type: "null"
+          description: "Цель: lose - снизить вес, maintain - удерживать, gain - набрать,
+            null - не выбрана"
+        dislikedTags:
+          maxItems: 20
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+          description: Теги блюд, которые гостю не предлагаются
+        timezone:
+          description: Часовой пояс IANA, например Europe/Moscow
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: "Изменение профиля: передаются только меняющиеся поля, хотя бы одно"
+    ManualMealInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Название блюда
+        kcal:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Калорийность одним числом, вместо пары kcalMin и kcalMax
+        kcalMin:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Нижняя граница калорийности, передаётся вместе с kcalMax
+        kcalMax:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Верхняя граница калорийности, не меньше kcalMin
+        proteinG:
+          description: Белки, г
+          type: number
+          minimum: 0
+          maximum: 500
+        fatG:
+          description: Жиры, г
+          type: number
+          minimum: 0
+          maximum: 500
+        carbsG:
+          description: Углеводы, г
+          type: number
+          minimum: 0
+          maximum: 500
+        tags:
+          maxItems: 10
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        eatenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "Когда съедено, ISO 8601: не раньше чем 7 дней назад и не позже чем
+            через 5 минут от текущего времени"
+      required:
+        - title
+      description: "Приём пищи, введённый вручную. Калорийность: либо kcal, либо пара
+        kcalMin и kcalMax. Без eatenAt запись получает текущее время"
+    MealPatchInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Название блюда
+        kcal:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Калорийность одним числом, вместо пары kcalMin и kcalMax
+        kcalMin:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Нижняя граница калорийности, передаётся вместе с kcalMax
+        kcalMax:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Верхняя граница калорийности, не меньше kcalMin
+        proteinG:
+          description: Белки, г, null сбрасывает значение
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 500
+            - type: "null"
+        fatG:
+          description: Жиры, г, null сбрасывает значение
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 500
+            - type: "null"
+        carbsG:
+          description: Углеводы, г, null сбрасывает значение
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 500
+            - type: "null"
+        tags:
+          maxItems: 10
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        eatenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "Когда съедено, ISO 8601: не раньше чем 7 дней назад и не позже чем
+            через 5 минут от текущего времени"
+      description: "Изменение приёма пищи: только меняющиеся поля, хотя бы одно.
+        Калорийность: либо kcal, либо пара kcalMin и kcalMax"
     Problem:
       type: object
       properties:
@@ -64,12 +327,94 @@ components:
         - lon
       additionalProperties: false
       description: Координаты WGS 84
+    ConsentState:
+      type: object
+      properties:
+        granted:
+          type: boolean
+          description: true, только если действует согласие на актуальную версию текста
+        version:
+          description: Версия действующего согласия, null если согласия нет. Устаревшая
+            версия означает, что согласие нужно дать заново
+          type:
+            - string
+            - "null"
+        grantedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда дано действующее согласие
+      required:
+        - granted
+        - version
+        - grantedAt
+      additionalProperties: false
+      description: Состояние согласия пользователя
+    ConsentStatus:
+      type: object
+      properties:
+        personalData:
+          $ref: "#/components/schemas/ConsentState"
+        personalizedOffers:
+          $ref: "#/components/schemas/ConsentState"
+      required:
+        - personalData
+        - personalizedOffers
+      additionalProperties: false
+      description: Состояние обоих согласий пользователя
+    ConsentDocument:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - personal_data
+            - personalized_offers
+          description: personal_data - обработка персональных данных, personalized_offers
+            - персональные предложения
+        version:
+          type: string
+          description: Актуальная версия текста, её передают в PUT /api/v1/consents/{kind}
+        title:
+          type: string
+        text:
+          type: string
+          description: Полный текст согласия, абзацы разделены пустой строкой
+        required:
+          type: boolean
+          description: Без обязательного согласия дневник и профиль не сохраняются
+        granted:
+          type: boolean
+          description: Действует ли согласие пользователя на актуальную версию
+        grantedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда дано действующее согласие
+      required:
+        - kind
+        - version
+        - title
+        - text
+        - required
+        - granted
+        - grantedAt
+      additionalProperties: false
+      description: Текст согласия и его состояние у пользователя
     UserProfile:
       type: object
       properties:
         id:
           type: integer
-          description: MAX user id
+          description: Идентификатор пользователя в MAX
         firstName:
           type:
             - string
@@ -80,9 +425,10 @@ components:
             - "null"
         timezone:
           type: string
+          description: Часовой пояс IANA, по нему считаются дни дневника
         kcalTarget:
           type: integer
-          description: Daily calorie guideline
+          description: Ориентир калорийности на день, ккал
         goal:
           anyOf:
             - type: string
@@ -91,6 +437,8 @@ components:
                 - maintain
                 - gain
             - type: "null"
+          description: "Цель: lose - снизить вес, maintain - удерживать, gain - набрать,
+            null - не выбрана"
         dislikedTags:
           type: array
           items:
@@ -131,11 +479,23 @@ components:
               - light
               - hearty
               - breakfast
+          description: Теги блюд, которые гостю не предлагаются
         location:
           anyOf:
             - $ref: "#/components/schemas/GeoPoint"
             - type: "null"
-          description: Last shared location, rounded to about 1 km
+          description: Последнее переданное местоположение с точностью около 1 км
+        locationUpdatedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда передано местоположение
+        consents:
+          $ref: "#/components/schemas/ConsentStatus"
       required:
         - id
         - firstName
@@ -145,7 +505,27 @@ components:
         - goal
         - dislikedTags
         - location
+        - locationUpdatedAt
+        - consents
       additionalProperties: false
+      description: Профиль пользователя и состояние его согласий
+    UserLocation:
+      type: object
+      properties:
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        updatedAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+      required:
+        - location
+        - updatedAt
+      additionalProperties: false
+      description: "Сохранённое местоположение: координаты округлены до 2 знаков, это
+        около 1 км"
     Session:
       type: object
       properties:
@@ -171,6 +551,383 @@ components:
         - startParam
         - user
       additionalProperties: false
+    Meal:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        kcalMin:
+          type: integer
+        kcalMax:
+          type: integer
+        kcal:
+          type: integer
+          description: Середина диапазона, по ней считаются итоги дня
+        proteinG:
+          description: Белки, г
+          type:
+            - number
+            - "null"
+        fatG:
+          description: Жиры, г
+          type:
+            - number
+            - "null"
+        carbsG:
+          description: Углеводы, г
+          type:
+            - number
+            - "null"
+        tags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        source:
+          type: string
+          enum:
+            - photo
+            - text
+            - manual
+            - booking
+            - demo
+          description: photo и text - распознано, manual - введено вручную, booking -
+            погашенная бронь, demo - демо-данные
+        confidence:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: "null"
+          description: Уверенность распознавания от 0 до 1, null для остальных записей
+        eatenAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        slot:
+          type: string
+          enum:
+            - breakfast
+            - lunch
+            - snack
+            - dinner
+          description: Приём пищи по местному времени пользователя
+      required:
+        - id
+        - title
+        - kcalMin
+        - kcalMax
+        - kcal
+        - proteinG
+        - fatG
+        - carbsG
+        - tags
+        - source
+        - confidence
+        - eatenAt
+        - slot
+      additionalProperties: false
+      description: Запись дневника питания. Калорийность приблизительная
+    DayTotals:
+      type: object
+      properties:
+        meals:
+          type: integer
+          description: Количество записей
+        kcalMin:
+          type: integer
+        kcalMax:
+          type: integer
+        kcal:
+          type: integer
+          description: Сумма середин диапазонов
+        proteinG:
+          type: number
+        fatG:
+          type: number
+        carbsG:
+          type: number
+      required:
+        - meals
+        - kcalMin
+        - kcalMax
+        - kcal
+        - proteinG
+        - fatG
+        - carbsG
+      additionalProperties: false
+      description: Итоги дня
+    DiaryDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          description: Календарная дата YYYY-MM-DD в часовом поясе пользователя
+        timezone:
+          type: string
+          description: Часовой пояс, в котором считаются границы дня
+        targetKcal:
+          type: integer
+          description: Ориентир калорийности пользователя
+        totals:
+          $ref: "#/components/schemas/DayTotals"
+        remainingKcal:
+          type: integer
+          minimum: 0
+          description: Сколько осталось до ориентира, не меньше 0
+        meals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Meal"
+          description: Записи дня по возрастанию eatenAt
+      required:
+        - date
+        - timezone
+        - targetKcal
+        - totals
+        - remainingKcal
+        - meals
+      additionalProperties: false
+      description: Дневник за один день
+    DiarySummaryDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          description: Календарная дата YYYY-MM-DD в часовом поясе пользователя
+        meals:
+          type: integer
+        kcal:
+          type: integer
+        kcalMin:
+          type: integer
+        kcalMax:
+          type: integer
+        proteinG:
+          type: number
+        fatG:
+          type: number
+        carbsG:
+          type: number
+      required:
+        - date
+        - meals
+        - kcal
+        - kcalMin
+        - kcalMax
+        - proteinG
+        - fatG
+        - carbsG
+      additionalProperties: false
+      description: Итоги одного дня, дни без записей с нулями
+    DiarySummary:
+      type: object
+      properties:
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiarySummaryDay"
+          description: Дни от старых к новым, последний - сегодня
+      required:
+        - days
+      additionalProperties: false
+      description: Итоги по дням
+    MealCandidate:
+      type: object
+      properties:
+        title:
+          type: string
+        portionG:
+          description: Оценка порции, г
+          type:
+            - number
+            - "null"
+        kcalMin:
+          type: integer
+        kcalMax:
+          type: integer
+        proteinG:
+          type: number
+        fatG:
+          type: number
+        carbsG:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - title
+        - portionG
+        - kcalMin
+        - kcalMax
+        - proteinG
+        - fatG
+        - carbsG
+        - tags
+        - confidence
+      additionalProperties: false
+      description: Вариант распознавания, который гость может подтвердить
+    MealLogResult:
+      oneOf:
+        - type: object
+          properties:
+            status:
+              type: string
+              const: logged
+            meals:
+              type: array
+              items:
+                $ref: "#/components/schemas/Meal"
+              description: Сохранённые записи
+            basis:
+              type: string
+              description: Короткое пояснение распознавания для гостя
+            day:
+              $ref: "#/components/schemas/DiaryDay"
+          required:
+            - status
+            - meals
+            - basis
+            - day
+          additionalProperties: false
+        - type: object
+          properties:
+            status:
+              type: string
+              const: uncertain
+            candidates:
+              type: array
+              items:
+                $ref: "#/components/schemas/MealCandidate"
+            basis:
+              type: string
+              description: Короткое пояснение распознавания для гостя
+          required:
+            - status
+            - candidates
+            - basis
+          additionalProperties: false
+        - type: object
+          properties:
+            status:
+              type: string
+              const: not_food
+            basis:
+              type: string
+              description: Короткое пояснение распознавания для гостя
+          required:
+            - status
+            - basis
+          additionalProperties: false
+        - type: object
+          properties:
+            status:
+              type: string
+              const: unavailable
+            reason:
+              type: string
+              enum:
+                - disabled
+                - timeout
+                - provider_error
+                - invalid_response
+                - quota_exceeded
+                - unsupported_image
+          required:
+            - status
+            - reason
+          additionalProperties: false
+      description: "Результат распознавания по полю status. logged: уверенно
+        распознанные блюда сохранены, day - обновлённый дневник за сегодня.
+        uncertain: ничего не сохранено, гость выбирает вариант или вводит блюдо,
+        запись создаётся через POST /api/v1/diary/meals. not_food: на фото или в
+        тексте нет еды, ничего не сохранено. unavailable: распознавание
+        недоступно, предложите ручной ввод; reason unsupported_image - фото не
+        удалось прочитать, попросите JPEG или PNG."
 paths:
   /health:
     get:
@@ -257,7 +1014,9 @@ paths:
         мини-приложение), auth_unavailable (503, вход через MAX не настроен на
         сервере). Токен из ответа передаётся в заголовке Authorization: Bearer.
         Ответ 401 с кодом invalid_token на других методах означает, что сессия
-        истекла и нужно войти заново."
+        истекла и нужно войти заново. В user.consents состояние согласий: если
+        personalData.granted равно false, покажите экраны согласий до работы с
+        дневником."
       requestBody:
         required: true
         content:
@@ -333,7 +1092,10 @@ paths:
       summary: Профиль текущего пользователя
       tags:
         - me
-      security:
+      description: "Профиль вместе с состоянием согласий: по consents мини-приложение
+        решает, показывать ли экраны согласий. Коды ошибок: user_not_found
+        (404): аккаунт удалён, войдите заново."
+      security: &a3
         - bearerAuth: []
       responses:
         "200":
@@ -342,6 +1104,931 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      operationId: updateMe
+      summary: Изменить профиль
+      tags:
+        - me
+      description: "Меняет только переданные поля: ориентир калорийности, цель,
+        нелюбимые теги, часовой пояс. Повторы тегов удаляются. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново. invalid_timezone (422): часовой пояс не найден,
+        передайте имя IANA, например Europe/Moscow."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfilePatchInput"
+      security: *a3
+      responses:
+        "200":
+          description: Обновлённый профиль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: deleteMyAccount
+      summary: Удалить аккаунт и все данные
+      tags:
+        - me
+      description: "Бесплатно и сразу удаляет профиль, дневник, согласия и состояние
+        бота, отменяет активные брони с возвратом порций в горящие предложения и
+        стирает объяснения показанных предложений. Повторный вызов тоже отвечает
+        204. После удаления старый токен получает 404 user_not_found на GET
+        /api/v1/me, новый вход создаёт пустой профиль без согласий. Коды ошибок:
+        demo_account_protected (403): демо-учётка общая для всех проверяющих, её
+        удалить нельзя."
+      security: *a3
+      responses:
+        "204":
+          description: Аккаунт удалён
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/me/location:
+    put:
+      operationId: setMyLocation
+      summary: Сохранить местоположение
+      tags:
+        - me
+      description: "Координаты округляются до 2 знаков (около 1 км) и сохраняются
+        только в таком виде, по ним подбираются заведения рядом. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeoPointInput"
+      security: *a3
+      responses:
+        "200":
+          description: Сохранённое местоположение
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserLocation"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: clearMyLocation
+      summary: Удалить местоположение
+      tags:
+        - me
+      description: Работает без согласия на обработку данных. Повторный вызов тоже
+        отвечает 204.
+      security: *a3
+      responses:
+        "204":
+          description: Местоположение удалено
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/consents:
+    get:
+      operationId: listConsents
+      summary: Тексты согласий и их состояние
+      tags:
+        - consents
+      description: Возвращает personal_data (обязательное, без него дневник и профиль
+        не сохраняются) и personalized_offers (необязательное). Каждое согласие
+        показывается отдельным экраном с полным текстом и своей кнопкой, после
+        нажатия отправьте PUT /api/v1/consents/{kind} с version из ответа.
+      security: *a3
+      responses:
+        "200":
+          description: Согласия в порядке показа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConsentDocument"
+                required:
+                  - items
+                additionalProperties: false
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/consents/{kind}:
+    put:
+      operationId: grantConsent
+      summary: Дать согласие
+      tags:
+        - consents
+      description: "Сохраняет согласие с версией текста, каналом miniapp и временем,
+        предыдущая запись остаётся в истории. Повтор с той же версией ничего не
+        меняет. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. user_not_found (404): аккаунт удалён, войдите
+        заново. consent_version_outdated (409): текст изменился, загрузите GET
+        /api/v1/consents и покажите его заново."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 32
+                  description: Версия текста, который увидел пользователь, из GET /api/v1/consents
+              required:
+                - version
+      parameters:
+        - schema:
+            type: string
+            enum:
+              - personal_data
+              - personalized_offers
+          in: path
+          name: kind
+          required: true
+          description: personal_data - обработка персональных данных, personalized_offers
+            - персональные предложения
+      security: *a3
+      responses:
+        "200":
+          description: Состояние согласия
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentState"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: revokeConsent
+      summary: Отозвать согласие
+      tags:
+        - consents
+      description: "Сразу отзывает согласие на персональные предложения, повторный
+        вызов тоже отвечает 204. Коды ошибок: validation_failed (400): исправьте
+        поля, перечисленные в errors. delete_account_instead (409): согласие на
+        обработку данных отзывается только удалением аккаунта, покажите «Чтобы
+        отозвать согласие на обработку данных, удалите аккаунт» и предложите
+        DELETE /api/v1/me."
+      parameters:
+        - schema:
+            type: string
+            enum:
+              - personal_data
+              - personalized_offers
+          in: path
+          name: kind
+          required: true
+          description: personal_data - обработка персональных данных, personalized_offers
+            - персональные предложения
+      security: *a3
+      responses:
+        "204":
+          description: Согласие отозвано
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/today:
+    get:
+      operationId: getDiaryToday
+      summary: Дневник за сегодня
+      tags:
+        - diary
+      description: "Сегодняшний день считается в часовом поясе пользователя. Коды
+        ошибок: user_not_found (404): аккаунт удалён, войдите заново."
+      security: *a3
+      responses:
+        "200":
+          description: Дневник за сегодня
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiaryDay"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/days/{date}:
+    get:
+      operationId: getDiaryDay
+      summary: Дневник за день
+      tags:
+        - diary
+      description: "Границы дня считаются в часовом поясе пользователя. Коды ошибок:
+        validation_failed (400): передайте дату в формате YYYY-MM-DD.
+        user_not_found (404): аккаунт удалён, войдите заново."
+      parameters:
+        - schema:
+            type: string
+            format: date
+          example: 2026-09-25
+          in: path
+          name: date
+          required: true
+          description: Дата YYYY-MM-DD в часовом поясе пользователя
+      security: *a3
+      responses:
+        "200":
+          description: Дневник за день
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiaryDay"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/summary:
+    get:
+      operationId: getDiarySummary
+      summary: Итоги по дням
+      tags:
+        - diary
+      description: "Итоги за последние days дней включая сегодня, от старых к новым.
+        Дни без записей тоже есть в ответе, с нулями. Коды ошибок:
+        validation_failed (400): days от 1 до 31. user_not_found (404): аккаунт
+        удалён, войдите заново."
+      parameters:
+        - schema:
+            default: 7
+            type: integer
+            minimum: 1
+            maximum: 31
+          in: query
+          name: days
+          required: false
+          description: Сколько последних дней включая сегодня
+      security: *a3
+      responses:
+        "200":
+          description: Итоги по дням
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiarySummary"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/meals:
+    post:
+      operationId: createMeal
+      summary: Записать приём пищи вручную
+      tags:
+        - diary
+      description: "Ручной ввод и подтверждение кандидата из распознавания. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново. eaten_at_out_of_range (422): время приёма пищи должно
+        быть не раньше чем 7 дней назад и не позже чем через 5 минут."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualMealInput"
+      security: *a3
+      responses:
+        "201":
+          description: Запись создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meal"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/meals/photo:
+    post:
+      operationId: logMealFromPhoto
+      summary: Записать приём пищи по фото
+      tags:
+        - diary
+      description: "Фото передаётся в поле image формы multipart/form-data: JPEG, PNG
+        или WebP до 10 МБ, тип определяется по содержимому. Фото не сохраняется
+        и уходит в распознавание без данных пользователя. Распознавание платное,
+        поэтому не больше 20 запросов в минуту. Уверенно распознанные блюда
+        сохраняются сразу, неуверенные возвращаются кандидатами: гость
+        подтверждает их через POST /api/v1/diary/meals. При status unavailable
+        предложите ручной ввод. Коды ошибок: image_required, image_empty,
+        invalid_multipart (400): приложите одно фото в поле image.
+        image_too_large, upload_too_many_parts (413): уменьшите фото и отправьте
+        только его. multipart_required, unsupported_image_type (415): отправьте
+        JPEG, PNG или WebP как multipart/form-data. consent_required (403): нет
+        согласия на обработку данных, покажите его текст из GET /api/v1/consents
+        и отправьте PUT /api/v1/consents/personal_data. user_not_found (404):
+        аккаунт удалён, войдите заново."
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Фото JPEG, PNG или WebP до 10 МБ
+      security: *a3
+      responses:
+        "200":
+          description: Результат распознавания
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealLogResult"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/meals/text:
+    post:
+      operationId: logMealFromText
+      summary: Записать приём пищи по описанию
+      tags:
+        - diary
+      description: "Распознавание платное, поэтому не больше 20 запросов в минуту.
+        Уверенно распознанные блюда сохраняются сразу, неуверенные возвращаются
+        кандидатами: гость подтверждает их через POST /api/v1/diary/meals. При
+        status unavailable предложите ручной ввод. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                  description: Что съедено, своими словами, например «овсянка с бананом и кофе с
+                    молоком»
+              required:
+                - description
+      security: *a3
+      responses:
+        "200":
+          description: Результат распознавания
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealLogResult"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/meals/{id}:
+    patch:
+      operationId: updateMeal
+      summary: Исправить запись
+      tags:
+        - diary
+      description: "Меняет только переданные поля. Коды ошибок: validation_failed
+        (400): исправьте поля, перечисленные в errors. consent_required (403):
+        нет согласия на обработку данных, покажите его текст из GET
+        /api/v1/consents и отправьте PUT /api/v1/consents/personal_data.
+        meal_not_found (404): записи нет или она принадлежит другому
+        пользователю. user_not_found (404): аккаунт удалён, войдите заново.
+        eaten_at_out_of_range (422): время приёма пищи должно быть не раньше чем
+        7 дней назад и не позже чем через 5 минут."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MealPatchInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Исправленная запись
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meal"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: deleteMeal
+      summary: Удалить запись
+      tags:
+        - diary
+      description: "Работает без согласия на обработку данных. Коды ошибок:
+        validation_failed (400): id должен быть положительным целым.
+        meal_not_found (404): записи нет или она принадлежит другому
+        пользователю."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "204":
+          description: Запись удалена
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Unauthorized
           content:
@@ -378,3 +2065,7 @@ tags:
     description: Вход через MAX
   - name: me
     description: Профиль текущего пользователя
+  - name: consents
+    description: Согласия на обработку данных и персональные предложения
+  - name: diary
+    description: Дневник питания
