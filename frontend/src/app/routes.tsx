@@ -1,4 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { DiaryScreen } from '../features/diary/DiaryScreen.tsx';
+import { InsightsScreen } from '../features/diary/InsightsScreen.tsx';
+import { EditMealScreen, NewMealScreen } from '../features/diary/MealFormScreen.tsx';
 import { ConsentStep } from '../features/onboarding/ConsentStep.tsx';
 import { DoneStep } from '../features/onboarding/DoneStep.tsx';
 import { GoalStep } from '../features/onboarding/GoalStep.tsx';
@@ -23,10 +26,11 @@ export const appRoutes: RouteObject[] = [
       { path: 'onboarding/location', element: <LocationStep /> },
       { path: 'onboarding/done', element: <DoneStep /> },
       { path: 'onboarding/*', element: <Navigate to="/onboarding" replace /> },
-      { path: 'diary', element: <StubScreen title="Дневник" /> },
-      { path: 'diary/meals/:id', element: <StubScreen title="Запись" back="/diary" /> },
-      { path: 'diary/:date', element: <StubScreen title="Дневник" back="/diary" /> },
-      { path: 'insights', element: <StubScreen title="Неделя" back="/diary" /> },
+      { path: 'diary', element: <DiaryScreen /> },
+      { path: 'diary/meals/new', element: <NewMealScreen /> },
+      { path: 'diary/meals/:id', element: <EditMealScreen /> },
+      { path: 'diary/:date', element: <DiaryScreen /> },
+      { path: 'insights', element: <InsightsScreen /> },
       { path: 'eat', element: <StubScreen title="Что поесть" /> },
       { path: 'deals', element: <StubScreen title="Горящее" back="/eat" /> },
       { path: 'venues', element: <StubScreen title="Заведения" back="/eat" /> },

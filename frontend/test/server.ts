@@ -9,6 +9,7 @@ interface ServerCall {
   search: string;
   body: unknown;
   authorization: string | null;
+  contentType: string | null;
 }
 
 type Handler = (call: ServerCall) => Response | Promise<Response>;
@@ -42,6 +43,7 @@ export function createServer() {
       search: url.search,
       body,
       authorization: request.headers.get('Authorization'),
+      contentType: request.headers.get('Content-Type'),
     };
     calls.push(call);
     const route = [...routes]

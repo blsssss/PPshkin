@@ -13,6 +13,8 @@
   --ppsh-on-cyan: #000000;
   --ppsh-on-pink: #000000;
   --ppsh-qr-paper: #ffffff;
+  --ppsh-on-accent-track: rgba(255, 255, 255, 0.25);
+  --ppsh-on-accent-soft: rgba(255, 255, 255, 0.14);
   --ppsh-skeleton: rgba(110, 26, 255, 0.08);
   --ppsh-skeleton-shine: rgba(110, 26, 255, 0.16);
   --ppsh-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
