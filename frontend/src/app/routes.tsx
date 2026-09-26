@@ -11,6 +11,7 @@ import { GoalStep } from '../features/onboarding/GoalStep.tsx';
 import { LocationStep } from '../features/onboarding/LocationStep.tsx';
 import { OffersStep } from '../features/onboarding/OffersStep.tsx';
 import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
+import { BookingScreen, BookingsScreen, NewBookingScreen } from '../features/bookings/BookingScreens.tsx';
 import { ProfileScreen } from '../features/profile/ProfileScreen.tsx';
 import { VenueHomeScreen, VenueLinkScreen, VenueSettingsScreen } from '../features/venue/CabinetScreens.tsx';
 import { ImportReviewScreen, ImportStartScreen } from '../features/venue/ImportScreens.tsx';
@@ -23,7 +24,7 @@ import {
 } from '../features/profile/ProfileSubScreens.tsx';
 import { AppShell } from './AppShell.tsx';
 import { RouteErrorScreen } from './screens/RouteErrorScreen.tsx';
-import { NotFoundScreen, StubScreen } from './screens/StubScreen.tsx';
+import { NotFoundScreen } from './screens/NotFoundScreen.tsx';
 import { StartRedirect } from './StartRedirect.tsx';
 
 export const appRoutes: RouteObject[] = [
@@ -48,9 +49,9 @@ export const appRoutes: RouteObject[] = [
       { path: 'deals', element: <DealsScreen /> },
       { path: 'venues', element: <VenuesScreen /> },
       { path: 'venues/:id', element: <VenueScreen /> },
-      { path: 'bookings', element: <StubScreen title="Брони" /> },
-      { path: 'bookings/new', element: <StubScreen title="Бронь" back="/bookings" /> },
-      { path: 'bookings/:id', element: <StubScreen title="Бронь" back="/bookings" /> },
+      { path: 'bookings', element: <BookingsScreen /> },
+      { path: 'bookings/new', element: <NewBookingScreen /> },
+      { path: 'bookings/:id', element: <BookingScreen /> },
       { path: 'venue', element: <VenueHomeScreen /> },
       { path: 'venue/settings', element: <VenueSettingsScreen /> },
       { path: 'venue/link', element: <VenueLinkScreen /> },

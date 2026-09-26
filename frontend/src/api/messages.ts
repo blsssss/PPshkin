@@ -38,6 +38,17 @@ const MESSAGES: Record<string, string> = {
     'Сегодня загружено 20 меню, это дневной лимит. Добавьте позиции вручную или попробуйте завтра',
   import_not_ready: 'Распознавание ещё не закончилось',
   import_already_applied: 'Эти позиции уже добавлены в меню',
+  too_many_bookings: 'У вас уже 3 активные брони. Отмените одну или дождитесь её окончания',
+  booking_exists: 'Эта горящая позиция уже забронирована вами',
+  venue_closed: 'Заведение сейчас закрыто, бронь недоступна',
+  deal_not_active: 'Горящая позиция закончилась',
+  deal_sold_out: 'Горящая позиция закончилась',
+  deal_not_found: 'Эта позиция больше недоступна',
+  menu_item_unavailable: 'Эта позиция больше недоступна',
+  offer_not_found: 'Предложение устарело, обновите подборку',
+  booking_not_found: 'Бронь не найдена',
+  booking_not_active: 'Бронь уже не активна',
+  booking_expired: 'Время брони вышло',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {

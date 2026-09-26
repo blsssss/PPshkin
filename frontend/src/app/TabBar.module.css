@@ -53,3 +53,14 @@
   transform: translateX(-50%);
   content: '';
 }
+
+.icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.counter {
+  position: absolute;
+  top: -6px;
+  left: 14px;
+}

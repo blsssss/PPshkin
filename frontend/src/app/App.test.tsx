@@ -150,8 +150,8 @@ describe('navigation', () => {
     expect(screen.getByRole('link', { name: 'Моё заведение' }).getAttribute('href')).toBe('/venue');
   });
 
-  it('never leaves a dead end in a stub', async () => {
-    const router = renderAt('/bookings');
+  it('never leaves a dead end on an unknown page', async () => {
+    const router = renderAt('/nowhere');
     fireEvent.click(await screen.findByRole('button', { name: 'На главную' }));
     expect(router.state.location.pathname).toBe('/diary');
   });
