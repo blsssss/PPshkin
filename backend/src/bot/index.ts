@@ -1,7 +1,9 @@
 import type { Queryable } from '../db/pool.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
+import type { Sleep } from '../integrations/max/sleep.ts';
 import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
+import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import type { BotKit } from './context.ts';
 import { createBookingsModule } from './guest/bookings.ts';
@@ -13,6 +15,7 @@ import { createVenuesModule } from './guest/venues.ts';
 import { createRegistry } from './registry.ts';
 import { createRouter } from './router.ts';
 import type { ChatStateStore } from './state.ts';
+import { createVenueModule } from './venue/index.ts';
 
 export interface BotDependencies {
   pool: Queryable;
@@ -23,6 +26,8 @@ export interface BotDependencies {
   logger: MaxLogger;
   bot: { username: string; userId: number };
   miniAppEnabled: boolean;
+  background: BackgroundTasks;
+  sleep: Sleep;
 }
 
 const GUEST_MODULES = [
@@ -44,6 +49,7 @@ export function createBot(deps: BotDependencies): UpdateHandler {
     openStartLink: (ctx, link) => registry.openStartLink(ctx, link),
   };
   for (const createModule of GUEST_MODULES) registry.add(createModule(kit));
+  registry.add(createVenueModule(kit, { clock: deps.clock, background: deps.background, sleep: deps.sleep }));
   return createRouter({
     db: deps.pool,
     services: deps.services,
