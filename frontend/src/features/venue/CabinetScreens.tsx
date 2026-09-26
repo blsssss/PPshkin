@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { isApiError } from '../../api/errors.ts';
 import { userMessage } from '../../api/messages.ts';
 import { buildStartAppLink } from '../../app/startParam.ts';
+import { demoMode } from '../../env.ts';
 import { haptic, openExternalLink } from '../../max/bridge.ts';
 import { plural } from '../../shared/format.ts';
 import { useGeolocation } from '../../shared/geo/useGeolocation.ts';
@@ -17,7 +18,7 @@ import { Label } from '../../shared/ui/Label.tsx';
 import { Notice } from '../../shared/ui/Notice.tsx';
 import { Page } from '../../shared/ui/Page.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
-import { ScreenState } from '../../shared/ui/ScreenState.tsx';
+import { ScreenState, type ScreenAction } from '../../shared/ui/ScreenState.tsx';
 import { ShareButton } from '../../shared/ui/ShareButton.tsx';
 import { Skeleton } from '../../shared/ui/Skeleton.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
@@ -38,7 +39,14 @@ import {
   type VenueInput,
 } from './model.ts';
 import { useVenueBookings, useVenueDeals } from './dealQueries.ts';
-import { useReloadVenue, useSaveVenue, useVenue, useVenueMenu, useVenueNotFoundRedirect } from './queries.ts';
+import {
+  useClaimDemoVenue,
+  useReloadVenue,
+  useSaveVenue,
+  useVenue,
+  useVenueMenu,
+  useVenueNotFoundRedirect,
+} from './queries.ts';
 import styles from './Venue.module.css';
 import { useLeave } from '../../shared/appHistory.ts';
 
@@ -144,9 +152,42 @@ function VenueHome({ venue }: { venue: Venue }) {
   );
 }
 
+const DEMO_ACCOUNT_TEXT = 'Под демо-учёткой копию получить нельзя, откройте мини-приложение в MAX';
+
+function useDemoVenueAction(): ScreenAction | undefined {
+  const toast = useToast();
+  const claim = useClaimDemoVenue();
+  const reload = useReloadVenue();
+  const [serverOff, setServerOff] = useState(false);
+  if (!demoMode() || serverOff) return undefined;
+  return {
+    label: 'Взять демо-заведение',
+    loading: claim.isPending,
+    onClick: () => {
+      claim.mutate(undefined, {
+        onSuccess: () => {
+          haptic.success();
+          toast.show('Готово, у вас копия кофейни «Зерно». Заведение и меню тестовые');
+        },
+        onError: (error) => {
+          if (isApiError(error, 'venue_exists')) {
+            void reload();
+            return;
+          }
+          haptic.error();
+          if (isApiError(error, 'demo_mode_disabled')) setServerOff(true);
+          const text = isApiError(error, 'demo_account') ? DEMO_ACCOUNT_TEXT : userMessage(error);
+          toast.show(text, { tone: 'error' });
+        },
+      });
+    },
+  };
+}
+
 export function VenueHomeScreen() {
   const navigate = useNavigate();
   const venue = useVenue();
+  const demo = useDemoVenueAction();
   useVenueNotFoundRedirect();
   const data = venue.data;
   return (
@@ -172,6 +213,7 @@ export function VenueHomeScreen() {
               void navigate('/venue/settings');
             },
           }}
+          secondaryAction={demo}
         />
       )}
       {data !== undefined && data !== null && <VenueHome venue={data} />}

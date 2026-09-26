@@ -59,6 +59,17 @@ export function useSaveVenue() {
   });
 }
 
+export function useClaimDemoVenue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => unwrap(await api.POST('/api/v1/venue/demo', { body: {} })),
+    onSuccess: async (venue) => {
+      queryClient.setQueryData(VENUE_KEY, venue);
+      await queryClient.invalidateQueries({ queryKey: MENU_KEY });
+    },
+  });
+}
+
 function replaceItem(items: MenuItem[] | undefined, item: MenuItem): MenuItem[] | undefined {
   if (items === undefined) return items;
   return items.some((entry) => entry.id === item.id)
