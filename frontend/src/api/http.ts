@@ -6,6 +6,8 @@ export const LONG_TIMEOUT_MS = 90_000;
 
 const LONG_REQUESTS = [/\/diary\/meals\/(photo|text)$/, /\/venue\/menu\/imports\/(photo|text)$/];
 const TOKEN_PROBLEMS = new Set(['invalid_token', 'unauthorized']);
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_DELAY_MS = 1000;
 
 export interface AuthBinding {
   token(): string | null;
@@ -55,6 +57,46 @@ async function send(request: Request, token: string | null, baseFetch: FetchLike
   }
 }
 
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const aborted = () =>
+      signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError');
+    if (signal.aborted) {
+      reject(aborted());
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(aborted());
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function sendWithRetry(
+  request: Request,
+  token: string | null,
+  baseFetch: FetchLike,
+): Promise<Response> {
+  if (request.method !== 'GET') return send(request, token, baseFetch);
+  const again = request.clone();
+  let response: Response;
+  try {
+    response = await send(request, token, baseFetch);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== NETWORK_ERROR) throw error;
+    await wait(RETRY_DELAY_MS, request.signal);
+    return send(again, token, baseFetch);
+  }
+  if (!RETRY_STATUSES.has(response.status)) return response;
+  await wait(RETRY_DELAY_MS, request.signal);
+  return send(again, token, baseFetch);
+}
+
 async function isTokenProblem(response: Response): Promise<boolean> {
   if (response.status !== 401) return false;
   const error = await apiErrorFromResponse(response);
@@ -73,9 +115,9 @@ export function createApiFetch(auth: AuthBinding, baseFetch: FetchLike = default
   return async (input) => {
     const retry = input.clone();
     const sent = auth.token();
-    let response = await send(input, sent, baseFetch);
+    let response = await sendWithRetry(input, sent, baseFetch);
     if ((await isTokenProblem(response)) && (await renewedToken(auth, sent))) {
-      response = await send(retry, auth.token(), baseFetch);
+      response = await sendWithRetry(retry, auth.token(), baseFetch);
     }
     if (!response.ok) throw emitApiError(await apiErrorFromResponse(response));
     return response;

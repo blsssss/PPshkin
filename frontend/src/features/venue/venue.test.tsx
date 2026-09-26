@@ -165,7 +165,7 @@ describe('cabinet', () => {
     await act(async () => {
       await router.navigate('/venue');
     });
-    expect(await screen.findByText('Уйти без сохранения?')).toBeTruthy();
+    expect(await screen.findByText('Изменения не сохранены. Уйти?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Остаться' }));
     expect(router.state.location.pathname).toBe('/venue/settings');
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -519,5 +519,34 @@ describe('recovery', () => {
     await renderApp('/venue/menu/import/11');
     expect(await screen.findByText('Найдено 1 позиция, выбрано 1')).toBeTruthy();
     expect(localStorage.getItem('ppshkin.menuImport')).toBeNull();
+  });
+});
+
+describe('back after saving', () => {
+  it('returns to the screen before the menu, not to the menu again', async () => {
+    await start();
+    server.on('POST', '/api/v1/venue/menu/items', (call) =>
+      json({ ...item(3), ...(call.body as object) }, 201),
+    );
+    const { router } = await renderApp('/venue');
+    await screen.findByRole('heading', { name: 'Кофейня «Зерно»' });
+    await act(async () => {
+      await router.navigate('/venue/menu');
+    });
+    await act(async () => {
+      await router.navigate('/venue/menu/new');
+    });
+    fireEvent.change(await screen.findByLabelText('Название'), { target: { value: 'Морс' } });
+    fireEvent.change(screen.getByLabelText('Категория'), { target: { value: 'drink' } });
+    fireEvent.change(screen.getByLabelText('Цена, ₽'), { target: { value: '150' } });
+    fireEvent.change(screen.getByLabelText('Ккал'), { target: { value: '90' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить позицию' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/venue/menu');
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/venue');
+    });
   });
 });

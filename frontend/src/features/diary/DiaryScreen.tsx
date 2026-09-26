@@ -108,8 +108,8 @@ export function DiaryScreen() {
   const title = date !== undefined && todayDate !== undefined ? dayTitle(date, todayDate) : 'Дневник';
 
   const goTo = (next: string) => {
-    if (todayDate !== undefined && next === todayDate) void navigate('/diary');
-    else void navigate(`/diary/${next}`);
+    if (todayDate !== undefined && next === todayDate) void navigate('/diary', { replace: true });
+    else void navigate(`/diary/${next}`, { replace: true });
   };
 
   const closeAdd = () => {
@@ -182,6 +182,7 @@ export function DiaryScreen() {
           status="error"
           title="Не удалось загрузить день"
           description={userMessage(day.error)}
+          error={day.error}
           action={{
             label: 'Повторить',
             onClick: () => {

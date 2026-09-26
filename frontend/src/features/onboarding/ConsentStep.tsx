@@ -82,6 +82,7 @@ export function ConsentStep() {
           status="error"
           title="Не удалось загрузить текст согласия"
           description={userMessage(consents.error)}
+          error={consents.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -95,7 +96,7 @@ export function ConsentStep() {
         <>
           <ConsentText text={document.text} />
           {notice !== null && <Notice tone="error">{notice}</Notice>}
-          <ActionBar>
+          <ActionBar sends>
             {granted ? (
               <Button
                 size="large"

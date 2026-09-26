@@ -1,5 +1,6 @@
 import { cx } from './cx.ts';
 import styles from './SegmentedControl.module.css';
+import { haptic } from '../../max/bridge.ts';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -28,7 +29,9 @@ export function SegmentedControl<T extends string>({
             className={cx(styles.segment, active && styles.active)}
             aria-pressed={active}
             onClick={() => {
-              if (!active) onChange(option.value);
+              if (active) return;
+              haptic.selection();
+              onChange(option.value);
             }}
           >
             {option.label}

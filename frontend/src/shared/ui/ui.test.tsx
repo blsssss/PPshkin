@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeWebApp } from '../../../test/webapp.ts';
+import { ApiError } from '../../api/errors.ts';
+import { Chip } from './Chip.tsx';
 import { ConfirmSheet } from './ConfirmSheet.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { OfflineBanner } from './OfflineBanner.tsx';
@@ -28,9 +31,32 @@ describe('ScreenState', () => {
     expect(retry).toHaveBeenCalled();
   });
 
-  it('announces loading', () => {
+  it('shows the loading state after 300 ms so fast answers do not flash', () => {
+    vi.useFakeTimers();
     render(<ScreenState status="loading" label="Загружаем дневник" />);
+    expect(screen.queryByText('Загружаем дневник')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByText('Загружаем дневник')).toBeTruthy();
     expect(screen.getByRole('status', { name: 'Загружаем дневник' })).toBeTruthy();
+  });
+
+  it('counts down a retry after 429', () => {
+    vi.useFakeTimers();
+    render(
+      <ScreenState
+        status="error"
+        title="Не удалось"
+        error={new ApiError({ status: 429, code: 'rate_limited', retryAfterSeconds: 3 })}
+        action={{ label: 'Повторить', onClick: () => undefined }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Повторить через 3 с' }).hasAttribute('disabled')).toBe(true);
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getByRole('button', { name: 'Повторить' }).hasAttribute('disabled')).toBe(false);
   });
 });
 
@@ -184,5 +210,47 @@ describe('ErrorBoundary', () => {
     );
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Перезапустить' })).toBeTruthy();
+  });
+});
+
+describe('Chip', () => {
+  it('vibrates only when the choice changes', () => {
+    const webApp = fakeWebApp();
+    render(
+      <>
+        <Chip pressed onClick={() => undefined}>
+          Выбрано
+        </Chip>
+        <Chip pressed={false} onClick={() => undefined}>
+          Другое
+        </Chip>
+        <Chip pressed toggles onClick={() => undefined}>
+          Тег
+        </Chip>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Выбрано' }));
+    expect(webApp.HapticFeedback.selectionChanged).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Другое' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Тег' }));
+    expect(webApp.HapticFeedback.selectionChanged).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cooldown after a long pause', () => {
+  it('counts from the moment the answer arrived', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-26T12:00:00.000Z'));
+    const error = new ApiError({ status: 429, code: 'rate_limited', retryAfterSeconds: 10 });
+    vi.setSystemTime(new Date('2026-09-26T12:00:02.000Z'));
+    render(
+      <ScreenState
+        status="error"
+        title="Не удалось"
+        error={error}
+        action={{ label: 'Повторить', onClick: () => undefined }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Повторить через 8 с' })).toBeTruthy();
   });
 });

@@ -7,7 +7,7 @@ import { useToast } from '../../shared/ui/Toast.tsx';
 import { logPhoto, logText } from './logging.ts';
 import { useRefreshDiary, type MealLogResult } from './queries.ts';
 
-const SLOW_AFTER_MS = 15_000;
+const SLOW_AFTER_MS = 10_000;
 const PHOTO_MAX_SIDE = 1600;
 
 export type LoggerState =
@@ -80,6 +80,7 @@ export function useMealLogger() {
       }
       if (id === run.current) setState({ kind: 'result', source, result });
     } catch (error) {
+      haptic.error();
       const { message, lost } = errorMessage(error, source);
       if (lost) void refresh();
       if (id === run.current) setState({ kind: 'error', source, message, lost });

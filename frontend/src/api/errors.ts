@@ -6,6 +6,7 @@ export class ApiError extends Error {
   readonly code: string;
   readonly fieldErrors: Record<string, string>;
   readonly retryAfterSeconds: number | null;
+  readonly receivedAt = Date.now();
 
   constructor(options: {
     status: number;

@@ -124,6 +124,7 @@ export function DealsScreen() {
           status="error"
           title="Не удалось загрузить горящие позиции"
           description={userMessage(deals.error)}
+          error={deals.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -242,6 +243,7 @@ export function VenuesScreen() {
           status="error"
           title="Не удалось загрузить заведения"
           description={userMessage(venues.error)}
+          error={venues.error}
           action={{
             label: 'Повторить',
             onClick: () => {

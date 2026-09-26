@@ -1,37 +1,30 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useBlocker } from 'react-router';
-import { setClosingConfirmation } from '../max/bridge.ts';
+import { useClosingConfirmation } from '../max/bridge.ts';
 import { ConfirmSheet } from './ui/ConfirmSheet.tsx';
 
 export function useUnsavedChanges(dirty: boolean): { prompt: ReactNode; release: () => void } {
-  const released = useRef(false);
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      dirty && !released.current && currentLocation.pathname !== nextLocation.pathname,
-  );
+  const releasedRef = useRef(false);
+  useClosingConfirmation(dirty);
 
   useEffect(() => {
-    setClosingConfirmation(dirty);
-    if (dirty) released.current = false;
+    if (dirty) releasedRef.current = false;
   }, [dirty]);
 
-  useEffect(
-    () => () => {
-      setClosingConfirmation(false);
-    },
-    [],
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && !releasedRef.current && currentLocation.pathname !== nextLocation.pathname,
   );
 
   const release = useCallback(() => {
-    released.current = true;
-    setClosingConfirmation(false);
+    releasedRef.current = true;
   }, []);
 
   const prompt = (
     <ConfirmSheet
       open={blocker.state === 'blocked'}
-      title="Уйти без сохранения?"
-      description="Изменения на этом экране не сохранятся."
+      title="Изменения не сохранены. Уйти?"
+      description="Всё, что вы изменили на этом экране, пропадёт."
       confirmLabel="Уйти"
       cancelLabel="Остаться"
       destructive

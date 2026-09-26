@@ -99,6 +99,12 @@ export const haptic = {
   error(): void {
     withHaptics((feedback) => feedback.notificationOccurred('error'));
   },
+  warning(): void {
+    withHaptics((feedback) => feedback.notificationOccurred('warning'));
+  },
+  selection(): void {
+    withHaptics((feedback) => feedback.selectionChanged());
+  },
   impact(style: ImpactStyle): void {
     withHaptics((feedback) => feedback.impactOccurred(style));
   },
@@ -206,11 +212,20 @@ export function openMaxLink(url: string): void {
   openInBrowser(url);
 }
 
-export function setClosingConfirmation(enabled: boolean): void {
+function setClosingConfirmation(enabled: boolean): void {
   const webApp = bridge();
   if (!insideMax()) return;
   if (enabled) attempt(() => webApp?.enableClosingConfirmation?.());
   else attempt(() => webApp?.disableClosingConfirmation?.());
+}
+
+export function useClosingConfirmation(active: boolean): void {
+  useEffect(() => {
+    setClosingConfirmation(active);
+    return () => {
+      setClosingConfirmation(false);
+    };
+  }, [active]);
 }
 
 export function useBackButton(onBack: () => void): void {

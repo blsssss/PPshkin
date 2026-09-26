@@ -142,6 +142,7 @@ export function InsightsScreen() {
           status="error"
           title="Не удалось загрузить график"
           description={userMessage(summary.error)}
+          error={summary.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -180,6 +181,7 @@ export function InsightsScreen() {
           status="error"
           title="Не удалось загрузить привычки"
           description={userMessage(insights.error)}
+          error={insights.error}
           action={{
             label: 'Повторить',
             onClick: () => {

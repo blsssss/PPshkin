@@ -93,7 +93,7 @@ export function GoalStep() {
         />
       )}
       {notice !== null && <Notice tone="error">{notice}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button size="large" stretched loading={update.isPending} disabled={!online} onClick={save}>
           {notice !== null ? 'Повторить' : 'Сохранить'}
         </Button>

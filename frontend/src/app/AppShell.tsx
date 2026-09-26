@@ -5,6 +5,7 @@ import type { UserProfile } from '../api/client.ts';
 import { isApiError } from '../api/errors.ts';
 import { onApiError } from '../api/events.ts';
 import { CONSENTS_KEY, PROFILE_KEY, useProfile, useUpdateProfile } from '../api/profile.ts';
+import { useTrackAppHistory } from '../shared/appHistory.ts';
 import { OfflineBanner } from '../shared/ui/OfflineBanner.tsx';
 import { TabBar } from './TabBar.tsx';
 
@@ -51,6 +52,7 @@ function useConsentRequiredRedirect(): void {
 }
 
 export function AppShell() {
+  useTrackAppHistory();
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   const profile = useProfile().data;

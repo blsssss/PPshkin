@@ -1,5 +1,6 @@
 import { Button, Spinner } from '@maxhub/max-ui';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useCooldown } from '../useCooldown.ts';
 import { cx } from './cx.ts';
 import styles from './ScreenState.module.css';
 
@@ -19,10 +20,30 @@ type ScreenStateProps =
       action: ScreenAction;
       secondaryAction?: ScreenAction;
       tertiaryAction?: ScreenAction | undefined;
+      error?: unknown;
     };
 
+const LOADING_DELAY_MS = 300;
+
+function useDelayed(active: boolean): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => {
+      setShown(true);
+    }, LOADING_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [active]);
+  return active && shown;
+}
+
 export function ScreenState(props: ScreenStateProps) {
+  const visible = useDelayed(props.status === 'loading');
+  const wait = useCooldown(props.status === 'loading' ? null : props.error);
   if (props.status === 'loading') {
+    if (!visible) return <div role="status" aria-busy="true" aria-label={props.label ?? 'Загрузка'} />;
     if (props.skeleton !== undefined) {
       return (
         <div aria-busy="true" aria-label={props.label ?? 'Загрузка'}>
@@ -51,9 +72,9 @@ export function ScreenState(props: ScreenStateProps) {
           stretched
           onClick={props.action.onClick}
           loading={props.action.loading}
-          disabled={props.action.disabled}
+          disabled={props.action.disabled === true || wait > 0}
         >
-          {props.action.label}
+          {wait > 0 ? `${props.action.label} через ${String(wait)} с` : props.action.label}
         </Button>
         {props.secondaryAction !== undefined && (
           <Button

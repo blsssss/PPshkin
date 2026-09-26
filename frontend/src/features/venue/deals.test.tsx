@@ -391,7 +391,7 @@ describe('review fixes', () => {
     await start();
     server.on('POST', '/api/v1/venue/bookings/redeem', () => problem(409, 'booking_not_active'));
     await renderApp('/venue/bookings');
-    fireEvent.click(await screen.findByRole('button', { name: 'Погасить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Погасить K7M2QX' }));
     const before = server.callsTo('GET', '/api/v1/venue/bookings').length;
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Погасить' }));
     expect(await screen.findByText('Бронь уже погашена или отменена')).toBeTruthy();

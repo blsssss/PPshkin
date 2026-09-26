@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { usePortalTarget } from './PortalRoot.tsx';
+import { registerSheet } from './sheetStack.ts';
 import styles from './BottomSheet.module.css';
 
 export function BottomSheet({
@@ -22,6 +23,13 @@ export function BottomSheet({
   useEffect(() => {
     closeRef.current = onClose;
   });
+
+  useEffect(() => {
+    if (!open) return;
+    return registerSheet(() => {
+      closeRef.current();
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
