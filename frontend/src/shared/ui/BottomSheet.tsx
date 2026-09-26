@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { usePortalTarget } from './PortalRoot.tsx';
 import styles from './BottomSheet.module.css';
 
 export function BottomSheet({
@@ -14,6 +15,7 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const titleId = useId();
+  const target = usePortalTarget();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
 
@@ -35,7 +37,7 @@ export function BottomSheet({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || target === null) return null;
 
   return createPortal(
     <div className={styles.layer}>
@@ -54,6 +56,6 @@ export function BottomSheet({
         {children}
       </div>
     </div>,
-    document.querySelector<HTMLElement>('.ppsh-app') ?? document.body,
+    target,
   );
 }
