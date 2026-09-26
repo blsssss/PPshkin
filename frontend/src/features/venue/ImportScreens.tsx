@@ -102,18 +102,20 @@ export function ImportStartScreen() {
   return (
     <Page>
       <ScreenHeader title="Загрузить меню" back="/venue/menu" />
-      <SegmentedControl
-        label="Способ"
-        options={[
-          { value: 'photo', label: 'Фото меню' },
-          { value: 'text', label: 'Текст меню' },
-        ]}
-        value={mode}
-        onChange={(value) => {
-          setMode(value);
-          setFailure(null);
-        }}
-      />
+      <div className={styles.group}>
+        <SegmentedControl
+          label="Способ"
+          options={[
+            { value: 'photo', label: 'Фото меню' },
+            { value: 'text', label: 'Текст меню' },
+          ]}
+          value={mode}
+          onChange={(value) => {
+            setMode(value);
+            setFailure(null);
+          }}
+        />
+      </div>
       {failure !== null && (
         <Notice tone="error">
           {failure.text}
