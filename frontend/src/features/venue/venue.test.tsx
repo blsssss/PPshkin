@@ -543,6 +543,7 @@ describe('back after saving', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Добавить позицию' }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/venue/menu');
+      expect(screen.queryByLabelText('Название')).toBeNull();
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
     await waitFor(() => {
