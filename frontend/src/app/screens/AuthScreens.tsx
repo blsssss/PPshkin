@@ -40,6 +40,24 @@ export function SessionExpiredScreen() {
   );
 }
 
+export function AccountDeletedScreen({ onRestart }: { onRestart: () => void }) {
+  return (
+    <HeroScreen
+      title="Аккаунт удалён, данные стёрты"
+      description="Профиль, дневник и согласия удалены. Можно начать заново: откроется пустой профиль."
+    >
+      <Button size="large" variant="primary-contrast" stretched onClick={onRestart}>
+        Начать заново
+      </Button>
+      {canCloseApp() && (
+        <Button size="large" variant="overlay" stretched onClick={() => closeApp()}>
+          Закрыть
+        </Button>
+      )}
+    </HeroScreen>
+  );
+}
+
 function failureTitle(error: ApiError): string {
   if (error.code.startsWith('init_data_')) return 'Не удалось войти через MAX';
   return userMessage(error);

@@ -25,6 +25,9 @@ const MESSAGES: Record<string, string> = {
   consent_required: 'Сначала дайте согласие на обработку данных',
   consent_version_outdated: 'Текст согласия обновился, прочитайте и подтвердите его снова',
   invalid_timezone: 'Этот часовой пояс не поддерживается, выберите из списка',
+  user_not_found: 'Аккаунт удалён, войдите заново',
+  demo_account_protected: 'Демо-аккаунт удалить нельзя, он общий для всех проверяющих',
+  delete_account_instead: 'Чтобы отозвать согласие на обработку данных, удалите аккаунт',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {

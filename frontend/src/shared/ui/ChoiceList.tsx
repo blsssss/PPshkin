@@ -9,18 +9,20 @@ export function ChoiceList<T extends string>({
   value,
   onChange,
   error,
+  legendHidden = false,
 }: {
   legend: string;
   options: readonly { value: T; label: string }[];
   value: T | null;
   onChange: (value: T) => void;
   error?: string | undefined;
+  legendHidden?: boolean;
 }) {
   const name = useId();
   const errorId = `${name}-error`;
   return (
     <fieldset className={styles.group} aria-describedby={error !== undefined ? errorId : undefined}>
-      <legend className={styles.legend}>{legend}</legend>
+      <legend className={legendHidden ? styles.hiddenLegend : styles.legend}>{legend}</legend>
       {options.map((option) => (
         <label key={option.value} className={cx(styles.option, value === option.value && styles.checked)}>
           <Radio

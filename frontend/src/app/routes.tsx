@@ -11,6 +11,13 @@ import { GoalStep } from '../features/onboarding/GoalStep.tsx';
 import { LocationStep } from '../features/onboarding/LocationStep.tsx';
 import { OffersStep } from '../features/onboarding/OffersStep.tsx';
 import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
+import { ProfileScreen } from '../features/profile/ProfileScreen.tsx';
+import {
+  ConsentTextScreen,
+  DeleteAccountScreen,
+  TagsScreen,
+  TargetScreen,
+} from '../features/profile/ProfileSubScreens.tsx';
 import { AppShell } from './AppShell.tsx';
 import { RouteErrorScreen } from './screens/RouteErrorScreen.tsx';
 import { NotFoundScreen, StubScreen } from './screens/StubScreen.tsx';
@@ -42,7 +49,12 @@ export const appRoutes: RouteObject[] = [
       { path: 'bookings/new', element: <StubScreen title="Бронь" back="/bookings" /> },
       { path: 'bookings/:id', element: <StubScreen title="Бронь" back="/bookings" /> },
       { path: 'venue/*', element: <StubScreen title="Моё заведение" /> },
-      { path: 'profile/*', element: <StubScreen title="Профиль" /> },
+      { path: 'profile', element: <ProfileScreen /> },
+      { path: 'profile/target', element: <TargetScreen /> },
+      { path: 'profile/tags', element: <TagsScreen /> },
+      { path: 'profile/consents/:kind', element: <ConsentTextScreen /> },
+      { path: 'profile/delete', element: <DeleteAccountScreen /> },
+      { path: 'profile/*', element: <Navigate to="/profile" replace /> },
       { path: '*', element: <NotFoundScreen /> },
     ],
   },

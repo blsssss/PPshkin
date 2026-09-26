@@ -9,3 +9,8 @@
   padding: 12px var(--ppsh-gutter) calc(12px + env(safe-area-inset-bottom));
   background: var(--background-primary);
 }
+
+:global(body:has([data-tabbar])) .bar {
+  bottom: calc(var(--ppsh-tabbar-height) + env(safe-area-inset-bottom));
+  padding-bottom: 12px;
+}

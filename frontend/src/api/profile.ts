@@ -64,3 +64,31 @@ export function useGrantConsent() {
     },
   });
 }
+
+export function useRevokeConsent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (kind: ConsentKind) => {
+      await api.DELETE('/api/v1/consents/{kind}', { params: { path: { kind } } });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CONSENTS_KEY }),
+        queryClient.refetchQueries({ queryKey: PROFILE_KEY }),
+      ]);
+    },
+  });
+}
+
+export function useSaveLocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (point: { lat: number; lon: number } | null) => {
+      if (point === null) await api.DELETE('/api/v1/me/location');
+      else await api.PUT('/api/v1/me/location', { body: point });
+    },
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: PROFILE_KEY });
+    },
+  });
+}
