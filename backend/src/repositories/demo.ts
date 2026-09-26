@@ -72,6 +72,17 @@ export async function lockDemoData(db: Queryable): Promise<void> {
   await db.query('select pg_advisory_xact_lock($1)', [DEMO_DATA_LOCK]);
 }
 
+export async function removeOwnedVenuesOutside(
+  db: Queryable,
+  ownerIds: readonly number[],
+  keptVenueIds: readonly number[],
+): Promise<void> {
+  await db.query('delete from venues where owner_id = any($1::bigint[]) and not (id = any($2::bigint[]))', [
+    ownerIds,
+    keptVenueIds,
+  ]);
+}
+
 export async function upsertVenues(db: Queryable, venues: readonly SeededVenue[], now: Date): Promise<void> {
   await db.query(
     `insert into venues as v (id, owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone,

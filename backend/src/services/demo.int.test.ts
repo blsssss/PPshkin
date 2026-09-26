@@ -3,7 +3,7 @@ import { seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { testConfig } from '../../test/services.ts';
-import { seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
+import { seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
 import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { createServices } from '../container.ts';
 import { dealPrice, loadDemoDataset, type DemoDataset } from '../demo/dataset.ts';
@@ -14,7 +14,7 @@ import { createRecognition } from '../recognition/index.ts';
 import * as meals from '../repositories/meals.ts';
 import * as users from '../repositories/users.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
-import { formatLocalTime, localDate } from '../shared/time.ts';
+import { addDays, formatLocalTime, localDate } from '../shared/time.ts';
 import { createDemoService } from './demo.ts';
 
 const pool = testPool();
@@ -85,6 +85,16 @@ async function dealsOf(venueId: number, since: Date): Promise<DealRow[]> {
 }
 
 const moscow = (iso: string) => new Date(`${iso}+03:00`);
+
+const HISTORY_WEEK = {
+  offersShown: 57,
+  offersAccepted: 21,
+  bookingsCreated: 21,
+  bookingsRedeemed: 16,
+  bookingsExpired: 3,
+  bookingsCancelled: 2,
+  surplusUnitsSold: 11,
+};
 
 beforeEach(async () => {
   await resetDatabase(pool);
@@ -202,6 +212,25 @@ describe('seed', () => {
   it('serializes concurrent seeds of several instances', async () => {
     await Promise.all([demo.seed(), stack().demo.seed()]);
     expect(await rowCounts()).toMatchObject({ venues: 6, menu_items: 64, deals: 36, meals: 26, offers: 57 });
+  });
+
+  it('replaces a venue the demo venue account created itself with «Зерно»', async () => {
+    const own = await seedVenue(pool, DEMO_OWNER, { name: 'Своя кофейня' });
+    const item = await seedMenuItem(pool, own.id);
+    const deal = await seedDeal(pool, item, {
+      startsAt: clock.now(),
+      endsAt: moscow('2026-09-26T21:00:00'),
+    });
+    await seedGuest(pool, REVIEWER, clock.now());
+    await services.bookings.create(REVIEWER, { menuItemId: item.id, dealId: deal.id });
+
+    expect(await demo.seed()).toMatchObject({ venues: 6, menuItems: 64 });
+
+    expect(await services.venues.get(DEMO_OWNER)).toMatchObject({ id: ZERNO, ownerId: DEMO_OWNER });
+    const { rows } = await pool.query('select id from venues where id = $1', [own.id]);
+    expect(rows).toEqual([]);
+    expect(await rowCounts()).toMatchObject({ venues: 6, menu_items: 64, deals: 36, bookings: 21 });
+    expect(await demo.seed()).toMatchObject({ dealsCreated: 0, historyDays: 0 });
   });
 
   it('restores seeded venues and menus changed through the demo venue account', async () => {
@@ -339,25 +368,15 @@ describe('refresh', () => {
   it('fills the analytics of «Зерно» for the last 7 days', async () => {
     await demo.seed();
     const analytics = await services.analytics.get(DEMO_OWNER, { from: '2026-09-19', to: '2026-09-25' });
-    expect(analytics).toMatchObject({
-      offersShown: 57,
-      offersAccepted: 21,
-      bookingsCreated: 21,
-      bookingsRedeemed: 16,
-      bookingsExpired: 3,
-      bookingsCancelled: 2,
-      surplusUnitsSold: 11,
-      acceptRate: 0.37,
-      redeemRate: 0.76,
-    });
+    expect(analytics).toMatchObject({ ...HISTORY_WEEK, acceptRate: 0.37, redeemRate: 0.76 });
     expect(analytics.byDay.map((day) => [day.date, day.offersShown, day.bookingsRedeemed])).toEqual([
-      ['2026-09-19', 8, 2],
-      ['2026-09-20', 6, 1],
-      ['2026-09-21', 9, 3],
-      ['2026-09-22', 7, 2],
-      ['2026-09-23', 10, 3],
+      ['2026-09-19', 9, 3],
+      ['2026-09-20', 7, 2],
+      ['2026-09-21', 10, 3],
+      ['2026-09-22', 8, 2],
+      ['2026-09-23', 9, 3],
       ['2026-09-24', 8, 2],
-      ['2026-09-25', 9, 3],
+      ['2026-09-25', 6, 1],
     ]);
     expect(analytics.revenueRub).toBeGreaterThan(analytics.surplusRevenueRub);
     expect(analytics.topItems.length).toBeGreaterThan(0);
@@ -377,6 +396,28 @@ describe('refresh', () => {
       date: '2026-09-25',
     });
     expect(history.every(({ booking }) => /^[A-HJ-NP-Z2-9]{6}$/.test(booking.code))).toBe(true);
+  });
+
+  it('keeps the weekly totals of «Зерно» for the last 7 days on every later day', async () => {
+    await demo.seed();
+    for (const today of ['2026-09-27', '2026-09-28', '2026-10-02']) {
+      clock.set(moscow(`${today}T07:00:00`));
+      await demo.refresh();
+      const analytics = await services.analytics.get(DEMO_OWNER, {
+        from: addDays(today, -7),
+        to: addDays(today, -1),
+      });
+      expect(analytics, today).toMatchObject(HISTORY_WEEK);
+      const { rows } = await pool.query<{ sold: number; left: number; total: number }>(
+        `select count(b.id) filter (where b.status = 'redeemed')::int as sold, d.quantity_left as left,
+                d.quantity_total as total
+           from deals d left join bookings b on b.deal_id = d.id
+          where d.venue_id = $1 and d.ends_at <= $2
+          group by d.id`,
+        [ZERNO, clock.now()],
+      );
+      expect(rows.every((row) => row.left === row.total - row.sold)).toBe(true);
+    }
   });
 
   it('keeps a day with real offers of the demo guest out of the generated history', async () => {

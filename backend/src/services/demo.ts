@@ -8,7 +8,7 @@ import {
   type DemoVenue,
 } from '../demo/dataset.ts';
 import { planDiary, type DiaryPlan } from '../demo/diary.ts';
-import { ANALYTICS_HISTORY, planHistoryDay, type HistoryDayCounts } from '../demo/history.ts';
+import { ANALYTICS_HISTORY, historySlot, planHistoryDay, type HistorySlot } from '../demo/history.ts';
 import {
   dealWindows,
   openingPeriod,
@@ -75,10 +75,7 @@ interface DealPlan {
   window: DealWindow;
 }
 
-interface HistoryDay extends DayWindow {
-  counts: HistoryDayCounts;
-  index: number;
-}
+type HistoryDay = DayWindow & HistorySlot;
 
 const HISTORY_EXPLANATION: OfferExplanation = {
   headline: 'Тестовая история',
@@ -200,7 +197,7 @@ async function writeHistoryDay(db: Queryable, venue: DemoVenue, day: HistoryDay)
   const windows = dealWindows(venue, day.date);
   const offers = planHistoryDay({
     counts: day.counts,
-    dayIndex: day.index,
+    dayIndex: day.dayIndex,
     menuItemIds: venue.menu.map((item) => item.id),
     templates: venue.dealTemplates,
     windows,
@@ -251,9 +248,9 @@ async function writeHistory(
 ): Promise<{ days: number; dealsCreated: number }> {
   const venue = demoAccountVenue(dataset);
   const today = localDate(now, venue.timezone);
-  const days = ANALYTICS_HISTORY.map((counts, index): HistoryDay => {
-    const date = addDays(today, index - ANALYTICS_HISTORY.length);
-    return { date, ...dayRange(date, venue.timezone), counts, index };
+  const days = ANALYTICS_HISTORY.map((_, offset): HistoryDay => {
+    const date = addDays(today, offset - ANALYTICS_HISTORY.length);
+    return { date, ...dayRange(date, venue.timezone), ...historySlot(date) };
   });
   const filled = await demo.daysWithOffers(db, DEMO_ACCOUNTS.guest.userId, venue.id, days);
   const pending = days.filter((day) => !filled.has(day.date));
@@ -289,11 +286,14 @@ async function seedAccounts(db: Queryable, dataset: DemoDataset, now: Date): Pro
 
 async function seedCatalog(db: Queryable, dataset: DemoDataset, now: Date): Promise<void> {
   const items = dataset.venues.flatMap((venue) => venue.menu.map((item) => ({ ...item, venueId: venue.id })));
+  const venueIds = dataset.venues.map((venue) => venue.id);
+  const ownerIds = dataset.venues.flatMap((venue) => (venue.ownerId === null ? [] : [venue.ownerId]));
+  await demo.removeOwnedVenuesOutside(db, ownerIds, venueIds);
   await demo.upsertVenues(db, dataset.venues, now);
   await demo.upsertMenuItems(db, items, now);
   await demo.archiveMenuItemsOutside(
     db,
-    dataset.venues.map((venue) => venue.id),
+    venueIds,
     items.map((item) => item.id),
     now,
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from '../shared/time.ts';
 import { demoAccountVenue, loadDemoDataset } from './dataset.ts';
-import { ANALYTICS_HISTORY, planHistoryDay, type HistoryOffer } from './history.ts';
+import { ANALYTICS_HISTORY, historySlot, planHistoryDay, type HistoryOffer } from './history.ts';
 import { dealWindows, openingPeriod } from './windows.ts';
 
 const zerno = demoAccountVenue(await loadDemoDataset());
@@ -104,5 +104,23 @@ describe('analytics history', () => {
     expect(booked).toHaveLength(3);
     expect(booked.every((offer) => offer.deal === null)).toBe(true);
     expect(offers.every((offer) => offer.deal === null)).toBe(true);
+  });
+});
+
+describe('historySlot', () => {
+  it('gives a date the same counts whatever day the history is written on', () => {
+    expect(historySlot('2026-09-19')).toEqual({ counts: ANALYTICS_HISTORY[2], dayIndex: 2 });
+    expect(historySlot('2026-09-26')).toEqual(historySlot('2026-09-19'));
+    expect(historySlot('2026-09-24')).toEqual({ counts: ANALYTICS_HISTORY[0], dayIndex: 0 });
+  });
+
+  it('covers the whole week in any 7 consecutive days', () => {
+    for (const start of ['2026-09-19', '2026-09-20', '2026-12-29', '2027-03-01']) {
+      const slots = ANALYTICS_HISTORY.map((_, offset) => historySlot(addDays(start, offset)).dayIndex);
+      expect(
+        slots.toSorted((left, right) => left - right),
+        start,
+      ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    }
   });
 });

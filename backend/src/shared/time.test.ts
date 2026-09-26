@@ -3,6 +3,7 @@ import {
   addDays,
   atLocalTime,
   dayRange,
+  daysSinceEpoch,
   formatLocalTime,
   isLocalDate,
   isOpenAt,
@@ -69,6 +70,13 @@ describe('local time helpers', () => {
   it('adds days across month and year boundaries', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
     expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  it('numbers calendar dates from 1970-01-01', () => {
+    expect(daysSinceEpoch('1970-01-01')).toBe(0);
+    expect(daysSinceEpoch('2026-09-19')).toBe(20715);
+    expect(daysSinceEpoch(addDays('2026-12-31', 1)) - daysSinceEpoch('2026-12-31')).toBe(1);
+    expect(daysSinceEpoch('2026-03-29') - daysSinceEpoch('2026-03-28')).toBe(1);
   });
 });
 

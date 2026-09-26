@@ -105,6 +105,10 @@ export function addDays(date: string, days: number): string {
   return new Date(utcMidnight(date) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
+export function daysSinceEpoch(date: string): number {
+  return utcMidnight(date) / DAY_MS;
+}
+
 export function dayRange(date: string, timeZone: string): { from: Date; to: Date } {
   return { from: localMidnight(date, timeZone), to: localMidnight(addDays(date, 1), timeZone) };
 }

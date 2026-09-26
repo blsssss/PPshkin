@@ -133,11 +133,6 @@ export async function lockByOwner(db: Queryable, ownerId: number): Promise<Venue
   return row ? mapVenue(row) : null;
 }
 
-export async function findById(db: Queryable, id: number): Promise<Venue | null> {
-  const row = await maybeOne<VenueRow>(db, `select ${VENUE_COLUMNS} from venues where id = $1`, [id]);
-  return row ? mapVenue(row) : null;
-}
-
 export async function findByIds(db: Queryable, ids: readonly number[]): Promise<Venue[]> {
   if (ids.length === 0) return [];
   const { rows } = await db.query<VenueRow>(

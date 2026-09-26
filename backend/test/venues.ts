@@ -117,7 +117,7 @@ export async function seedDemoVenue(
       SEEDED_AT,
     ],
   );
-  const seeded = await venues.findById(db, id);
+  const [seeded] = await venues.findByIds(db, [id]);
   if (!seeded) throw new Error(`Demo venue ${id} was not stored`);
   return seeded;
 }

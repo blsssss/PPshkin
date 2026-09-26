@@ -1,5 +1,6 @@
 import { BOOKING_HOLD_MINUTES } from '../domain/bookings.ts';
 import type { BookingStatus, OfferChannel } from '../domain/vocabulary.ts';
+import { daysSinceEpoch } from '../shared/time.ts';
 import type { DealTemplate } from './dataset.ts';
 import type { DealWindow, DealWindowName, OpeningPeriod } from './windows.ts';
 
@@ -21,6 +22,11 @@ export const ANALYTICS_HISTORY: readonly HistoryDayCounts[] = [
   { shows: 9, redeemedWithDeal: 2, redeemedWithoutDeal: 1, expired: 0, cancelled: 0 },
 ];
 
+export interface HistorySlot {
+  counts: HistoryDayCounts;
+  dayIndex: number;
+}
+
 export type HistoryBookingStatus = Exclude<BookingStatus, 'active'>;
 
 export interface HistoryBooking {
@@ -39,9 +45,7 @@ export interface HistoryOffer {
   booking: HistoryBooking | null;
 }
 
-export interface HistoryDayInput {
-  counts: HistoryDayCounts;
-  dayIndex: number;
+export interface HistoryDayInput extends HistorySlot {
   menuItemIds: readonly number[];
   templates: readonly DealTemplate[];
   windows: readonly DealWindow[];
@@ -77,6 +81,11 @@ function pick<T>(items: readonly T[], index: number): T {
   const item = items[index % items.length];
   if (item === undefined) throw new RangeError('Cannot pick from an empty list');
   return item;
+}
+
+export function historySlot(date: string): HistorySlot {
+  const dayIndex = daysSinceEpoch(date) % ANALYTICS_HISTORY.length;
+  return { counts: pick(ANALYTICS_HISTORY, dayIndex), dayIndex };
 }
 
 function during(period: OpeningPeriod, share: number): Date {

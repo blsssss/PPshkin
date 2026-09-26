@@ -39,7 +39,7 @@ describe('venues repository', () => {
     });
     const { rows } = await pool.query<{ opens_at: string }>('select opens_at from venues');
     expect(rows[0]?.opens_at).toBe('07:30:00');
-    expect(await venues.findById(pool, venue!.id)).toEqual(venue);
+    expect(await venues.findByIds(pool, [venue!.id])).toEqual([venue]);
     expect(await venues.findByOwner(pool, 1)).toEqual(venue);
     expect(await venues.lockByOwner(pool, 1)).toEqual(venue);
   });
@@ -64,7 +64,7 @@ describe('venues repository', () => {
     expect(await venues.listVisibleWithin(pool, box, 1)).toEqual([baumana]);
     expect(await venues.listVisible(pool, 1)).toEqual([baumana, arena]);
     expect(await venues.findByOwner(pool, 404)).toBeNull();
-    expect(await venues.findById(pool, 404)).toBeNull();
+    expect(await venues.findByIds(pool, [404])).toEqual([]);
   });
 
   it('finds venues by ids in id order', async () => {

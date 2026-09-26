@@ -12,6 +12,8 @@ import {
   demoAccountVenue,
   loadDemoDataset,
   parseDemoDataset,
+  type DemoMenuItem,
+  type DemoVenue,
 } from './dataset.ts';
 import { DEMO_CITY_CENTER } from './location.ts';
 
@@ -100,6 +102,61 @@ describe('demo dataset', () => {
       if (/рыб|лосос|минтай/i.test(`${item.name} ${item.description}`))
         expect(item.tags, item.name).toContain('fish');
     }
+  });
+
+  it('keeps prices within the guides of the issue for every group of dishes', () => {
+    const tatarPastry = /^(Эчпочмак|Кыстыбый|Губадия|Бэлиш)/;
+    const guides: {
+      group: string;
+      min: number;
+      max: number;
+      matches: (venue: DemoVenue, item: DemoMenuItem) => boolean;
+    }[] = [
+      {
+        group: 'кофейные напитки',
+        min: 180,
+        max: 320,
+        matches: (_, item) => item.category === 'drink' && item.tags.includes('coffee'),
+      },
+      { group: 'десерты', min: 180, max: 390, matches: (_, item) => item.category === 'dessert' },
+      {
+        group: 'выпечка',
+        min: 60,
+        max: 250,
+        matches: (_, item) => item.category === 'bakery' && !tatarPastry.test(item.name),
+      },
+      { group: 'татарская выпечка', min: 90, max: 300, matches: (_, item) => tatarPastry.test(item.name) },
+      {
+        group: 'супы в столовой',
+        min: 90,
+        max: 180,
+        matches: (venue, item) => venue.category === 'canteen' && item.category === 'soup',
+      },
+      {
+        group: 'горячее в столовой',
+        min: 180,
+        max: 320,
+        matches: (venue, item) => venue.category === 'canteen' && item.category === 'main',
+      },
+      {
+        group: 'боулы и салаты в кафе',
+        min: 420,
+        max: 650,
+        matches: (venue, item) =>
+          venue.category === 'cafe' && (item.category === 'salad' || item.name.startsWith('Боул')),
+      },
+    ];
+    const checked = new Map(guides.map((guide) => [guide.group, 0]));
+    for (const venue of dataset.venues) {
+      for (const item of venue.menu) {
+        for (const guide of guides.filter((candidate) => candidate.matches(venue, item))) {
+          checked.set(guide.group, (checked.get(guide.group) ?? 0) + 1);
+          expect(item.priceRub, `${guide.group}: ${item.name}`).toBeGreaterThanOrEqual(guide.min);
+          expect(item.priceRub, `${guide.group}: ${item.name}`).toBeLessThanOrEqual(guide.max);
+        }
+      }
+    }
+    expect([...checked.values()].every((count) => count > 0)).toBe(true);
   });
 
   it('builds deal templates from items of the same venue with a lower price', () => {

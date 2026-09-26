@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { seedDeal, seedDemoCopy, seedDemoVenue, seedMenuItem } from '../../test/venues.ts';
 import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { jsonb, one } from '../db/pool.ts';
 import * as users from '../repositories/users.ts';
@@ -174,6 +176,41 @@ describe('account deletion', () => {
     expect(await quantityLeft(cancelled)).toBe(1);
     expect(await bookingRow(endedBooking)).toMatchObject({ status: 'cancelled', user_id: null });
     expect(await bookingRow(cancelledBooking)).toMatchObject({ status: 'cancelled', user_id: null });
+  });
+
+  it('deletes the demo venue copy of the user with its menu, deals, offers and bookings', async () => {
+    const source = await seedDemoVenue(pool, 900001);
+    const sourceItem = await seedMenuItem(pool, source.id);
+    const copy = await seedDemoCopy(pool, source.id, OTHER);
+    const item = await seedMenuItem(pool, copy.id);
+    const copyDeal = await seedDeal(pool, item, {
+      startsAt: new Date(NOW),
+      endsAt: new Date('2026-09-25T18:00:00Z'),
+    });
+    await seedOffer(pool, { userId: OTHER, item, createdAt: new Date(NOW) });
+    await seedBooking(pool, {
+      userId: OTHER,
+      item,
+      code: 'ABC239',
+      createdAt: new Date(NOW),
+      dealId: copyDeal.id,
+    });
+
+    await account.deleteAccount(OTHER);
+
+    const venues = await pool.query<{ id: number; owner_id: number | null }>(
+      'select id, owner_id from venues order by id',
+    );
+    expect(venues.rows).toEqual([
+      { id: venueId, owner_id: GUEST },
+      { id: source.id, owner_id: null },
+    ]);
+    const left = await pool.query<{ id: number }>('select id from menu_items order by id');
+    expect(left.rows.map((row) => row.id)).toEqual([menuItemId, sourceItem.id]);
+    for (const table of ['deals', 'offers', 'bookings']) {
+      const { rows } = await pool.query(`select id from ${table} where venue_id = $1`, [copy.id]);
+      expect(rows, table).toEqual([]);
+    }
   });
 
   it('succeeds again for an already deleted user', async () => {
