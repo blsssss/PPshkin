@@ -16,6 +16,15 @@
   font-weight: 600;
 }
 
+.hiddenLegend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .option {
   display: flex;
   align-items: center;
