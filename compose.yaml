@@ -29,6 +29,10 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-ppshkin}@db:5432/${POSTGRES_DB:-ppshkin}
       PGPASSWORD: ${POSTGRES_PASSWORD:-ppshkin}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      DEMO_GUEST_TOKEN: ${DEMO_GUEST_TOKEN-local-demo-guest-token-not-secret}
+      DEMO_VENUE_TOKEN: ${DEMO_VENUE_TOKEN-local-demo-venue-token-not-secret}
+      BOT_MODE: ${BOT_MODE:-off}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     depends_on:
@@ -46,7 +50,7 @@ services:
       context: ./frontend
       args:
         VITE_MAX_BOT_NAME: ${VITE_MAX_BOT_NAME:-}
-        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
     ports:
       - "${FRONTEND_PORT:-8080}:8080"
     depends_on:
