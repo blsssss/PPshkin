@@ -101,5 +101,5 @@ gh run watch
 | `CHADGPT_API_KEY` | Secrets | ключ ChadGPT с положительным балансом | `recognition` |
 | `DEMO_GUEST_TOKEN` | Secrets | значение `DEMO_GUEST_TOKEN` из `.env` сервера | `api` |
 | `DEMO_VENUE_TOKEN` | Secrets | значение `DEMO_VENUE_TOKEN` из `.env` сервера | `api` |
-| `PUBLIC_BASE_URL` | Variables | `https://<домен>` | `max`, `site`, `api` |
+| `PUBLIC_BASE_URL` | Variables | `https://hackathon.easymythic.dev` | `max`, `site`, `api` |
 | `MAX_BOT_USERNAME` | Variables | ник бота без `@`, для рабочего бота `t516_hakaton_max_bot` | `max` |
