@@ -170,6 +170,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...required, MINI_APP_ENABLED: 'maybe' })).toThrow(/MINI_APP_ENABLED/);
   });
 
+  it('keeps proactive offers off unless they are switched on', () => {
+    expect(loadConfig(required).PROACTIVE_OFFERS).toBe(false);
+    expect(loadConfig({ ...required, PROACTIVE_OFFERS: '' }).PROACTIVE_OFFERS).toBe(false);
+    expect(loadConfig({ ...required, PROACTIVE_OFFERS: 'false' }).PROACTIVE_OFFERS).toBe(false);
+    expect(loadConfig({ ...required, PROACTIVE_OFFERS: 'true' }).PROACTIVE_OFFERS).toBe(true);
+    expect(() => loadConfig({ ...required, PROACTIVE_OFFERS: 'sometimes' })).toThrow(/PROACTIVE_OFFERS/);
+  });
+
   it('rejects unknown bot modes, bad API URLs and bad webhook secrets', () => {
     expect(() => loadConfig({ ...required, BOT_MODE: 'push' })).toThrow(/BOT_MODE/);
     expect(() => loadConfig({ ...required, MAX_API_BASE_URL: 'ftp://max.ru' })).toThrow(/MAX_API_BASE_URL/);

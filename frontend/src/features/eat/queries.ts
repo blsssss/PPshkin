@@ -50,5 +50,6 @@ export function useVenueDetails(id: number) {
   return useQuery({
     queryKey: ['venue-details', id],
     queryFn: async () => unwrap(await api.GET('/api/v1/venues/{id}', { params: { path: { id } } })),
+    enabled: id > 0,
   });
 }
