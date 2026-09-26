@@ -29,10 +29,18 @@ export function quietestLevel(first: Config['LOG_LEVEL'], second: Config['LOG_LE
   return LEVEL_ORDER.indexOf(first) >= LEVEL_ORDER.indexOf(second) ? first : second;
 }
 
+function pathOnly(url: string): string {
+  const queryStart = url.indexOf('?');
+  return queryStart === -1 ? url : url.slice(0, queryStart);
+}
+
 export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   return {
     level: config.LOG_LEVEL,
     redact: ['req.headers.authorization', 'req.headers["x-max-bot-api-secret"]'],
+    serializers: {
+      req: (request) => ({ method: request.method, url: pathOnly(request.url) }),
+    },
     ...(config.LOG_PRETTY ? { transport: { target: 'pino-pretty', options: { singleLine: true } } } : {}),
   };
 }

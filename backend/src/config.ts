@@ -89,6 +89,8 @@ const baseSchema = z.object({
   ),
 });
 
+const LOCAL_DEMO_TOKEN_PREFIX = 'local-demo-';
+
 function isHttpsWithoutPort(url: string): boolean {
   const authority = /^https:\/\/([^/?#]*)/i.exec(url)?.[1];
   return authority !== undefined && !/:\d*$/.test(authority);
@@ -111,11 +113,21 @@ export const configSchema = baseSchema.superRefine((config, context) => {
     });
   }
   if (config.BOT_MODE === 'webhook') {
-    const missing = (['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL'] as const).filter(
-      (name) => config[name] === undefined,
-    );
+    const missing = (
+      ['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL', 'SESSION_SECRET'] as const
+    ).filter((name) => config[name] === undefined);
     for (const name of missing) {
       context.addIssue({ code: 'custom', path: [name], message: `BOT_MODE=webhook needs ${name}` });
+    }
+    const localDemoTokens = (['DEMO_GUEST_TOKEN', 'DEMO_VENUE_TOKEN'] as const).filter((name) =>
+      config[name]?.startsWith(LOCAL_DEMO_TOKEN_PREFIX),
+    );
+    for (const name of localDemoTokens) {
+      context.addIssue({
+        code: 'custom',
+        path: [name],
+        message: 'local demo tokens are not allowed with BOT_MODE=webhook',
+      });
     }
     const publicUrl = config.PUBLIC_BASE_URL;
     if (publicUrl !== undefined && !isHttpsWithoutPort(publicUrl)) {
