@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NETWORK_ERROR } from '../api/errors.ts';
@@ -24,10 +25,11 @@ const fake = vi.hoisted(() => {
         return () => listeners.delete(listener);
       },
       start: vi.fn(() => Promise.resolve()),
-      takeStartParam() {
-        const value = startParam;
+      pendingStartParam: () => startParam,
+      markStartHandled() {
+        if (startParam === null) return false;
         startParam = null;
-        return value;
+        return true;
       },
     },
   };
@@ -191,6 +193,30 @@ describe('startParam', () => {
     const router = renderAt('/');
     await screen.findByRole('heading', { name: 'Заведение' });
     expect(router.state.location.pathname).toBe('/venues/1');
+  });
+
+  it('keeps the startapp target under StrictMode double effects', async () => {
+    fake.set({ status: 'ready', user: TEST_USER, startParam: 'venue_1' }, 'venue_1');
+    const router = createMemoryRouter(appRoutes, { initialEntries: ['/'] });
+    render(
+      <StrictMode>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </StrictMode>,
+    );
+    await screen.findByRole('heading', { name: 'Заведение' });
+    expect(router.state.location.pathname).toBe('/venues/1');
+  });
+
+  it('goes to the diary on later visits to the root', async () => {
+    fake.set({ status: 'ready', user: TEST_USER, startParam: 'venue_1' }, 'venue_1');
+    const router = renderAt('/');
+    await screen.findByRole('heading', { name: 'Заведение' });
+    await act(async () => {
+      await router.navigate('/');
+    });
+    expect(router.state.location.pathname).toBe('/diary');
   });
 
   it('opens the deal list with a highlight', async () => {

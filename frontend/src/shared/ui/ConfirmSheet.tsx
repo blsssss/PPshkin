@@ -29,6 +29,8 @@ export function ConfirmSheet({
     setBusy(true);
     try {
       await onConfirm();
+    } catch {
+      return;
     } finally {
       setBusy(false);
     }

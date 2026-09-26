@@ -30,7 +30,7 @@ export function parseStartParam(value: string | null): string {
   return resolveStartParam(value).path;
 }
 
-export function isValidStartPayload(payload: string): boolean {
+function isValidStartPayload(payload: string): boolean {
   return PAYLOAD_PATTERN.test(payload);
 }
 

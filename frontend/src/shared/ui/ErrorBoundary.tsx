@@ -5,7 +5,7 @@ interface State {
   failed: boolean;
 }
 
-export class ErrorBoundary extends Component<{ children: ReactNode; onRestart?: () => void }, State> {
+export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   override state: State = { failed: false };
 
   static getDerivedStateFromError(): State {
@@ -13,11 +13,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode; onRestart?: 
   }
 
   private restart = () => {
-    if (this.props.onRestart !== undefined) {
-      this.setState({ failed: false });
-      this.props.onRestart();
-      return;
-    }
     window.location.reload();
   };
 

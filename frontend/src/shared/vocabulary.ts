@@ -43,8 +43,6 @@ export const TAG_LABELS: Record<Tag, string> = {
   breakfast: 'завтрак',
 };
 
-export const TAGS = Object.keys(TAG_LABELS) as Tag[];
-
 export const MENU_CATEGORY_LABELS: Record<MenuCategory, string> = {
   breakfast: 'Завтраки',
   main: 'Горячее',
@@ -56,8 +54,6 @@ export const MENU_CATEGORY_LABELS: Record<MenuCategory, string> = {
   snack: 'Закуски',
   drink: 'Напитки',
 };
-
-export const MENU_CATEGORIES = Object.keys(MENU_CATEGORY_LABELS) as MenuCategory[];
 
 export const VENUE_CATEGORY_LABELS: Record<VenueCategory, string> = {
   coffee: 'Кофейня',
@@ -73,7 +69,3 @@ export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
   snack: 'перекус',
   dinner: 'ужин',
 };
-
-export function capitalize(text: string): string {
-  return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
-}

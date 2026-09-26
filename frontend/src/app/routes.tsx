@@ -1,15 +1,15 @@
-import { Navigate, type RouteObject } from 'react-router';
+import type { RouteObject } from 'react-router';
 import { AppShell } from './AppShell.tsx';
 import { RouteErrorScreen } from './screens/RouteErrorScreen.tsx';
 import { NotFoundScreen, StubScreen } from './screens/StubScreen.tsx';
-import { HOME_PATH } from './startParam.ts';
+import { StartRedirect } from './StartRedirect.tsx';
 
 export const appRoutes: RouteObject[] = [
   {
     element: <AppShell />,
     errorElement: <RouteErrorScreen />,
     children: [
-      { index: true, element: <Navigate to={HOME_PATH} replace /> },
+      { index: true, element: <StartRedirect /> },
       { path: 'onboarding/*', element: <StubScreen title="Знакомство" /> },
       { path: 'diary', element: <StubScreen title="Дневник" /> },
       { path: 'diary/meals/:id', element: <StubScreen title="Запись" back="/diary" /> },

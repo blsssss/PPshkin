@@ -18,7 +18,13 @@ export function timeoutFor(url: string): number {
   return LONG_REQUESTS.some((pattern) => pattern.test(path)) ? LONG_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 }
 
+function bodyless(status: number): boolean {
+  return status === 204 || status === 205 || status === 304;
+}
+
 async function send(request: Request, token: string | null, baseFetch: FetchLike): Promise<Response> {
+  const callerAborted = () => request.signal.aborted;
+  if (callerAborted()) throw request.signal.reason;
   if (token !== null) request.headers.set('Authorization', `Bearer ${token}`);
   const controller = new AbortController();
   const timeout = { reached: false };
@@ -31,10 +37,16 @@ async function send(request: Request, token: string | null, baseFetch: FetchLike
   };
   request.signal.addEventListener('abort', forwardAbort);
   try {
-    return await baseFetch(request, { signal: controller.signal });
+    const response = await baseFetch(request, { signal: controller.signal });
+    const body = bodyless(response.status) ? null : await response.arrayBuffer();
+    return new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   } catch (error) {
     if (timeout.reached) throw new ApiError({ status: 0, code: TIMEOUT_ERROR });
-    if (request.signal.aborted) throw error;
+    if (callerAborted()) throw error;
     throw new ApiError({ status: 0, code: NETWORK_ERROR });
   } finally {
     clearTimeout(timer);
@@ -48,15 +60,21 @@ async function isTokenProblem(response: Response): Promise<boolean> {
   return TOKEN_PROBLEMS.has(error.code);
 }
 
+async function renewedToken(auth: AuthBinding, sent: string | null): Promise<boolean> {
+  const current = auth.token();
+  if (current !== null && current !== sent) return true;
+  return auth.refresh();
+}
+
 const defaultFetch: FetchLike = (input, init) => fetch(input, init);
 
 export function createApiFetch(auth: AuthBinding, baseFetch: FetchLike = defaultFetch): FetchLike {
   return async (input) => {
     const retry = input.clone();
-    let response = await send(input, auth.token(), baseFetch);
-    if (await isTokenProblem(response)) {
-      const refreshed = await auth.refresh();
-      if (refreshed) response = await send(retry, auth.token(), baseFetch);
+    const sent = auth.token();
+    let response = await send(input, sent, baseFetch);
+    if ((await isTokenProblem(response)) && (await renewedToken(auth, sent))) {
+      response = await send(retry, auth.token(), baseFetch);
     }
     if (!response.ok) throw await apiErrorFromResponse(response);
     return response;

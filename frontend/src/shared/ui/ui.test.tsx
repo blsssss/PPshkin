@@ -165,13 +165,12 @@ function Broken(): never {
 describe('ErrorBoundary', () => {
   it('offers a restart instead of a white screen', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const restart = vi.fn();
     render(
-      <ErrorBoundary onRestart={restart}>
+      <ErrorBoundary>
         <Broken />
       </ErrorBoundary>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Перезапустить' }));
-    expect(restart).toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Перезапустить' })).toBeTruthy();
   });
 });

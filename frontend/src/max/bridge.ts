@@ -66,7 +66,7 @@ export function initData(): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-export function insideMax(): boolean {
+function insideMax(): boolean {
   return initData() !== null;
 }
 

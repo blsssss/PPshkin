@@ -19,7 +19,7 @@ const TABS: readonly Tab[] = [
   { to: '/profile', label: 'Профиль', icon: 'profile', sections: ['/profile'] },
 ];
 
-export function isTabActive(tab: Pick<Tab, 'sections'>, pathname: string): boolean {
+function isTabActive(tab: Pick<Tab, 'sections'>, pathname: string): boolean {
   return tab.sections.some((section) => pathname === section || pathname.startsWith(`${section}/`));
 }
 

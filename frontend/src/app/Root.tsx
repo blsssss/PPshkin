@@ -5,7 +5,7 @@ import { platform, ready } from '../max/bridge.ts';
 import { ErrorBoundary } from '../shared/ui/ErrorBoundary.tsx';
 import { ToastProvider } from '../shared/ui/Toast.tsx';
 
-export function createQueryClient(): QueryClient {
+function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false, staleTime: 30_000 },

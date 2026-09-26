@@ -1,8 +1,8 @@
 import { ApiError, NETWORK_ERROR, TIMEOUT_ERROR } from './errors.ts';
 
-export const NOT_FOUND_TEXT = 'Не нашли';
+const NOT_FOUND_TEXT = 'Не нашли';
 
-export const MESSAGES: Record<string, string> = {
+const MESSAGES: Record<string, string> = {
   [NETWORK_ERROR]: 'Нет соединения с сервером',
   [TIMEOUT_ERROR]: 'Сервер отвечает слишком долго',
   validation_failed: 'Проверьте введённые данные',

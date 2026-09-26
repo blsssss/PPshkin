@@ -160,6 +160,51 @@ describe('expired token', () => {
     expect(signIns).toBe(2);
   });
 
+  it('does not sign in again for a 401 that arrives after the token was renewed', async () => {
+    let signIns = 0;
+    let releaseSlow: () => void = () => undefined;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    const { session: store, api } = setup(async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === '/api/v1/auth/max') {
+        signIns += 1;
+        return session({ token: `token-${signIns}` });
+      }
+      const auth = request.headers.get('Authorization');
+      if (auth === 'Bearer token-1' && path === '/api/v1/consents') {
+        await slowGate;
+        return problem(401, 'invalid_token');
+      }
+      return auth === 'Bearer token-1'
+        ? problem(401, 'invalid_token')
+        : json(path === '/api/v1/me' ? TEST_USER : { items: [] });
+    });
+    await store.start();
+    const slow = api.GET('/api/v1/consents');
+    await api.GET('/api/v1/me');
+    expect(signIns).toBe(2);
+    releaseSlow();
+    await expect(slow).resolves.toMatchObject({ data: { items: [] } });
+    expect(signIns).toBe(2);
+  });
+
+  it('does not send a request the caller already aborted', async () => {
+    const {
+      session: store,
+      api,
+      calls,
+    } = setup((request) =>
+      new URL(request.url).pathname === '/api/v1/auth/max' ? session({ token: 'token-1' }) : json(TEST_USER),
+    );
+    await store.start();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(api.GET('/api/v1/me', { signal: controller.signal })).rejects.toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual(['/api/v1/auth/max']);
+  });
+
   it('shows the expired screen when initData is too old for a new sign in', async () => {
     let signIns = 0;
     const { session: store, api } = setup((request) => {

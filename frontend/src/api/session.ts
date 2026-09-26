@@ -22,7 +22,8 @@ export interface SessionStore {
   token(): string | null;
   refresh(): Promise<boolean>;
   setUser(user: UserProfile): void;
-  takeStartParam(): string | null;
+  pendingStartParam(): string | null;
+  markStartHandled(): boolean;
 }
 
 function asApiError(error: unknown): ApiError {
@@ -33,7 +34,7 @@ export function createSessionStore(deps: SessionDeps): SessionStore {
   let state: SessionState = { status: 'loading' };
   let token: string | null = null;
   let startParam: string | null = null;
-  let startParamTaken = false;
+  let startHandled = false;
   let refreshing: Promise<boolean> | null = null;
   const listeners = new Set<() => void>();
 
@@ -109,10 +110,11 @@ export function createSessionStore(deps: SessionDeps): SessionStore {
     setUser(user) {
       if (state.status === 'ready') setState({ ...state, user });
     },
-    takeStartParam() {
-      if (startParamTaken) return null;
-      startParamTaken = true;
-      return startParam;
+    pendingStartParam: () => (startHandled ? null : startParam),
+    markStartHandled() {
+      if (startHandled) return false;
+      startHandled = true;
+      return true;
     },
   };
 }
