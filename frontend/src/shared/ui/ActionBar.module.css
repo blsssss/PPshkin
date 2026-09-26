@@ -1,0 +1,11 @@
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 24px calc(-1 * var(--ppsh-gutter)) 0;
+  padding: 12px var(--ppsh-gutter) calc(12px + env(safe-area-inset-bottom));
+  background: var(--background-primary);
+}

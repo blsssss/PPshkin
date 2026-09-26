@@ -26,6 +26,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    env: { TZ: 'Europe/Moscow' },
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['test/setup.ts'],
     restoreMocks: true,
