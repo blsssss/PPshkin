@@ -106,6 +106,29 @@ describe('bot runtime', () => {
     expect(vi.mocked(api.getUpdates).mock.calls[0]?.[0].signal?.aborted).toBe(true);
   });
 
+  it('hands out the messenger for notifications once the bot is up', async () => {
+    const { promise: me, resolve } = Promise.withResolvers<typeof BOT>();
+    const sendMessage = vi.fn(() => Promise.resolve({ mid: 'mid.1' }));
+    const api = workingApi({ getMe: vi.fn(() => me), sendMessage });
+    const { bot } = runtime(POLLING, api);
+
+    expect(bot.messenger()).toBeNull();
+    bot.start();
+    await Promise.resolve();
+    expect(bot.messenger()).toBeNull();
+
+    resolve(BOT);
+    await vi.waitFor(() => {
+      expect(bot.messenger()).not.toBeNull();
+    });
+    await bot.messenger()?.sendToUser(101, { text: 'Бронь истекла' });
+    expect(sendMessage).toHaveBeenCalledWith(
+      { userId: 101 },
+      expect.objectContaining({ text: 'Бронь истекла' }),
+    );
+    await bot.stop();
+  });
+
   it('subscribes the webhook and handles updates once the bot is up', async () => {
     const { promise: me, resolve } = Promise.withResolvers<typeof BOT>();
     const api = workingApi({ getMe: vi.fn(() => me) });

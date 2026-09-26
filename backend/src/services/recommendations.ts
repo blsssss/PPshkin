@@ -21,7 +21,7 @@ export const MAX_RECOMMENDATIONS = 10;
 export interface RecommendationRequest {
   location: GeoPoint | null;
   limit: number;
-  channel: Extract<OfferChannel, 'bot' | 'miniapp'>;
+  channel: OfferChannel;
 }
 
 export interface RecommendedOffer {

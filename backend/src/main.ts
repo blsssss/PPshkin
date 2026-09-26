@@ -6,6 +6,11 @@ import { createPool } from './db/pool.ts';
 import { buildApp } from './http/app.ts';
 import { createMaxApi } from './integrations/max/api.ts';
 import type { MaxLogger } from './integrations/max/poller.ts';
+import { createJobs } from './jobs/index.ts';
+import { createAdvisoryLock } from './jobs/lock.ts';
+import { createScheduler } from './jobs/scheduler.ts';
+import { createMessengerNotifier } from './notifications/messenger-notifier.ts';
+import { silentNotifier } from './notifications/silent-notifier.ts';
 import { createRecognition } from './recognition/index.ts';
 import { createBackgroundTasks } from './shared/background.ts';
 import { systemClock } from './shared/clock.ts';
@@ -38,13 +43,6 @@ const recognition = createRecognition({
     },
   },
 });
-const services = createServices({
-  config,
-  pool,
-  clock: systemClock,
-  recognition,
-  background,
-});
 const botLogger: MaxLogger = {
   debug: (object, message) => {
     app.log.debug(object, message);
@@ -60,6 +58,22 @@ const botLogger: MaxLogger = {
   },
 };
 const botSettings = maxBotSettings(config);
+const botMessenger = () => botRuntime?.messenger() ?? null;
+const notifier = botSettings
+  ? createMessengerNotifier({
+      messenger: botMessenger,
+      diaryDay: (userId) => services.diary.day(userId),
+      logger: botLogger,
+    })
+  : silentNotifier;
+const services = createServices({
+  config,
+  pool,
+  clock: systemClock,
+  recognition,
+  background,
+  notifier,
+});
 const botRuntime =
   botSettings &&
   createBotRuntime({
@@ -71,6 +85,12 @@ const botRuntime =
     logger: botLogger,
     miniAppEnabled: config.MINI_APP_ENABLED,
   });
+const scheduler = createScheduler({
+  lock: createAdvisoryLock(pool),
+  clock: systemClock,
+  logger: botLogger,
+  jobs: createJobs({ config, db: pool, services, messenger: botMessenger, logger: botLogger }),
+});
 const webhook = botSettings?.webhook;
 const app = await buildApp({
   config,
@@ -90,6 +110,9 @@ if (!config.MAX_BOT_TOKEN) {
 if (!config.CHADGPT_API_KEY) {
   app.log.warn('CHADGPT_API_KEY is not set: photo recognition is disabled, text uses offline fallbacks');
 }
+if (!config.PROACTIVE_OFFERS) {
+  app.log.info('proactive offers are disabled');
+}
 
 if (config.MIGRATE_ON_START) {
   const applied = await migrate(pool, await loadMigrations());
@@ -104,6 +127,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
   await botRuntime?.stop();
   background.stop();
   await app.close();
+  await scheduler.stop();
   await background.idle(10_000);
   await pool.end();
   process.exit(0);
@@ -114,3 +138,4 @@ process.once('SIGTERM', (signal) => void shutdown(signal));
 
 await app.listen({ host: config.HOST, port: config.PORT });
 botRuntime?.start();
+scheduler.start();
