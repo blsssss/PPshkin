@@ -65,3 +65,5 @@ export type IncomingEvent =
       messageId: string | null;
     }
   | { type: 'stopped'; key: string; user: MessengerUser };
+
+export type UpdateHandler = (event: IncomingEvent) => Promise<void>;

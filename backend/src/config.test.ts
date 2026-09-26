@@ -20,9 +20,12 @@ describe('loadConfig', () => {
       SESSION_TTL_HOURS: 12,
       INIT_DATA_MAX_AGE_SECONDS: 3600,
       DEMO_MODE: false,
+      BOT_MODE: 'polling',
+      MAX_API_BASE_URL: 'https://platform-api2.max.ru',
     });
     expect(config.MAX_BOT_TOKEN).toBeUndefined();
     expect(config.PUBLIC_BASE_URL).toBeUndefined();
+    expect(config.MAX_WEBHOOK_SECRET).toBeUndefined();
   });
 
   it('parses numbers, flags and comma separated lists', () => {
@@ -139,6 +142,70 @@ describe('loadConfig', () => {
     const load = () => loadConfig({ ...required, [name]: value });
     if (valid) expect(load()).toHaveProperty(name, Number(value));
     else expect(load).toThrow(new RegExp(name));
+  });
+
+  it('reads the bot transport settings', () => {
+    const config = loadConfig({
+      ...required,
+      BOT_MODE: 'off',
+      MAX_API_BASE_URL: 'http://127.0.0.1:8080/max',
+      MAX_WEBHOOK_SECRET: 'Hook_secret-2026',
+    });
+    expect(config).toMatchObject({
+      BOT_MODE: 'off',
+      MAX_API_BASE_URL: 'http://127.0.0.1:8080/max',
+      MAX_WEBHOOK_SECRET: 'Hook_secret-2026',
+    });
+    expect(loadConfig({ ...required, BOT_MODE: '', MAX_WEBHOOK_SECRET: '' })).toMatchObject({
+      BOT_MODE: 'polling',
+      MAX_WEBHOOK_SECRET: undefined,
+    });
+  });
+
+  it('rejects unknown bot modes, bad API URLs and bad webhook secrets', () => {
+    expect(() => loadConfig({ ...required, BOT_MODE: 'push' })).toThrow(/BOT_MODE/);
+    expect(() => loadConfig({ ...required, MAX_API_BASE_URL: 'ftp://max.ru' })).toThrow(/MAX_API_BASE_URL/);
+    for (const secret of ['abcd', 'has space', 'кириллица', 'semi;colon', 'x'.repeat(257)]) {
+      expect(() => loadConfig({ ...required, MAX_WEBHOOK_SECRET: secret })).toThrow(/MAX_WEBHOOK_SECRET/);
+    }
+  });
+
+  describe('webhook mode', () => {
+    const webhook = {
+      ...required,
+      BOT_MODE: 'webhook',
+      MAX_BOT_TOKEN: 'max-bot-token-0123456789',
+      MAX_WEBHOOK_SECRET: 'hook_secret-1',
+      PUBLIC_BASE_URL: 'https://ppshkin.example',
+    };
+
+    it('accepts a complete setup', () => {
+      expect(loadConfig(webhook).BOT_MODE).toBe('webhook');
+      expect(loadConfig({ ...webhook, PUBLIC_BASE_URL: 'https://ppshkin.example/app/' }).BOT_MODE).toBe(
+        'webhook',
+      );
+    });
+
+    it.each(['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL'])('needs %s', (name) => {
+      expect(() => loadConfig({ ...webhook, [name]: '' })).toThrow(
+        new RegExp(`${name}: BOT_MODE=webhook needs ${name}`),
+      );
+    });
+
+    it.each(['http://ppshkin.example', 'https://ppshkin.example:8443', 'https://ppshkin.example:443/app'])(
+      'refuses %s as the public URL',
+      (url) => {
+        expect(() => loadConfig({ ...webhook, PUBLIC_BASE_URL: url })).toThrow(
+          /PUBLIC_BASE_URL: BOT_MODE=webhook needs an https PUBLIC_BASE_URL without an explicit port/,
+        );
+      },
+    );
+
+    it('allows an http public URL in the other modes', () => {
+      expect(
+        loadConfig({ ...webhook, BOT_MODE: 'polling', PUBLIC_BASE_URL: 'http://localhost:3000' }).BOT_MODE,
+      ).toBe('polling');
+    });
   });
 
   it('reports every invalid variable', () => {

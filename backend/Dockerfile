@@ -13,10 +13,12 @@ RUN npm run build
 
 FROM node:24.21.0-alpine3.24 AS runtime
 ENV NODE_ENV=production
+ENV NODE_EXTRA_CA_CERTS=/app/certs/russian_trusted_root_ca.pem
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY certs ./certs
 COPY package.json ./
 USER node
 EXPOSE 3000
