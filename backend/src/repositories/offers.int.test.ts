@@ -135,6 +135,24 @@ describe('offers repository', () => {
     expect(await offers.findStatus(pool, GUEST, booked.id + 100)).toBeNull();
   });
 
+  it('accepts an own offer of the booked item and clears an earlier decline', async () => {
+    const offer = await showOne(GUEST, eclair);
+    await offers.decline(pool, { id: offer.id, userId: GUEST, reason: 'dislike', at: now });
+    const at = new Date(now.getTime() + 60_000);
+    const acceptance = { id: offer.id, userId: GUEST, menuItemId: eclair.id, at };
+    expect(await offers.accept(pool, { ...acceptance, userId: OTHER })).toBe(false);
+    expect(await offers.accept(pool, { ...acceptance, menuItemId: croissant.id })).toBe(false);
+    expect(await offers.accept(pool, { ...acceptance, id: offer.id + 100 })).toBe(false);
+    expect(await offers.findStatus(pool, GUEST, offer.id)).toBe('declined');
+
+    expect(await offers.accept(pool, acceptance)).toBe(true);
+    const { rows } = await pool.query(
+      'select status, decline_reason, responded_at from offers where id = $1',
+      [offer.id],
+    );
+    expect(rows).toEqual([{ status: 'accepted', decline_reason: null, responded_at: at }]);
+  });
+
   it('lists distinct items shown to the user since a moment', async () => {
     await showOne(GUEST, eclair, daysAgo(1));
     await show(GUEST, [croissant, eclair], daysAgo(0.25));

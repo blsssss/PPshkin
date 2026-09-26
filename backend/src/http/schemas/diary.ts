@@ -11,20 +11,12 @@ import {
   type DiarySummaryDay,
   type MealLogResult,
 } from '../../services/diary.ts';
-import { isLocalDate } from '../../shared/time.ts';
-import { IsoDateTime, iso } from './common.ts';
+import { IsoDateTime, iso, LocalDate, localDateParam } from './common.ts';
 
-const LocalDateSchema = z.iso.date().describe('Календарная дата YYYY-MM-DD в часовом поясе пользователя');
+const UserLocalDate = LocalDate.describe('Календарная дата YYYY-MM-DD в часовом поясе пользователя');
 
 export const DiaryDateParams = z.object({
-  date: z
-    .string()
-    .refine(isLocalDate, 'expected a calendar date in YYYY-MM-DD format')
-    .meta({
-      format: 'date',
-      examples: ['2026-09-25'],
-      description: 'Дата YYYY-MM-DD в часовом поясе пользователя',
-    }),
+  date: localDateParam('Дата YYYY-MM-DD в часовом поясе пользователя'),
 });
 
 export const DiarySummaryQuery = z.object({
@@ -153,7 +145,7 @@ export const DayTotalsSchema = z
 
 export const DiaryDaySchema = z
   .object({
-    date: LocalDateSchema,
+    date: UserLocalDate,
     timezone: z.string().describe('Часовой пояс, в котором считаются границы дня'),
     targetKcal: z.number().int().describe('Ориентир калорийности пользователя'),
     totals: DayTotalsSchema,
@@ -164,7 +156,7 @@ export const DiaryDaySchema = z
 
 export const DiarySummaryDaySchema = z
   .object({
-    date: LocalDateSchema,
+    date: UserLocalDate,
     meals: z.number().int(),
     kcal: z.number().int(),
     kcalMin: z.number().int(),

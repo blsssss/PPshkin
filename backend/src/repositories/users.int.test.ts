@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { withTransaction } from '../db/pool.ts';
 import * as users from './users.ts';
 
 const pool = testPool();
@@ -111,6 +112,20 @@ describe('users repository', () => {
     await users.clearLocation(pool, 14);
     await users.clearLocation(pool, 14);
     expect(await users.findById(pool, 14)).toMatchObject({ location: null, locationUpdatedAt: null });
+  });
+
+  it('locks an existing user against changes but not against new references', async () => {
+    await users.upsert(pool, { id: 16, firstName: null, username: null });
+    await withTransaction(pool, async (client) => {
+      expect(await users.lock(client, 16)).toBe(true);
+      expect(await users.lock(client, 404)).toBe(false);
+      await expect(
+        pool.query('select id from users where id = 16 for no key update nowait'),
+      ).rejects.toMatchObject({ code: '55P03' });
+      await expect(
+        pool.query('select id from users where id = 16 for key share nowait'),
+      ).resolves.toMatchObject({ rowCount: 1 });
+    });
   });
 
   it('removes a user', async () => {

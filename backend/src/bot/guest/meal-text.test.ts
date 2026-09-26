@@ -27,8 +27,20 @@ describe('parseManualEntry', () => {
     'съел 300',
     'Борщ 300 г',
     `${'а'.repeat(201)} 300`,
+    'запеканка кроликом, сыром сулугуни, помидорами и липтон 0.5',
+    'Липтон 0.5',
+    'Кола 0,5',
+    'Салат, курица, хлеб 500',
+    'Суп с фрикадельками и хлебом и компот и пирожок 700',
   ])('rejects %s', (text) => {
     expect(parseManualEntry(text)).toBeNull();
+  });
+
+  it('keeps multi word dishes with explicit calories', () => {
+    expect(parseManualEntry('Паста с курицей и грибами 600')).toEqual({
+      title: 'Паста с курицей и грибами',
+      kcal: 600,
+    });
   });
 });
 
@@ -75,6 +87,11 @@ describe('classifyText', () => {
     ['На обед суп', 'recognize'],
     ['на ужин рыба', 'recognize'],
     ['съел, кажется, всё', 'recognize'],
+    ['запеканка кроликом, сыром сулугуни, помидорами и липтон 0.5', 'recognize'],
+    ['Липтон 0.5', 'recognize'],
+    ['Борщ 300 г', 'recognize'],
+    ['два куска пиццы и кола', 'recognize'],
+    ['на завтраке был омлет', 'recognize'],
     ['привет', 'help'],
     ['Привет!', 'help'],
     ['спасибо большое', 'help'],
@@ -85,7 +102,6 @@ describe('classifyText', () => {
     ['а'.repeat(501), 'help'],
     ['съешь ещё этих булок', 'confirm'],
     ['ёжик', 'confirm'],
-    ['на завтраке был омлет', 'confirm'],
     ['сЪелбы', 'confirm'],
     ['а'.repeat(500), 'confirm'],
   ])('treats %s as %s', (text, kind) => {

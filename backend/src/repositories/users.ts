@@ -66,6 +66,10 @@ export async function upsert(db: Queryable, identity: UserIdentity): Promise<Use
   return mapUser(row);
 }
 
+export async function lock(db: Queryable, id: number): Promise<boolean> {
+  return (await maybeOne(db, 'select id from users where id = $1 for no key update', [id])) !== null;
+}
+
 export async function findById(db: Queryable, id: number): Promise<User | null> {
   const row = await maybeOne<UserRow>(db, `select ${USER_COLUMNS} from users where id = $1`, [id]);
   return row ? mapUser(row) : null;

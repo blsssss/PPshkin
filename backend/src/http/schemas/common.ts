@@ -1,6 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import { z } from 'zod';
 import type { GeoPoint } from '../../domain/models.ts';
+import { isLocalDate } from '../../shared/time.ts';
 
 export const ProblemSchema = z
   .object({
@@ -48,6 +49,18 @@ export const IsoDateTime = z
   .string()
   .meta({ format: 'date-time', examples: ['2026-09-25T12:00:00.000Z'] })
   .describe('Дата и время в формате ISO 8601, UTC');
+
+const LOCAL_DATE_EXAMPLES = ['2026-09-25'];
+
+export const LocalDate = z.iso.date().meta({ examples: LOCAL_DATE_EXAMPLES });
+
+const calendarDate = () => z.string().refine(isLocalDate, 'expected a calendar date in YYYY-MM-DD format');
+
+export const localDateParam = (description: string) =>
+  calendarDate().meta({ format: 'date', examples: LOCAL_DATE_EXAMPLES, description });
+
+export const optionalLocalDate = (description: string) =>
+  calendarDate().optional().meta({ format: 'date', examples: LOCAL_DATE_EXAMPLES, description });
 
 export const GeoPointSchema = z
   .object({

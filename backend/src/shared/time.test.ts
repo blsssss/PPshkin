@@ -8,6 +8,7 @@ import {
   isValidTimeZone,
   localDate,
   localParts,
+  nextClosingAt,
 } from './time.ts';
 
 describe('local time helpers', () => {
@@ -91,5 +92,61 @@ describe('isOpenAt', () => {
     expect(isOpenAt('08:00', 'garbage', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
     expect(isOpenAt('', '', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
     expect(isOpenAt('25:00', '22:00', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
+  });
+});
+
+describe('nextClosingAt', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('closes later today in the venue time zone', () => {
+    expect(nextClosingAt('08:00', '22:00', at('2026-09-25T10:00:00Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-25T19:00:00Z'),
+    );
+    expect(nextClosingAt('08:00:00', '22:00:00', at('2026-09-25T10:00:00Z'), 'Asia/Yekaterinburg')).toEqual(
+      at('2026-09-25T17:00:00Z'),
+    );
+  });
+
+  it('moves to the next day from the closing moment on', () => {
+    expect(nextClosingAt('08:00', '22:00', at('2026-09-25T18:59:59Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-25T19:00:00Z'),
+    );
+    expect(nextClosingAt('08:00', '22:00', at('2026-09-25T19:00:00Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-26T19:00:00Z'),
+    );
+    expect(nextClosingAt('08:00', '00:00', at('2026-09-25T18:00:00Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-25T21:00:00Z'),
+    );
+  });
+
+  it('closes after midnight for hours like 20:00-02:00', () => {
+    expect(nextClosingAt('20:00', '02:00', at('2026-09-25T18:00:00Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-25T23:00:00Z'),
+    );
+    expect(nextClosingAt('20:00', '02:00', at('2026-09-25T22:30:00Z'), 'Europe/Moscow')).toEqual(
+      at('2026-09-25T23:00:00Z'),
+    );
+  });
+
+  it('has no closing round the clock', () => {
+    expect(nextClosingAt('09:00', '09:00', at('2026-09-25T10:00:00Z'), 'Europe/Moscow')).toBeNull();
+  });
+
+  it('keeps the local closing time on daylight saving days', () => {
+    expect(nextClosingAt('08:00', '22:00', at('2026-03-29T08:00:00Z'), 'Europe/Berlin')).toEqual(
+      at('2026-03-29T20:00:00Z'),
+    );
+    expect(nextClosingAt('08:00', '22:00', at('2026-10-25T08:00:00Z'), 'Europe/Berlin')).toEqual(
+      at('2026-10-25T21:00:00Z'),
+    );
+    expect(nextClosingAt('20:00', '02:30', at('2026-10-24T20:00:00Z'), 'Europe/Berlin')).toEqual(
+      at('2026-10-25T00:30:00Z'),
+    );
+  });
+
+  it('rejects malformed hours', () => {
+    expect(() => nextClosingAt('08:00', 'late', at('2026-09-25T10:00:00Z'), 'Europe/Moscow')).toThrow(
+      RangeError,
+    );
   });
 });
