@@ -1,0 +1,31 @@
+.label {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 3px 8px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.violet {
+  color: var(--ppsh-on-accent);
+  background: var(--ppsh-violet);
+}
+
+.blue {
+  color: var(--ppsh-on-accent);
+  background: var(--ppsh-blue-strong);
+}
+
+.cyan {
+  color: var(--ppsh-on-cyan);
+  background: var(--ppsh-cyan);
+}
+
+.pink {
+  color: var(--ppsh-on-pink);
+  background: var(--ppsh-pink);
+}

@@ -1,0 +1,13 @@
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: calc(10px + env(safe-area-inset-top)) var(--ppsh-gutter) 10px;
+  color: var(--ppsh-on-pink);
+  background: var(--ppsh-pink);
+  font-family: var(--ppsh-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}

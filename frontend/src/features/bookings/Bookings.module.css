@@ -1,0 +1,158 @@
+.muted {
+  margin: 6px 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 16px;
+  background: var(--ppsh-panel);
+}
+
+.title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.meta {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.terms {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.ticket {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.code {
+  margin: 0;
+  font-family: var(--ppsh-font-mono);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.timer {
+  margin: 0;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.urgent {
+  color: var(--text-negative);
+}
+
+.qr {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 12px;
+  padding: 12px;
+  background: var(--ppsh-qr-paper);
+}
+
+.qr img {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  color: inherit;
+  background: var(--ppsh-panel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rowCode {
+  font-family: var(--ppsh-font-mono);
+  font-weight: 700;
+}
+
+.fullscreen {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  color: #000;
+  background: var(--ppsh-qr-paper);
+}
+
+.fullscreen img {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.fullscreenCode {
+  margin: 0;
+  font-family: var(--ppsh-font-mono);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.fullscreenActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}

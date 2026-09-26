@@ -1,0 +1,43 @@
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: calc(48px + env(safe-area-inset-top)) var(--ppsh-gutter) calc(48px + env(safe-area-inset-bottom));
+  color: var(--ppsh-on-accent);
+  background: var(--ppsh-violet);
+}
+
+.content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  margin: 16px 0 0;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.625rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.description {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}

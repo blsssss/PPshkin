@@ -1,0 +1,113 @@
+.section {
+  margin: 0 0 24px;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.value {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.muted {
+  margin: 6px 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.link {
+  color: var(--ppsh-accent-text);
+  font-weight: 700;
+}
+
+.label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0;
+  color: var(--text-primary);
+  background: var(--ppsh-panel);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.error {
+  margin: 6px 0 0;
+  color: var(--text-negative);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.inlineButton {
+  display: block;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--ppsh-accent-text);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.card {
+  margin: 0 0 8px;
+  padding: 14px 16px;
+  background: var(--ppsh-panel);
+}
+
+.cardTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.sheetActions {
+  margin-top: 16px;
+}
+
+.counter {
+  margin: 8px 0;
+  font-family: var(--ppsh-font-mono);
+  font-weight: 700;
+}
+
+.consequences {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}

@@ -1,13 +1,13 @@
 import { VENUE_CATEGORY_LABELS } from '../../domain/vocabulary.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
-import type { OutgoingMessage } from '../../ports/messenger.ts';
+import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
 import type { DealCardView, VenueDetailsView } from '../../services/catalog.ts';
 import type { DealView } from '../../services/deals.ts';
 import { AppError } from '../../shared/errors.ts';
 import { formatLocalTime, isOpenAt } from '../../shared/time.ts';
 import { parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
-import { helpButtons, placeButtons } from '../keyboards.ts';
+import { eatButton, placeButtons } from '../keyboards.ts';
 import {
   bold,
   BUTTONS,
@@ -21,11 +21,14 @@ import {
   OFFER_ENDED,
   OFFER_FORMS,
   openingStatus,
+  TITLE_IN_BUTTON_LIMIT,
   TITLE_IN_LIST_LIMIT,
   truncate,
   venuePlace,
   venueSummary,
 } from '../texts.ts';
+import { bookButton } from './offer-keyboards.ts';
+import { bookDeal, OFFER_BUTTONS } from './offer-texts.ts';
 
 const VENUE_DEALS_LIMIT = 5;
 
@@ -37,13 +40,17 @@ function missingAs(code: string) {
 }
 
 function offerEnded(): OutgoingMessage {
-  return { text: OFFER_ENDED, buttons: helpButtons() };
+  return { text: OFFER_ENDED, buttons: [[eatButton()]] };
 }
 
 function dealLine({ deal, item }: DealView, timeZone: string): string {
   const name = escapeMarkdown(truncate(item.name, TITLE_IN_LIST_LIMIT));
   const until = dealAvailability(formatLocalTime(deal.endsAt, timeZone), deal.quantityLeft);
   return `${name}: ${dealPrice(deal.priceRub, item.priceRub, item.kcal)}, ${until}`;
+}
+
+function bookDealButton(text: string, { deal, item }: DealView): Button {
+  return bookButton(text, { menuItemId: item.id, dealId: deal.id, offerId: null });
 }
 
 function venueCard({ venue, openNow, deals }: VenueDetailsView, ctx: BotContext): OutgoingMessage {
@@ -58,6 +65,9 @@ function venueCard({ venue, openNow, deals }: VenueDetailsView, ctx: BotContext)
           ),
         ]
       : [NO_DEALS];
+  const bookable = openNow
+    ? deals.filter((view) => view.status === 'active').slice(0, VENUE_DEALS_LIMIT)
+    : [];
   return {
     text: [
       bold(venue.name),
@@ -67,20 +77,23 @@ function venueCard({ venue, openNow, deals }: VenueDetailsView, ctx: BotContext)
       '',
       ...offers,
     ].join('\n'),
-    buttons: placeButtons({
-      location: venue.location,
-      botUsername: ctx.botUsername,
-      miniAppEnabled: ctx.miniAppEnabled,
-      appLabel: BUTTONS.venueInApp,
-      startParam: `venue_${venue.id}`,
-    }),
+    buttons: [
+      ...bookable.map((view) => [
+        bookDealButton(bookDeal(truncate(view.item.name, TITLE_IN_BUTTON_LIMIT), view.deal.priceRub), view),
+      ]),
+      ...placeButtons({
+        location: venue.location,
+        botUsername: ctx.botUsername,
+        miniAppEnabled: ctx.miniAppEnabled,
+        appLabel: BUTTONS.venueInApp,
+        startParam: `venue_${venue.id}`,
+      }),
+    ],
   };
 }
 
-function dealCard(
-  { deal: { deal, item }, venue, distanceM }: DealCardView,
-  ctx: BotContext,
-): OutgoingMessage {
+function dealCard({ deal: view, venue, distanceM }: DealCardView, ctx: BotContext): OutgoingMessage {
+  const { deal, item } = view;
   const openNow = isOpenAt(venue.opensAt, venue.closesAt, ctx.now, venue.timezone);
   return {
     text: [
@@ -91,13 +104,16 @@ function dealCard(
       ...(openNow ? [] : [openingStatus(false, venue.opensAt, venue.closesAt)]),
       ...(venue.isDemo ? [DEMO_VENUE] : []),
     ].join('\n'),
-    buttons: placeButtons({
-      location: venue.location,
-      botUsername: ctx.botUsername,
-      miniAppEnabled: ctx.miniAppEnabled,
-      appLabel: BUTTONS.openInApp,
-      startParam: `deal_${deal.id}`,
-    }),
+    buttons: [
+      ...(openNow && view.status === 'active' ? [[bookDealButton(OFFER_BUTTONS.book, view)]] : []),
+      ...placeButtons({
+        location: venue.location,
+        botUsername: ctx.botUsername,
+        miniAppEnabled: ctx.miniAppEnabled,
+        appLabel: BUTTONS.openInApp,
+        startParam: `deal_${deal.id}`,
+      }),
+    ],
   };
 }
 

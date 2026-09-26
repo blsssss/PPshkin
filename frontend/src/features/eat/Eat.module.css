@@ -1,0 +1,315 @@
+.tabs {
+  margin: 0 0 12px;
+}
+
+.pointBar {
+  margin: 0 0 12px;
+}
+
+.pointRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.pointText {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.inlineLink {
+  display: block;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--ppsh-accent-text);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inlineAnchor {
+  color: var(--ppsh-accent-text);
+  font-weight: 700;
+}
+
+.lead {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.muted {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--ppsh-panel);
+}
+
+.card::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  background: var(--ppsh-violet);
+  content: '';
+}
+
+.flash {
+  outline: 3px solid var(--ppsh-pink);
+  outline-offset: -3px;
+}
+
+.cardLink {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headline {
+  margin: 0;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.125rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.dish {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.venueLine,
+.venueMeta {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.kcal {
+  font-weight: 700;
+}
+
+.dealLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.price {
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.0625rem;
+  font-weight: 800;
+}
+
+.oldPrice {
+  color: var(--text-secondary);
+}
+
+.dealMeta {
+  flex-basis: 100%;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.why {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  background: var(--background-primary);
+}
+
+.whySummary {
+  min-height: 32px;
+  color: var(--ppsh-accent-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.whyTitle {
+  margin: 10px 0 4px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.whyList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.assumptions {
+  color: var(--text-secondary);
+}
+
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.declineRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.footerLink {
+  display: block;
+  margin: 20px 0 0;
+  color: var(--ppsh-accent-text);
+  font-weight: 700;
+  text-align: center;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  margin: 4px 0 8px;
+  font-weight: 600;
+}
+
+.venueList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.venueRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 0;
+  color: var(--text-primary);
+  background: var(--ppsh-panel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.venueName {
+  font-weight: 700;
+}
+
+.venueDeals {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.venueHead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.hours {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.headActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sectionTitle {
+  margin: 20px 0 8px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--ppsh-panel);
+}
+
+.menuHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.menuName {
+  font-weight: 700;
+}
+
+.menuMeta,
+.menuTags {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}

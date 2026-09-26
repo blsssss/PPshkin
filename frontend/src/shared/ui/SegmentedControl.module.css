@@ -1,0 +1,25 @@
+.control {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--ppsh-panel);
+}
+
+.segment {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.active {
+  color: var(--ppsh-on-accent);
+  background: var(--ppsh-violet);
+}

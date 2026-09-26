@@ -1,4 +1,4 @@
-import { plural } from '../../shared/plural.ts';
+import { MEAL_FORMS, plural } from '../../shared/plural.ts';
 import { formatLocalTime } from '../../shared/time.ts';
 import type { Deal, FactorScore, IntentFactor, MenuItem, OfferExplanation, Venue } from '../models.ts';
 import type { BehaviorProfile } from '../nutrition/profile.ts';
@@ -24,7 +24,6 @@ const SLOT_HEADLINES: Record<Exclude<MealSlot, 'dinner'>, string> = {
   lunch: 'Подходит на обед',
   snack: 'Лёгкий перекус',
 };
-const MEAL_FORMS = ['приём', 'приёма', 'приёмов'] as const;
 const FAVOURITE_TASTE_MIN = 0.6;
 const FAVOURITE_LABELS_LIMIT = 3;
 const WALKING_LIMIT_M = 1000;

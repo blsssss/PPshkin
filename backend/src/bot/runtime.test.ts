@@ -7,6 +7,7 @@ import type { Queryable } from '../db/pool.ts';
 import type { MaxApi } from '../integrations/max/api.ts';
 import { MaxApiError } from '../integrations/max/errors.ts';
 import type { IncomingEvent } from '../ports/messenger.ts';
+import { createBackgroundTasks } from '../shared/background.ts';
 import { BOT_COMMANDS } from './commands.ts';
 import { createBotRuntime, maxBotSettings, type MaxBotSettings } from './runtime.ts';
 
@@ -60,6 +61,7 @@ function runtime(settings: MaxBotSettings, api: MaxApi, sleep = vi.fn(() => Prom
     clock: { now: () => new Date('2026-09-26T09:00:00Z') },
     logger,
     miniAppEnabled: false,
+    background: createBackgroundTasks(logger),
     states,
     sleep,
   });
@@ -104,6 +106,29 @@ describe('bot runtime', () => {
     });
     await bot.stop();
     expect(vi.mocked(api.getUpdates).mock.calls[0]?.[0].signal?.aborted).toBe(true);
+  });
+
+  it('hands out the messenger for notifications once the bot is up', async () => {
+    const { promise: me, resolve } = Promise.withResolvers<typeof BOT>();
+    const sendMessage = vi.fn(() => Promise.resolve({ mid: 'mid.1' }));
+    const api = workingApi({ getMe: vi.fn(() => me), sendMessage });
+    const { bot } = runtime(POLLING, api);
+
+    expect(bot.messenger()).toBeNull();
+    bot.start();
+    await Promise.resolve();
+    expect(bot.messenger()).toBeNull();
+
+    resolve(BOT);
+    await vi.waitFor(() => {
+      expect(bot.messenger()).not.toBeNull();
+    });
+    await bot.messenger()?.sendToUser(101, { text: 'Бронь истекла' });
+    expect(sendMessage).toHaveBeenCalledWith(
+      { userId: 101 },
+      expect.objectContaining({ text: 'Бронь истекла' }),
+    );
+    await bot.stop();
   });
 
   it('subscribes the webhook and handles updates once the bot is up', async () => {
