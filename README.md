@@ -192,7 +192,13 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 | `VITE_DEMO_MODE` | нет | `false` в `frontend/Dockerfile`; `true` в `compose.yaml` | показывать демо-кнопки в кабинете заведения |
 | `VITE_DEV_TOKEN` | нет | пусто | Bearer-токен для dev-сервера Vite вне MAX, например локальный демо-токен; в production-сборке не используется |
 
-Переменные репозитория GitHub для публикации образов и живых проверок описаны в [docs/deploy.md](docs/deploy.md).
+Живые проверки `npm run smoke` ([docs/smoke.md](docs/smoke.md)) читают переменные backend из таблицы выше и ещё одну свою:
+
+| Переменная | Обязательна | По умолчанию | Назначение |
+|---|---|---|---|
+| `MAX_BOT_USERNAME` | для проверки `max.me` | пусто | ник бота без `@`, с которым сверяется ответ MAX на `getMe`; для рабочего бота `t516_hakaton_max_bot`. Используется только живыми проверками, backend её не читает |
+
+Переменные репозитория GitHub для публикации образов описаны в [docs/deploy.md](docs/deploy.md), секреты и переменные живых проверок в [docs/smoke.md](docs/smoke.md).
 
 ## Порты
 
@@ -312,7 +318,8 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 
 - [backend/testdata/venues.json](backend/testdata/venues.json): 6 заведений Казани с меню и шаблонами горящих позиций;
 - [backend/testdata/demo-guest.json](backend/testdata/demo-guest.json): профиль и шаблон дневника демо-гостя;
-- [backend/testdata/accounts.json](backend/testdata/accounts.json): тестовые учётки и роли.
+- [backend/testdata/accounts.json](backend/testdata/accounts.json): тестовые учётки и роли;
+- [backend/testdata/samples/dish.jpg](backend/testdata/samples/dish.jpg) и [backend/testdata/samples/menu.txt](backend/testdata/samples/menu.txt): образцы для живых проверок распознавания ([docs/smoke.md](docs/smoke.md)); фото блюда снято участником команды (собственное фото, метаданные EXIF и GPS удалены), в Docker-образ образцы не попадают.
 
 Фиксированные id:
 
@@ -336,7 +343,7 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 
 ## Сценарий проверки
 
-Шаги 1-10 проходятся на рабочем боте [https://max.ru/t516_hakaton_max_bot](https://max.ru/t516_hakaton_max_bot) в мобильном приложении или веб-версии MAX с любого аккаунта. Бронь и погашение в кофейне «Зерно» проверяйте с 08:00 до 22:00 по Москве. Шаги 11-12 выполняются на локальном стенде. Полная версия с ветками ошибок: [docs/scenario.md](docs/scenario.md).
+Шаги 1-10 проходятся на рабочем боте [https://max.ru/t516_hakaton_max_bot](https://max.ru/t516_hakaton_max_bot) в мобильном приложении или веб-версии MAX с любого аккаунта. Бронь и погашение в кофейне «Зерно» проверяйте с 08:00 до 22:00 по Москве. Шаги 11-12 выполняются на локальном стенде. Полная версия с ветками ошибок: [docs/scenario.md](docs/scenario.md). Перед сдачей и после каждого деплоя основной сценарий проходится по чек-листу в веб-версии MAX, на Android и на iOS, а интеграции проверяются живыми проверками `npm run smoke`: [docs/smoke.md](docs/smoke.md).
 
 | № | Действие | Ожидаемый результат |
 |---|---|---|
@@ -589,6 +596,8 @@ npm test
 ```
 
 `openapi.yaml` генерируется из кода командой `npm run openapi` в `backend/`, мини-приложение генерирует из него типы клиента. CI (`.github/workflows/ci.yml`) проверяет backend, frontend, сборку и запуск `compose.yaml`, а также продакшен-конфигурацию `compose.prod.yaml` с Caddy.
+
+Живые проверки MAX, ChadGPT и рабочего API (`npm run smoke` в `backend/`, workflow `.github/workflows/smoke.yml`) обращаются к настоящим сервисам и запускаются только вручную, в CI их нет: [docs/smoke.md](docs/smoke.md).
 
 ## Лицензия
 

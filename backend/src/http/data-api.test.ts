@@ -14,7 +14,7 @@ import {
   splitFieldPath,
   substitutionName,
   type DataApiCheck,
-} from '../../test/data-api.ts';
+} from '../smoke/data-api.ts';
 import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { configSchema } from '../config.ts';
 import { OPENAPI_FILE } from './openapi-document.ts';

@@ -1,0 +1,51 @@
+name: smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      checks:
+        description: Группа живых проверок
+        type: choice
+        options:
+          - all
+          - max
+          - site
+          - recognition
+          - api
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run smoke -- --checks "$SMOKE_CHECKS" --strict
+        env:
+          SMOKE_CHECKS: ${{ inputs.checks }}
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/backend/certs/russian_trusted_root_ca.pem
+          MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+          CHADGPT_API_KEY: ${{ secrets.CHADGPT_API_KEY }}
+          DEMO_GUEST_TOKEN: ${{ secrets.DEMO_GUEST_TOKEN }}
+          DEMO_VENUE_TOKEN: ${{ secrets.DEMO_VENUE_TOKEN }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          MAX_BOT_USERNAME: ${{ vars.MAX_BOT_USERNAME }}

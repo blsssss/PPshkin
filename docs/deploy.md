@@ -183,7 +183,7 @@ docker compose -f compose.prod.yaml logs backend
 
 Подписка создаётся автоматически при старте backend в режиме `webhook` (#9): backend подписывается на `https://<домен>/max/webhook` с секретом `MAX_WEBHOOK_SECRET` и удаляет подписки на другие адреса. Задача `max_webhook_guard` каждые 10 минут проверяет подписку и восстанавливает её, если подписки нет или в ней не хватает типов `bot_started`, `message_created`, `message_callback`, `bot_stopped`. Подписка пропадает, например, когда кто-то запускает long polling с тем же токеном или когда MAX отписывает бота после долгих ошибок доставки.
 
-Проверка: живые проверки (#20) или лог backend:
+Проверка: живая проверка `max.webhook` ([smoke.md](smoke.md)) или лог backend:
 
 ```bash
 docker compose -f compose.prod.yaml logs backend | grep -E 'max bot started|max transport started|webhook subscription restored'
@@ -225,9 +225,11 @@ docker compose -f compose.prod.yaml exec backend node -e "fetch('https://platfor
 
 | Переменная | Значение | Для чего |
 |---|---|---|
-| `PUBLIC_BASE_URL` | `https://<домен>` | живые проверки (#20) |
+| `PUBLIC_BASE_URL` | `https://<домен>` | живые проверки ([smoke.md](smoke.md)) |
 | `MAX_BOT_USERNAME` | имя бота без `@` | аргумент сборки `VITE_MAX_BOT_NAME` образа мини-приложения и живые проверки |
-| `DEMO_MODE` | `true` на период проверки, потом `false` | аргумент сборки `VITE_DEMO_MODE` образа мини-приложения и живые проверки |
+| `DEMO_MODE` | `true` на период проверки, потом `false` | аргумент сборки `VITE_DEMO_MODE` образа мини-приложения |
+
+Секреты живых проверок (`MAX_BOT_TOKEN`, `CHADGPT_API_KEY`, `DEMO_GUEST_TOKEN`, `DEMO_VENUE_TOKEN`) задаются на вкладке Secrets, список и значения в [smoke.md](smoke.md).
 
 `MAX_BOT_USERNAME` и `DEMO_MODE` попадают в образ мини-приложения при сборке, поэтому после их изменения запустите workflow `publish` вручную (Actions, publish, Run workflow) и обновите сервис по разделу 9.
 
@@ -290,6 +292,6 @@ docker compose -f compose.prod.yaml logs -f backend
 docker compose -f compose.prod.yaml logs -f caddy
 ```
 
-- Живые проверки (#20) запускаются вручную на вкладке Actions репозитория.
+- После каждого обновления запустите живые проверки вручную: Actions, smoke, Run workflow или `gh workflow run smoke.yml -f checks=all`; порядок, стоимость и чек-лист ручной проверки в [smoke.md](smoke.md).
 - Тома `caddy_data` (сертификаты) и `pgdata` (база) не удаляйте: без `caddy_data` Caddy выпускает сертификаты заново и может упереться в лимиты Let's Encrypt. Команду `down --volumes` на сервере не используйте.
 - На период проверки хакатона `DEMO_MODE=true` с собственными токенами `DEMO_GUEST_TOKEN` и `DEMO_VENUE_TOKEN` (не `local-demo-...`). После завершения задайте `DEMO_MODE=false`, удалите строки `DEMO_GUEST_TOKEN` и `DEMO_VENUE_TOKEN` (backend не запустится с токенами при выключенном демо-режиме), поменяйте переменную репозитория `DEMO_MODE` на `false`, пересоберите образы через `publish` и обновите сервис по разделу 9.
