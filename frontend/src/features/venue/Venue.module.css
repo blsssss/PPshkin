@@ -121,7 +121,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
   margin: 0 0 16px;
 }
