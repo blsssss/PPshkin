@@ -1,4 +1,5 @@
 import { ApiError, NETWORK_ERROR, TIMEOUT_ERROR, apiErrorFromResponse } from './errors.ts';
+import { emitApiError } from './events.ts';
 
 export const DEFAULT_TIMEOUT_MS = 15_000;
 export const LONG_TIMEOUT_MS = 90_000;
@@ -76,7 +77,7 @@ export function createApiFetch(auth: AuthBinding, baseFetch: FetchLike = default
     if ((await isTokenProblem(response)) && (await renewedToken(auth, sent))) {
       response = await send(retry, auth.token(), baseFetch);
     }
-    if (!response.ok) throw await apiErrorFromResponse(response);
+    if (!response.ok) throw emitApiError(await apiErrorFromResponse(response));
     return response;
   };
 }

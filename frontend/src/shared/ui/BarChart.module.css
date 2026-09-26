@@ -1,0 +1,87 @@
+.chart {
+  margin: 0;
+}
+
+.plot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  border-bottom: 2px solid var(--divider-primary);
+}
+
+.column {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+button.column {
+  cursor: pointer;
+}
+
+button.column:hover .bar {
+  background: var(--ppsh-blue);
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  max-width: 28px;
+  background: var(--ppsh-violet);
+}
+
+.over {
+  background: var(--ppsh-pink);
+}
+
+.target {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 2px dashed var(--ppsh-accent-text);
+  pointer-events: none;
+}
+
+.targetLabel {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  padding: 0 4px;
+  color: var(--ppsh-accent-text);
+  background: var(--background-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.captions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.captions span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.compact .plot,
+.compact .captions {
+  gap: 2px;
+}
+
+.compact .captions span {
+  overflow: visible;
+}

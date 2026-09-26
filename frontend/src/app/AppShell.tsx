@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { UserProfile } from '../api/client.ts';
 import { isApiError } from '../api/errors.ts';
+import { onApiError } from '../api/events.ts';
 import { CONSENTS_KEY, PROFILE_KEY, useProfile, useUpdateProfile } from '../api/profile.ts';
 import { OfflineBanner } from '../shared/ui/OfflineBanner.tsx';
 import { TabBar } from './TabBar.tsx';
@@ -39,33 +40,13 @@ function useConsentRequiredRedirect(): void {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const redirect = (error: unknown) => {
+    return onApiError((error) => {
       if (!isApiError(error, 'consent_required')) return;
-      queryClient.setQueryData<UserProfile>(PROFILE_KEY, (current) =>
-        current === undefined
-          ? current
-          : {
-              ...current,
-              consents: {
-                ...current.consents,
-                personalData: { granted: false, version: null, grantedAt: null },
-              },
-            },
-      );
-      void queryClient.invalidateQueries({ queryKey: PROFILE_KEY });
-      void queryClient.invalidateQueries({ queryKey: CONSENTS_KEY });
-      void navigate('/onboarding/consent', { replace: true });
-    };
-    const unsubscribeQueries = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type === 'updated' && event.action.type === 'error') redirect(event.action.error);
+      void Promise.resolve(navigate('/onboarding/consent', { replace: true })).then(() => {
+        void queryClient.invalidateQueries({ queryKey: PROFILE_KEY });
+        void queryClient.invalidateQueries({ queryKey: CONSENTS_KEY });
+      });
     });
-    const unsubscribeMutations = queryClient.getMutationCache().subscribe((event) => {
-      if (event.type === 'updated' && event.action.type === 'error') redirect(event.action.error);
-    });
-    return () => {
-      unsubscribeQueries();
-      unsubscribeMutations();
-    };
   }, [queryClient, navigate]);
 }
 
