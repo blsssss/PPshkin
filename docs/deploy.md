@@ -2,7 +2,7 @@
 
 Инструкция поднимает ППшкин на одном сервере: Caddy принимает HTTPS на 443 и сам выпускает сертификат Let's Encrypt, backend и мини-приложение запускаются из готовых образов GHCR, PostgreSQL хранит данные на томе Docker. Всё описано в [compose.prod.yaml](../compose.prod.yaml) и [deploy/Caddyfile](../deploy/Caddyfile), образы публикует [publish.yml](../.github/workflows/publish.yml), та же конфигурация каждый раз проверяется в job `deploy` из [ci.yml](../.github/workflows/ci.yml).
 
-Наружу опубликован только Caddy (порты 80, 443/tcp и 443/udp). Backend и база доступны только внутри сети проекта Docker.
+Рабочий домен сервиса `hackathon.easymythic.dev`, ниже `<домен>` означает его. Наружу опубликован только Caddy (порты 80, 443/tcp и 443/udp). Backend и база доступны только внутри сети проекта Docker.
 
 Маршрутизация Caddy:
 
@@ -31,10 +31,10 @@ docker compose version
 
 ## 2. Домен и DNS
 
-Создайте у регистратора A-запись домена сервиса (например, `ppshkin.<ваш-домен>`) на публичный IPv4 сервера и дождитесь, пока она станет видна:
+Создайте у регистратора A-запись домена сервиса `hackathon.easymythic.dev` на публичный IPv4 сервера и дождитесь, пока она станет видна:
 
 ```bash
-dig +short ppshkin.<ваш-домен>
+dig +short hackathon.easymythic.dev
 ```
 
 Команда должна вывести IP сервера. Запускайте Caddy только после этого: пока запись не видна, каждая попытка выпуска сертификата заканчивается ошибкой, и Let's Encrypt быстро упирается в лимиты неудачных проверок домена.
@@ -101,7 +101,7 @@ curl -fsSL -o deploy/Caddyfile https://raw.githubusercontent.com/blsssss/PPshkin
 
 | Переменная | Где задаётся | Значение |
 |---|---|---|
-| `DOMAIN` | `.env` на сервере | домен сервиса, например `ppshkin.<ваш-домен>` |
+| `DOMAIN` | `.env` на сервере | домен сервиса, `hackathon.easymythic.dev` |
 | `ACME_EMAIL` | `.env` | почта для уведомлений Let's Encrypt |
 | `IMAGE_TAG` | `.env` | `latest` или `sha-<7 символов коммита>` |
 | `POSTGRES_USER`, `POSTGRES_DB` | `.env` | `ppshkin` |
@@ -124,7 +124,7 @@ curl -fsSL -o deploy/Caddyfile https://raw.githubusercontent.com/blsssss/PPshkin
 cd /opt/ppshkin
 umask 077
 cat > .env <<EOF
-DOMAIN=ppshkin.<ваш-домен>
+DOMAIN=hackathon.easymythic.dev
 ACME_EMAIL=<почта для Let's Encrypt>
 IMAGE_TAG=latest
 POSTGRES_USER=ppshkin
@@ -166,9 +166,9 @@ docker compose -f compose.prod.yaml ps
 Проверки:
 
 ```bash
-curl -fsS https://ppshkin.<ваш-домен>/health
-curl -fsS https://ppshkin.<ваш-домен>/ready
-curl -sSI http://ppshkin.<ваш-домен>/health
+curl -fsS https://hackathon.easymythic.dev/health
+curl -fsS https://hackathon.easymythic.dev/ready
+curl -sSI http://hackathon.easymythic.dev/health
 docker compose -f compose.prod.yaml logs backend
 ```
 

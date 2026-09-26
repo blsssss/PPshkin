@@ -85,7 +85,7 @@
 
 ## D. Проверка через API с демо-токенами
 
-Те же шаги запросами к API. На сервере адрес `https://<домен>/api/v1` (сейчас в документации заполнитель `https://ppshkin.example.com`, он будет заменён на рабочий после развёртывания по [deploy.md](deploy.md)), Swagger UI `https://<домен>/docs`, контракт [openapi.yaml](../openapi.yaml), машиночитаемый набор проверок [DATA-API.yaml](../DATA-API.yaml). Значения `DEMO_GUEST_TOKEN` и `DEMO_VENUE_TOKEN` сервера передаются жюри вне репозитория. Локально:
+Те же шаги запросами к API. На сервере адрес `https://hackathon.easymythic.dev/api/v1` (отвечает после развёртывания по [deploy.md](deploy.md)), Swagger UI `https://hackathon.easymythic.dev/docs`, контракт [openapi.yaml](../openapi.yaml), машиночитаемый набор проверок [DATA-API.yaml](../DATA-API.yaml). Значения `DEMO_GUEST_TOKEN` и `DEMO_VENUE_TOKEN` сервера передаются жюри вне репозитория. Локально:
 
 ```bash
 BASE=http://localhost:3000
@@ -93,7 +93,7 @@ GUEST="Authorization: Bearer local-demo-guest-token-not-secret"
 VENUE="Authorization: Bearer local-demo-venue-token-not-secret"
 ```
 
-Для сервера `BASE=https://<домен>` и токены сервера. Уведомления бота демо-учёткам не отправляются: у них отрицательные `userId`, это не пользователи MAX.
+Для сервера `BASE=https://hackathon.easymythic.dev` и токены сервера. Уведомления бота демо-учёткам не отправляются: у них отрицательные `userId`, это не пользователи MAX.
 
 | № | Запрос | Ожидаемый результат |
 |---|---|---|

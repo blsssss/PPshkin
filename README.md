@@ -6,7 +6,7 @@
 |---|---|
 | Бот в MAX | [https://max.ru/t516_hakaton_max_bot](https://max.ru/t516_hakaton_max_bot) («Хакатон МАХ 516») |
 | Мини-приложение | кнопка запуска в чате с ботом и [https://max.ru/t516_hakaton_max_bot?startapp](https://max.ru/t516_hakaton_max_bot?startapp) |
-| API | `https://ppshkin.example.com/api/v1`, Swagger UI `https://ppshkin.example.com/docs`. Домен `ppshkin.example.com` это заполнитель: адрес будет заменён на рабочий после развёртывания по [docs/deploy.md](docs/deploy.md) |
+| API | `https://hackathon.easymythic.dev/api/v1`, Swagger UI `https://hackathon.easymythic.dev/docs`. Адрес отвечает после развёртывания по [docs/deploy.md](docs/deploy.md) и A-записи домена на сервер |
 | Контракт API | [openapi.yaml](openapi.yaml) (OpenAPI 3.1), проверки для жюри [DATA-API.yaml](DATA-API.yaml) |
 | Документы | [архитектура](docs/architecture.md), [сценарии проверки](docs/scenario.md), [продукт](docs/product.md), [политика обработки данных](docs/privacy.md), [пользовательское соглашение](docs/terms.md), [возможности MAX](docs/max-features.md), [развёртывание](docs/deploy.md) |
 
