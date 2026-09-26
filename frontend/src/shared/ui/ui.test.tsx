@@ -110,6 +110,17 @@ describe('ConfirmSheet', () => {
     expect(screen.getByText('closed')).toBeTruthy();
   });
 
+  it('renders inside the themed app root so the theme applies', () => {
+    const root = document.createElement('div');
+    root.className = 'ppsh-app';
+    document.body.append(root);
+    render(<ConfirmHarness onConfirm={() => Promise.resolve()} />, {
+      container: root.appendChild(document.createElement('div')),
+    });
+    expect(screen.getByRole('dialog', { name: 'Удалить запись?' }).closest('.ppsh-app')).toBe(root);
+    root.remove();
+  });
+
   it('closes on Escape', () => {
     render(<ConfirmHarness onConfirm={() => Promise.resolve()} />);
     fireEvent.keyDown(document, { key: 'Escape' });

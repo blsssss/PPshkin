@@ -54,6 +54,6 @@ export function BottomSheet({
         {children}
       </div>
     </div>,
-    document.body,
+    document.querySelector<HTMLElement>('.ppsh-app') ?? document.body,
   );
 }
