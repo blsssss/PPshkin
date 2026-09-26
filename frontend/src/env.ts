@@ -3,6 +3,10 @@ export const env = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
 };
 
+export function demoMode(): boolean {
+  return import.meta.env.VITE_DEMO_MODE === 'true';
+}
+
 export function devToken(): string | null {
   if (import.meta.env.DEV) {
     const token = import.meta.env.VITE_DEV_TOKEN;

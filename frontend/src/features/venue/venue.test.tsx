@@ -108,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe('cabinet', () => {
@@ -135,6 +136,54 @@ describe('cabinet', () => {
       timezone: 'Europe/Moscow',
     });
     expect(await screen.findByText('Заведение создано')).toBeTruthy();
+  });
+
+  it('shows the demo venue button only in demo mode', async () => {
+    await start(null);
+    await renderApp('/venue');
+    await screen.findByRole('button', { name: 'Создать заведение' });
+    expect(screen.queryByRole('button', { name: 'Взять демо-заведение' })).toBeNull();
+  });
+
+  it('takes a copy of the demo venue', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
+    await start(null);
+    server.on('POST', '/api/v1/venue/demo', () => json({ ...VENUE, isDemo: true }, 201));
+    await renderApp('/venue');
+    server.on('GET', '/api/v1/venue', () => json({ ...VENUE, isDemo: true }));
+    server.on('GET', '/api/v1/venue/menu', () => json({ items: menu }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Взять демо-заведение' }));
+    expect(
+      await screen.findByText('Готово, у вас копия кофейни «Зерно». Заведение и меню тестовые'),
+    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: VENUE.name })).toBeTruthy();
+    expect(server.callsTo('POST', '/api/v1/venue/demo')).toHaveLength(1);
+  });
+
+  it('hides the demo venue button when the server has no demo mode', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
+    await start(null);
+    server.on('POST', '/api/v1/venue/demo', () => problem(404, 'demo_mode_disabled'));
+    await renderApp('/venue');
+    fireEvent.click(await screen.findByRole('button', { name: 'Взять демо-заведение' }));
+    expect(await screen.findByText('Демо-режим на сервере выключен')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Взять демо-заведение' })).toBeNull();
+  });
+
+  it('explains the demo account and reloads an existing venue', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
+    await start(null);
+    server.on('POST', '/api/v1/venue/demo', () => problem(403, 'demo_account'));
+    await renderApp('/venue');
+    fireEvent.click(await screen.findByRole('button', { name: 'Взять демо-заведение' }));
+    expect(
+      await screen.findByText('Под демо-учёткой копию получить нельзя, откройте мини-приложение в MAX'),
+    ).toBeTruthy();
+    server.on('POST', '/api/v1/venue/demo', () => problem(409, 'venue_exists'));
+    server.on('GET', '/api/v1/venue', () => json(VENUE));
+    server.on('GET', '/api/v1/venue/menu', () => json({ items: menu }));
+    fireEvent.click(screen.getByRole('button', { name: 'Взять демо-заведение' }));
+    expect(await screen.findByRole('heading', { name: VENUE.name })).toBeTruthy();
   });
 
   it('shows field errors before sending and the server conflict after', async () => {
