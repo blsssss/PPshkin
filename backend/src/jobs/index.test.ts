@@ -41,14 +41,18 @@ describe('createJobs', () => {
 
   it('refreshes demo data daily at 06:00 in Moscow only in demo mode', async () => {
     const demo = { refresh: vi.fn(() => Promise.resolve({ venues: 6 })) };
+    const logger = fakeLogger();
 
     expect(jobs({ DEMO_MODE: false }, { demo }).map((job) => job.name)).not.toContain('refresh_demo_data');
     expect(jobs({ DEMO_MODE: true }).map((job) => job.name)).not.toContain('refresh_demo_data');
 
-    const refresh = jobs({ DEMO_MODE: true }, { demo }).find((job) => job.name === 'refresh_demo_data');
+    const refresh = jobs({ DEMO_MODE: true }, { demo, logger }).find(
+      (job) => job.name === 'refresh_demo_data',
+    );
     expect(refresh?.schedule).toEqual({ dailyAt: '06:00', timeZone: 'Europe/Moscow' });
     await refresh?.run(new Date('2026-09-26T03:00:00Z'));
     expect(demo.refresh).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith({ demo: { venues: 6 } }, 'demo data refreshed');
   });
 
   it('expires bookings across all guests and venues', async () => {

@@ -207,7 +207,7 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
       ]);
       if (!venue) throw dealNotFound();
       if (!view) throw new Error(`Deal ${dealId} lost its menu item`);
-      return { deal: view, venue, distanceM: distanceFrom(point, venue) };
+      return { deal: view, venue, distanceM: distanceFrom(resolveDemoPoint(point, demoMode).point, venue) };
     },
   };
 }

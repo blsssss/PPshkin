@@ -24,7 +24,7 @@ export function createJobs({ config, db, services, messenger, logger, demo }: Jo
     expireBookingsJob(services.bookings),
     failStaleImportsJob(db),
     purgeProcessedUpdatesJob(db),
-    ...(config.DEMO_MODE && demo ? [refreshDemoDataJob(demo)] : []),
+    ...(config.DEMO_MODE && demo ? [refreshDemoDataJob(demo, logger)] : []),
     ...(config.PROACTIVE_OFFERS
       ? [
           proactiveOffersJob({

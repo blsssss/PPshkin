@@ -295,6 +295,18 @@ describe('proactive_offers job', () => {
       expect(await storedOffers()).toEqual([]);
     });
 
+    it('when the guest is far away and the demo center was used', async () => {
+      recommendations.recommend.mockImplementation(async (userId, request) => ({
+        ...(await recommend(userId, 'push')),
+        demoCenterUsed: request.channel === 'push',
+      }));
+
+      await job().run(clock.now());
+
+      expect(sendToUser).not.toHaveBeenCalled();
+      expect(await storedOffers()).toEqual([]);
+    });
+
     it('while the bot is not running yet', async () => {
       messenger = null;
 
