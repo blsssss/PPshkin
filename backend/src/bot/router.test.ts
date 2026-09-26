@@ -114,7 +114,7 @@ describe('bot router', () => {
 
   it('answers unknown commands with help', async () => {
     const chat = consentedChat();
-    expect(texts(await chat.send('/eat'))[0]).toContain('**Что я умею**');
+    expect(texts(await chat.send('/settings'))[0]).toContain('**Что я умею**');
     expect(texts(await chat.send('/unknown with args'))[0]).toContain('**Что я умею**');
   });
 

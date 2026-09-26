@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { botChat, GUEST_ID, sent, texts, type BotChat } from '../../../test/bot.ts';
+import { botChat, GUEST_ID, labels, payloads, sent, texts, type BotChat } from '../../../test/bot.ts';
 import { sampleDeal, sampleMenuItem, sampleVenue } from '../../../test/venues.ts';
 import type { DealCardView, VenueDetailsView } from '../../services/catalog.ts';
 import { notFound } from '../../shared/errors.ts';
@@ -47,7 +47,33 @@ describe('start links', () => {
         'Эклер: 130 ₽ вместо 200 ₽, около 330 ккал, до 14:00, осталось 3 шт.',
       ].join('\n'),
     );
-    expect(reply?.buttons).toEqual([[ROUTE]]);
+    expect(reply?.buttons).toEqual([
+      [{ type: 'callback', text: 'Забронировать: Эклер, 130 ₽', payload: 'bk:new:11:21:0' }],
+      [ROUTE],
+    ]);
+  });
+
+  it('offers to book only running deals of an open venue', async () => {
+    const chat = consentedChat();
+    const view = (id: number, status: 'active' | 'scheduled' | 'sold_out', name: string) => ({
+      deal: { ...sampleDeal, id },
+      item: { ...sampleMenuItem, id: id + 100, name },
+      status,
+    });
+    const deals = [
+      view(31, 'active', 'Очень длинное название десерта дня от шефа с ягодами'),
+      view(32, 'scheduled', 'Пирог'),
+      view(33, 'sold_out', 'Кекс'),
+    ];
+    chat.world.services.catalog.venue = () => Promise.resolve({ ...details, deals });
+
+    const [open] = sent(await chat.start('v_7'));
+    expect(payloads(open)).toEqual(['bk:new:131:31:0']);
+    expect(labels(open)[0]).toBe('Забронировать: Очень длинное название десерта дня от ш…, 130 ₽');
+
+    chat.world.services.catalog.venue = () => Promise.resolve({ ...details, openNow: false, deals });
+    const [closed] = sent(await chat.start('v_7'));
+    expect(payloads(closed)).toEqual([]);
   });
 
   it('marks demo venues, lists at most five deals and links to the mini app', async () => {
@@ -106,6 +132,7 @@ describe('start links', () => {
       ].join('\n'),
     );
     expect(reply?.buttons).toEqual([
+      [{ type: 'callback', text: 'Забронировать', payload: 'bk:new:11:21:0' }],
       [
         ROUTE,
         {
@@ -115,6 +142,17 @@ describe('start links', () => {
         },
       ],
     ]);
+  });
+
+  it('does not offer to book a deal that has not started yet', async () => {
+    const chat = consentedChat();
+    chat.world.services.catalog.deal = () =>
+      Promise.resolve({ ...card, deal: { ...card.deal, status: 'scheduled' } });
+
+    const [reply] = sent(await chat.start('d_21'));
+
+    expect(payloads(reply)).toEqual([]);
+    expect(reply?.buttons).toEqual([[ROUTE]]);
   });
 
   it('warns that the venue of a deal is closed and escapes venue names', async () => {
@@ -144,7 +182,7 @@ describe('start links', () => {
     const [reply] = sent(await chat.start(payload));
 
     expect(reply?.text).toBe('Это предложение уже закончилось.');
-    expect(reply?.buttons).toEqual([[{ type: 'callback', text: 'Помощь', payload: 'cmd:help' }]]);
+    expect(reply?.buttons).toEqual([[{ type: 'callback', text: 'Что поесть?', payload: 'cmd:eat' }]]);
   });
 
   it.each(['v_abc', 'd_0'])('treats %s as a finished offer without asking the catalog', async (payload) => {

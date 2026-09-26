@@ -123,6 +123,14 @@ describe('bot texts', () => {
     expect(errorText('demo_account_protected')).toBe('Демо-аккаунт удалить нельзя.');
     expect(errorText('validation_failed')).toBe('Проверьте ввод и попробуйте ещё раз.');
     expect(errorText('eaten_at_out_of_range')).toBe('Проверьте ввод и попробуйте ещё раз.');
+    expect(errorText('too_many_bookings')).toBe(
+      'У вас уже 3 активные брони. Лишнюю можно отменить в /bookings.',
+    );
+    expect(errorText('deal_sold_out')).toBe('Эту позицию уже разобрали. Посмотрим другое: /eat');
+    expect(errorText('deal_not_found')).toBe('Позиция больше недоступна. Посмотрим другое: /eat');
+    expect(errorText('booking_expired')).toBe('Бронь уже не активна.');
+    expect(errorText('offer_not_found')).toBe('Не нашёл: запись уже удалена или устарела.');
+    expect(errorText('offer_already_accepted')).toBe('По этому предложению уже есть бронь, код в /bookings.');
     expect(errorText('toString')).toBeNull();
     expect(errorText('something_else')).toBeNull();
   });

@@ -4,7 +4,9 @@ import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
 import type { Clock } from '../shared/clock.ts';
 import type { BotKit } from './context.ts';
+import { createBookingsModule } from './guest/bookings.ts';
 import { createMealsModule } from './guest/meals.ts';
+import { createOffersModule } from './guest/offers.ts';
 import { createOnboardingModule } from './guest/onboarding.ts';
 import { createProfileModule } from './guest/profile.ts';
 import { createVenuesModule } from './guest/venues.ts';
@@ -23,7 +25,14 @@ export interface BotDependencies {
   miniAppEnabled: boolean;
 }
 
-const GUEST_MODULES = [createOnboardingModule, createMealsModule, createProfileModule, createVenuesModule];
+const GUEST_MODULES = [
+  createOnboardingModule,
+  createMealsModule,
+  createOffersModule,
+  createBookingsModule,
+  createProfileModule,
+  createVenuesModule,
+];
 
 export function createBot(deps: BotDependencies): UpdateHandler {
   const registry = createRegistry();
