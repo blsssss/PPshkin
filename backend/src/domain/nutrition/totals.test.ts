@@ -43,8 +43,11 @@ describe('daily totals', () => {
     });
   });
 
-  it('returns empty totals for a day without meals', () => {
-    expect(dayTotals([])).toEqual(EMPTY_TOTALS);
+  it('returns fresh empty totals for a day without meals', () => {
+    const totals = dayTotals([]);
+    expect(totals).toEqual(EMPTY_TOTALS);
+    expect(totals).not.toBe(EMPTY_TOTALS);
+    expect(Object.isFrozen(EMPTY_TOTALS)).toBe(true);
   });
 
   it('never reports a negative remaining budget', () => {

@@ -45,8 +45,9 @@ const shutdown = async (signal: NodeJS.Signals) => {
   if (closing) return;
   closing = true;
   app.log.info({ signal }, 'shutting down');
+  background.stop();
   await app.close();
-  await background.idle();
+  await background.idle(10_000);
   await pool.end();
   process.exit(0);
 };

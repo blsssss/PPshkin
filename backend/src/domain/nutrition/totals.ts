@@ -10,7 +10,7 @@ export interface DayTotals {
   carbsG: number;
 }
 
-export const EMPTY_TOTALS: DayTotals = {
+export const EMPTY_TOTALS: Readonly<DayTotals> = Object.freeze({
   meals: 0,
   kcalMin: 0,
   kcalMax: 0,
@@ -18,7 +18,7 @@ export const EMPTY_TOTALS: DayTotals = {
   proteinG: 0,
   fatG: 0,
   carbsG: 0,
-};
+});
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
@@ -37,7 +37,7 @@ export function dayTotals(meals: readonly Meal[]): DayTotals {
       fatG: round1(sum.fatG + (meal.fatG ?? 0)),
       carbsG: round1(sum.carbsG + (meal.carbsG ?? 0)),
     }),
-    EMPTY_TOTALS,
+    { ...EMPTY_TOTALS },
   );
 }
 

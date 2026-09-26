@@ -31,6 +31,27 @@ describe('background tasks', () => {
     );
   });
 
+  it('refuses new tasks after stop and gives up waiting after the timeout', async () => {
+    const logger = { error: vi.fn() };
+    const tasks = createBackgroundTasks(logger);
+    tasks.run('slow', () => new Promise((resolve) => setTimeout(resolve, 200)));
+    tasks.stop();
+    expect(tasks.run('late', () => Promise.resolve())).toBe(false);
+    expect(await tasks.idle(10)).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith({ pending: 1 }, 'background tasks abandoned on shutdown');
+    expect(await tasks.idle(1_000)).toBe(true);
+  });
+
+  it('survives a logger that throws', async () => {
+    const tasks = createBackgroundTasks({
+      error: () => {
+        throw new Error('logger is broken');
+      },
+    });
+    tasks.run('broken', () => Promise.reject(new Error('boom')));
+    await expect(tasks.idle()).resolves.toBe(true);
+  });
+
   it('waits for tasks started by other tasks', async () => {
     const tasks = createBackgroundTasks({ error: vi.fn() });
     const done: string[] = [];

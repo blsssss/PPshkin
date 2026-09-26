@@ -69,6 +69,17 @@ describe('OpenAPI document', () => {
     }
   });
 
+  it('documents upload failures on every multipart operation', () => {
+    for (const { path, method, operation } of operations) {
+      const body = operation.requestBody as OpenAPIV3_1.RequestBodyObject | undefined;
+      if (!body?.content['multipart/form-data']) continue;
+      const statuses = Object.keys(operation.responses ?? {});
+      expect(statuses, `${method.toUpperCase()} ${path}`).toEqual(
+        expect.arrayContaining(['400', '413', '415']),
+      );
+    }
+  });
+
   it('protects every API operation except sign in', () => {
     const open = operations
       .filter(({ path }) => path.startsWith('/api/'))

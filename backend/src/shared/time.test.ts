@@ -34,12 +34,33 @@ describe('local time helpers', () => {
     expect(to.toISOString()).toBe('2026-03-29T22:00:00.000Z');
   });
 
+  it('starts the day at the first local midnight when clocks jump at midnight', () => {
+    const santiago = dayRange('2026-09-06', 'America/Santiago');
+    expect(localDate(santiago.from, 'America/Santiago')).toBe('2026-09-06');
+    expect(localDate(new Date(santiago.from.getTime() - 1), 'America/Santiago')).toBe('2026-09-05');
+    expect(santiago.to.getTime() - santiago.from.getTime()).toBe(23 * 3600 * 1000);
+
+    const azores = dayRange('2026-03-29', 'Atlantic/Azores');
+    expect(localDate(azores.from, 'Atlantic/Azores')).toBe('2026-03-29');
+    expect(localDate(new Date(azores.from.getTime() - 1), 'Atlantic/Azores')).toBe('2026-03-28');
+  });
+
+  it('starts the day at the first midnight when clocks fall back over midnight', () => {
+    const { from } = dayRange('2014-10-26', 'Asia/Magadan');
+    expect(localDate(from, 'Asia/Magadan')).toBe('2014-10-26');
+    expect(localDate(new Date(from.getTime() - 1), 'Asia/Magadan')).toBe('2014-10-25');
+  });
+
   it('validates time zones and calendar dates', () => {
     expect(isValidTimeZone('Europe/Moscow')).toBe(true);
+    expect(isValidTimeZone('UTC')).toBe(true);
     expect(isValidTimeZone('Mars/Olympus')).toBe(false);
+    expect(isValidTimeZone('+03:00')).toBe(false);
+    expect(isValidTimeZone('europe/moscow')).toBe(false);
     expect(isLocalDate('2026-02-28')).toBe(true);
     expect(isLocalDate('2026-02-30')).toBe(false);
     expect(isLocalDate('26-02-01')).toBe(false);
+    expect(isLocalDate('0050-06-01')).toBe(false);
   });
 
   it('adds days across month and year boundaries', () => {
@@ -64,5 +85,11 @@ describe('isOpenAt', () => {
 
   it('treats equal opening and closing time as round the clock', () => {
     expect(isOpenAt('00:00', '00:00', at('2026-09-25T01:00:00Z'), 'Europe/Moscow')).toBe(true);
+  });
+
+  it('treats malformed hours as closed', () => {
+    expect(isOpenAt('08:00', 'garbage', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
+    expect(isOpenAt('', '', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
+    expect(isOpenAt('25:00', '22:00', at('2026-09-25T07:00:00Z'), 'Europe/Moscow')).toBe(false);
   });
 });
