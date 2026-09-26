@@ -12,6 +12,9 @@ import { LocationStep } from '../features/onboarding/LocationStep.tsx';
 import { OffersStep } from '../features/onboarding/OffersStep.tsx';
 import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
 import { ProfileScreen } from '../features/profile/ProfileScreen.tsx';
+import { VenueHomeScreen, VenueLinkScreen, VenueSettingsScreen } from '../features/venue/CabinetScreens.tsx';
+import { ImportReviewScreen, ImportStartScreen } from '../features/venue/ImportScreens.tsx';
+import { EditItemScreen, MenuScreen, NewItemScreen } from '../features/venue/MenuScreens.tsx';
 import {
   ConsentTextScreen,
   DeleteAccountScreen,
@@ -48,7 +51,15 @@ export const appRoutes: RouteObject[] = [
       { path: 'bookings', element: <StubScreen title="Брони" /> },
       { path: 'bookings/new', element: <StubScreen title="Бронь" back="/bookings" /> },
       { path: 'bookings/:id', element: <StubScreen title="Бронь" back="/bookings" /> },
-      { path: 'venue/*', element: <StubScreen title="Моё заведение" /> },
+      { path: 'venue', element: <VenueHomeScreen /> },
+      { path: 'venue/settings', element: <VenueSettingsScreen /> },
+      { path: 'venue/link', element: <VenueLinkScreen /> },
+      { path: 'venue/menu', element: <MenuScreen /> },
+      { path: 'venue/menu/new', element: <NewItemScreen /> },
+      { path: 'venue/menu/import', element: <ImportStartScreen /> },
+      { path: 'venue/menu/import/:importId', element: <ImportReviewScreen /> },
+      { path: 'venue/menu/:itemId', element: <EditItemScreen /> },
+      { path: 'venue/*', element: <Navigate to="/venue" replace /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/target', element: <TargetScreen /> },
       { path: 'profile/tags', element: <TagsScreen /> },

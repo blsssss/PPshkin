@@ -9,12 +9,13 @@ describe('parseStartParam', () => {
     ['venue_900001', '/venues/900001'],
     ['deal_42', '/deals?highlight=42'],
     ['booking_7', '/bookings/7'],
+    ['import_5', '/venue/menu/import/5'],
   ])('%s opens %s', (value, path) => {
     expect(parseStartParam(value)).toBe(path);
     expect(resolveStartParam(value).recognized).toBe(true);
   });
 
-  it.each(['unknown', 'venue_', 'venue_abc', 'venue_0', 'deal_1_2', 'booking_-1', 'import_5', 'v_1'])(
+  it.each(['unknown', 'venue_', 'venue_abc', 'venue_0', 'deal_1_2', 'booking_-1', 'import_x', 'v_1'])(
     '%s falls back to the diary with a toast',
     (value) => {
       expect(resolveStartParam(value)).toEqual({ path: '/diary', recognized: false });

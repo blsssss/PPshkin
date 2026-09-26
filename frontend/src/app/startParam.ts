@@ -9,6 +9,7 @@ export const START_ROUTES: readonly { prefix: string; path: (id: string) => stri
   { prefix: 'venue_', path: (id) => `/venues/${id}` },
   { prefix: 'deal_', path: (id) => `/deals?highlight=${id}` },
   { prefix: 'booking_', path: (id) => `/bookings/${id}` },
+  { prefix: 'import_', path: (id) => `/venue/menu/import/${id}` },
 ];
 
 export interface StartTarget {

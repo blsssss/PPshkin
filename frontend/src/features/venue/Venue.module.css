@@ -1,0 +1,290 @@
+.muted {
+  margin: 6px 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.meta {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 0;
+  color: inherit;
+  background: var(--ppsh-panel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--ppsh-violet);
+  content: '';
+}
+
+.tileTitle {
+  font-family: var(--ppsh-font-mono);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sectionTitle {
+  margin: 24px 0 8px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.select,
+.time,
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0;
+  color: var(--text-primary);
+  background: var(--ppsh-panel);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.textarea {
+  min-height: 200px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.field {
+  min-width: 0;
+  margin: 0 0 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.error {
+  margin: 6px 0 0;
+  color: var(--text-negative);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.inlineButton {
+  display: inline;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--ppsh-accent-text);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qr {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0 16px;
+  padding: 16px;
+  background: #fff;
+}
+
+.qr img {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.link {
+  overflow-wrap: anywhere;
+  margin: 0 0 12px;
+  font-family: var(--ppsh-font-mono);
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group {
+  margin: 0 0 16px;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--ppsh-panel);
+}
+
+.itemMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.itemName {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.hidden {
+  opacity: 0.6;
+}
+
+.switchLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reviewRow {
+  padding: 12px 16px;
+  background: var(--ppsh-panel);
+}
+
+.reviewRow[data-invalid='true'] {
+  outline: 2px solid var(--ppsh-pink);
+}
+
+.reviewHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.reviewSummary {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reviewFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+  margin-top: 12px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.counter {
+  margin: 8px 0;
+  font-family: var(--ppsh-font-mono);
+  font-weight: 700;
+}
+
+@media (min-width: 768px) {
+  .reviewFields .grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.switchRowInline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 8px 0 0;
+  font-weight: 600;
+}
+
+.grid > .field {
+  margin: 0;
+}

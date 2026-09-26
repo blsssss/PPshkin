@@ -28,6 +28,16 @@ const MESSAGES: Record<string, string> = {
   user_not_found: 'Аккаунт удалён, войдите заново',
   demo_account_protected: 'Демо-аккаунт удалить нельзя, он общий для всех проверяющих',
   delete_account_instead: 'Чтобы отозвать согласие на обработку данных, удалите аккаунт',
+  venue_not_found: 'У вас пока нет заведения',
+  venue_exists: 'У вас уже есть заведение',
+  menu_item_not_found: 'Позиция не найдена, возможно, её уже удалили',
+  deal_price_not_lower: 'Есть горящее предложение по цене не ниже новой. Снимите его или укажите цену выше',
+  import_not_found: 'Импорт не найден',
+  import_in_progress: 'Предыдущее меню ещё распознаётся',
+  import_limit_reached:
+    'Сегодня загружено 20 меню, это дневной лимит. Добавьте позиции вручную или попробуйте завтра',
+  import_not_ready: 'Распознавание ещё не закончилось',
+  import_already_applied: 'Эти позиции уже добавлены в меню',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
