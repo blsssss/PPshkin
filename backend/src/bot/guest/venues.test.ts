@@ -190,11 +190,6 @@ describe('start links', () => {
     expect(texts(await chat.start(payload))).toEqual(['Это предложение уже закончилось.']);
   });
 
-  it('answers staff links with help until the venue module handles them', async () => {
-    const chat = consentedChat();
-    expect(texts(await chat.start('r_K7M2QX'))[0]).toContain('**Что я умею**');
-  });
-
   it('greets as usual for an unknown payload', async () => {
     const chat = consentedChat();
     expect(texts(await chat.start('promo-2026'))).toEqual([

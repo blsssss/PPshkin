@@ -85,6 +85,7 @@ const botRuntime =
     clock: systemClock,
     logger: botLogger,
     miniAppEnabled: config.MINI_APP_ENABLED,
+    background,
   });
 const jobs = createJobs({ config, db: pool, services, messenger: botMessenger, logger: botLogger });
 const lockPool = createPool(config.DATABASE_URL, {

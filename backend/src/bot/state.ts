@@ -4,6 +4,7 @@ import { onlyKnownTags } from '../domain/vocabulary.ts';
 import * as chatStates from '../repositories/chat-states.ts';
 import { isLocalDate } from '../shared/time.ts';
 import { OfferQueueSchema } from './guest/offer-card.ts';
+import { VENUE_FLOWS } from './venue/flows.ts';
 
 export const FLOW_TTL_MS = 30 * 60_000;
 
@@ -33,6 +34,7 @@ const FlowSchema = z.discriminatedUnion('name', [
     candidates: z.array(MealCandidateSchema).min(1),
     messageId,
   }),
+  ...VENUE_FLOWS,
 ]);
 
 const ActiveFlowSchema = FlowSchema.and(z.object({ expiresAt: z.iso.datetime() }));

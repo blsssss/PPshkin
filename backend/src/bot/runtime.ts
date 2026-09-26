@@ -8,6 +8,7 @@ import { realSleep, sleepUnlessAborted, type Sleep } from '../integrations/max/s
 import { createMaxTransport, type MaxTransport } from '../integrations/max/transport.ts';
 import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
+import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import { BOT_COMMANDS } from './commands.ts';
 import { withFallbackReply } from './failures.ts';
@@ -43,6 +44,7 @@ export interface BotRuntimeOptions {
   clock: Clock;
   logger: MaxLogger;
   miniAppEnabled: boolean;
+  background: BackgroundTasks;
   states?: ChatStateStore;
   sleep?: Sleep;
 }
@@ -79,6 +81,8 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
       logger,
       bot: { username: me.username, userId: me.user_id },
       miniAppEnabled: options.miniAppEnabled,
+      background: options.background,
+      sleep: (ms) => sleepUnlessAborted(sleep, ms, lifetime.signal),
     });
     const handler = withFallbackReply(createDedupingHandler(pool, bot), { messenger, logger });
     const started = createMaxTransport({

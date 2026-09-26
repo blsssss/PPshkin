@@ -7,6 +7,7 @@ import type { Queryable } from '../db/pool.ts';
 import type { MaxApi } from '../integrations/max/api.ts';
 import { MaxApiError } from '../integrations/max/errors.ts';
 import type { IncomingEvent } from '../ports/messenger.ts';
+import { createBackgroundTasks } from '../shared/background.ts';
 import { BOT_COMMANDS } from './commands.ts';
 import { createBotRuntime, maxBotSettings, type MaxBotSettings } from './runtime.ts';
 
@@ -60,6 +61,7 @@ function runtime(settings: MaxBotSettings, api: MaxApi, sleep = vi.fn(() => Prom
     clock: { now: () => new Date('2026-09-26T09:00:00Z') },
     logger,
     miniAppEnabled: false,
+    background: createBackgroundTasks(logger),
     states,
     sleep,
   });
