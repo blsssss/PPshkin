@@ -139,9 +139,9 @@ describe('bot router', () => {
     await chat.press('ml:manual', 'mid.old');
     chat.world.clock.advance(FLOW_TTL_MS);
 
-    const replies = await chat.send('Плов');
+    const replies = await chat.send('Ёжик в тумане');
 
-    expect(texts(replies)).toEqual(['Записать «Плов» в дневник?']);
+    expect(texts(replies)).toEqual(['Записать «Ёжик в тумане» в дневник?']);
     expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_text_confirm' });
   });
 

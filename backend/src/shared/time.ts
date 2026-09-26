@@ -4,6 +4,7 @@ export interface LocalParts {
   minute: number;
 }
 
+const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/;
 
@@ -86,8 +87,8 @@ function localMidnight(date: string, timeZone: string): Date {
     .sort((left, right) => left - right);
   const earliest = candidates[0] ?? naive - offsetMs(naive, timeZone);
   let start = earliest;
-  while (localDate(new Date(start - 60_000), timeZone) === date) {
-    start -= 60_000;
+  while (localDate(new Date(start - MINUTE_MS), timeZone) === date) {
+    start -= MINUTE_MS;
   }
   return new Date(start);
 }
@@ -121,4 +122,28 @@ export function isOpenAt(opensAt: string, closesAt: string, instant: Date, timeZ
   const now = hour * 60 + minute;
   if (open === close) return true;
   return open < close ? now >= open && now < close : now >= open || now < close;
+}
+
+function atLocalTime(date: string, minutes: number, timeZone: string): Date {
+  const wall = utcMidnight(date) + minutes * MINUTE_MS;
+  const before = wall - offsetMs(wall - DAY_MS, timeZone);
+  const after = wall - offsetMs(wall + DAY_MS, timeZone);
+  const earlier = Math.min(before, after);
+  const shows = (instant: number) => {
+    const parts = localParts(new Date(instant), timeZone);
+    return parts.date === date && parts.hour * 60 + parts.minute === minutes;
+  };
+  return new Date([earlier, Math.max(before, after)].find(shows) ?? earlier);
+}
+
+export function nextClosingAt(opensAt: string, closesAt: string, now: Date, timeZone: string): Date | null {
+  const open = minutesOfDay(opensAt);
+  const close = minutesOfDay(closesAt);
+  if (open === null || close === null) {
+    throw new RangeError(`Invalid opening hours ${opensAt}-${closesAt}`);
+  }
+  if (open === close) return null;
+  const today = localDate(now, timeZone);
+  const closing = atLocalTime(today, close, timeZone);
+  return closing > now ? closing : atLocalTime(addDays(today, 1), close, timeZone);
 }
