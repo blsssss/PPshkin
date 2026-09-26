@@ -61,6 +61,14 @@ const ok = () => json({ success: true });
 const sent = (mid = 'mid.1') => json({ message: { body: { mid, seq: 1, text: 'hi' } } });
 const notReady = () => json({ code: 'attachment.not.ready', message: 'Key: errors.process.attachment' }, 400);
 
+function breakingBody(pull: () => Promise<never>) {
+  return new Response(new ReadableStream<Uint8Array>({ pull }), {
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+const brokenBody = (cause: Error) => breakingBody(() => Promise.reject(cause));
+
 function setup(replies: Reply[], options: { sleep?: (ms: number) => Promise<void>; baseUrl?: string } = {}) {
   let time = 0;
   const sleeps: number[] = [];
@@ -415,6 +423,29 @@ describe('MAX API errors', () => {
     await expect(api.getMe()).rejects.toMatchObject({ code: 'unexpected.response' });
   });
 
+  it('reports a body that breaks off as a network error without sending the request again', async () => {
+    const cause = new TypeError('terminated');
+    const { api, requests, sleeps } = setup([brokenBody(cause)]);
+    const error = await api.sendMessage({ userId: 1 }, { text: 'x' }).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(MaxApiError);
+    expect(error).toMatchObject({ status: 0, code: 'network.error', cause });
+    expect(requests).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it('reports a cancellation by the caller while the body is read as an abort', async () => {
+    const controller = new AbortController();
+    const { api, requests } = setup([(request) => breakingBody(() => waitForAbort(request.signal))]);
+    const pending = api.getUpdates({ timeoutSeconds: 30, types: [], signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(1);
+    });
+    controller.abort();
+    const error = await pending.catch((failure: unknown) => failure);
+    expect(error).not.toBeInstanceOf(MaxApiError);
+    expect(error).toMatchObject({ name: 'AbortError' });
+  });
+
   it('keeps the token out of error messages', async () => {
     const { api } = setup([json({ code: 'verify.token', message: `Token ${TOKEN} is revoked` }, 401)]);
     await expect(api.getMe()).rejects.toThrow(/^Token \[token\] is revoked$/);
@@ -433,6 +464,46 @@ describe('MAX API rate limits', () => {
     await api.sendMessage({ userId: 2 }, { text: 'c' });
     expect(sleeps).toEqual([]);
     await api.sendMessage({ userId: 1 }, { text: 'd' });
+    expect(sleeps).toEqual([1000]);
+  });
+
+  const keyedCalls: [string, (api: MaxApi) => Promise<unknown>, (api: MaxApi) => Promise<unknown>][] = [
+    [
+      'a chat for messages and typing',
+      (api) => api.sendAction(5, 'typing_on'),
+      (api) => api.sendMessage({ chatId: 5 }, { text: 'x' }),
+    ],
+    [
+      'one message for edits',
+      (api) => api.editMessage('mid.1', { text: 'x' }),
+      (api) => api.editMessage('mid.1', { text: 'y' }),
+    ],
+    [
+      'one callback for answers',
+      (api) => api.answerCallback('cb.1', {}),
+      (api) => api.answerCallback('cb.1', { notification: 'x' }),
+    ],
+  ];
+
+  it.each(keyedCalls)('spaces requests to %s', async (_name, first, second) => {
+    const { api, sleeps } = setup([sent(), sent(), sent(), sent(), sent(), sent()]);
+    await first(api);
+    await second(api);
+    await api.sendMessage({ userId: 5 }, { text: 'other key' });
+    await api.editMessage('mid.2', { text: 'other key' });
+    await api.answerCallback('cb.2', {});
+    expect(sleeps).toEqual([]);
+    await first(api);
+    expect(sleeps).toEqual([1000]);
+  });
+
+  it('holds other methods only to the global limit of 25 requests per second', async () => {
+    const { api, sleeps } = setup(Array.from({ length: 26 }, () => json(botInfo)));
+    for (let request = 0; request < 25; request += 1) {
+      await api.getMe();
+    }
+    expect(sleeps).toEqual([]);
+    await api.getMe();
     expect(sleeps).toEqual([1000]);
   });
 });
@@ -541,6 +612,14 @@ describe('MAX file downloads', () => {
     const error = await api.download(photoUrl, 10).catch((failure: unknown) => failure);
     expect(error).toBeInstanceOf(DownloadTooLargeError);
     expect(pulled).toBeLessThan(10);
+  });
+
+  it('reports a file that breaks off as a network error', async () => {
+    const cause = new TypeError('terminated');
+    const { api } = setup([brokenBody(cause)]);
+    const error = await api.download(photoUrl, 1024).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(MaxApiError);
+    expect(error).toMatchObject({ status: 0, code: 'network.error', cause });
   });
 
   it('returns an empty buffer for a response without a body', async () => {

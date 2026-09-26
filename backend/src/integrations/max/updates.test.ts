@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_UPDATE_TYPES, parseUpdate } from './updates.ts';
+import { MAX_UPDATE_TYPES, parseUpdate, updateTypeOf } from './updates.ts';
 
 const TIMESTAMP = 1_790_000_000_123;
 
@@ -233,6 +233,25 @@ describe('parseUpdate', () => {
     ];
     for (const input of inputs) {
       expect(parseUpdate(input)).toBeNull();
+    }
+  });
+});
+
+describe('updateTypeOf', () => {
+  it('reads the update type for logs from any input', () => {
+    expect(updateTypeOf({ update_type: 'message_edited', timestamp: TIMESTAMP })).toBe('message_edited');
+    expect(updateTypeOf(messageCreated({ text: 'Привет' }))).toBe('message_created');
+    for (const input of [
+      null,
+      undefined,
+      'bot_started',
+      42,
+      [],
+      {},
+      { update_type: 7 },
+      { type: 'bot_started' },
+    ]) {
+      expect(updateTypeOf(input)).toBeNull();
     }
   });
 });

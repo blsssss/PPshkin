@@ -1,26 +1,31 @@
 import type { FastifyInstance } from 'fastify';
 import type { QueryResult, QueryResultRow } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildTestApp } from '../../../test/services.ts';
+import { buildTestApp, fakeServices, testConfig } from '../../../test/services.ts';
 import type { Queryable } from '../../db/pool.ts';
 import { createDedupingHandler } from '../../integrations/max/dedupe.ts';
-import type { UpdateHandler } from '../../ports/messenger.ts';
+import type { IncomingEvent, UpdateHandler } from '../../ports/messenger.ts';
 import { createBackgroundTasks } from '../../shared/background.ts';
+import { buildApp } from '../app.ts';
 import { maxWebhookRoutes } from './max-webhook.ts';
 
 const SECRET = 'hook_secret-1';
 
-const update = {
-  update_type: 'message_created',
-  timestamp: 1_790_000_000_000,
-  user_locale: 'ru',
-  message: {
-    sender: { user_id: 101, first_name: 'Анна', username: null, is_bot: false },
-    recipient: { chat_id: 555, chat_type: 'dialog', user_id: 700 },
+function textFrom(userId: number, mid: string) {
+  return {
+    update_type: 'message_created',
     timestamp: 1_790_000_000_000,
-    body: { mid: 'mid.1', seq: 1, text: 'Привет', attachments: [] },
-  },
-};
+    user_locale: 'ru',
+    message: {
+      sender: { user_id: userId, first_name: 'Анна', username: null, is_bot: false },
+      recipient: { chat_id: userId + 1000, chat_type: 'dialog', user_id: 700 },
+      timestamp: 1_790_000_000_000,
+      body: { mid, seq: 1, text: 'Привет', attachments: [] },
+    },
+  };
+}
+
+const update = textFrom(101, 'mid.1');
 
 const hiddenRoute = {
   type: 'about:blank',
@@ -36,15 +41,27 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
+type LogEntry = Record<string, unknown>;
+
 async function start(handler: UpdateHandler, env: Record<string, string> = {}) {
-  const background = createBackgroundTasks({ error: vi.fn() });
-  const app = await buildTestApp({
-    env,
-    extend: (server) => {
-      void server.register(maxWebhookRoutes, { secret: SECRET, handler, background });
+  const logs: LogEntry[] = [];
+  const backgroundLogger = { error: vi.fn() };
+  const background = createBackgroundTasks(backgroundLogger);
+  const app = await buildApp({
+    config: testConfig(env),
+    services: fakeServices(),
+    logger: {
+      level: 'debug',
+      stream: {
+        write: (line: string) => {
+          logs.push(JSON.parse(line) as LogEntry);
+        },
+      },
     },
   });
   apps.push(app);
+  await app.register(maxWebhookRoutes, { secret: SECRET, handler, background });
+  await app.ready();
   const deliver = (payload: unknown, secret: string | null = SECRET) =>
     app.inject({
       method: 'POST',
@@ -55,8 +72,10 @@ async function start(handler: UpdateHandler, env: Record<string, string> = {}) {
       },
       payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
     });
-  return { app, background, deliver };
+  return { app, background, backgroundLogger, deliver, logs };
 }
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function memoryDatabase(): Queryable {
   const keys = new Set<string>();
@@ -136,6 +155,56 @@ describe('POST /max/webhook', () => {
     }
     await background.idle();
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('handles updates of one guest in order and of different guests at once', async () => {
+    const { promise: firstGate, resolve: openFirst } = Promise.withResolvers<undefined>();
+    const started: string[] = [];
+    const handler = vi.fn(async (event: IncomingEvent) => {
+      const mid = event.type === 'message' ? event.messageId : event.key;
+      started.push(mid);
+      if (mid === 'mid.1') await firstGate;
+    });
+    const { background, deliver } = await start(handler);
+
+    expect((await deliver(textFrom(101, 'mid.1'))).statusCode).toBe(200);
+    await vi.waitFor(() => {
+      expect(started).toEqual(['mid.1']);
+    });
+    expect((await deliver(textFrom(101, 'mid.2'))).statusCode).toBe(200);
+    expect((await deliver(textFrom(102, 'mid.3'))).statusCode).toBe(200);
+    await vi.waitFor(() => {
+      expect(started).toEqual(['mid.1', 'mid.3']);
+    });
+    await settle();
+    expect(started).toEqual(['mid.1', 'mid.3']);
+    expect(background.pending).toBe(2);
+
+    openFirst(undefined);
+    await background.idle();
+    expect(started).toEqual(['mid.1', 'mid.3', 'mid.2']);
+  });
+
+  it('logs the update type of ignored updates and the key of failed ones', async () => {
+    const handler = vi.fn(() => Promise.reject(new Error('handler crashed')));
+    const { background, backgroundLogger, deliver, logs } = await start(handler);
+
+    await deliver({ update_type: 'message_edited', timestamp: 1, message: update.message });
+    await deliver({ unexpected: true });
+    await deliver(update);
+    await background.idle();
+
+    expect(logs.filter((entry) => entry.msg === 'max update ignored')).toMatchObject([
+      { level: 20, update_type: 'message_edited' },
+      { level: 20, update_type: null },
+    ]);
+    expect(logs.filter((entry) => entry.msg === 'max update handler failed')).toMatchObject([
+      { level: 50, key: 'message_created:mid.1:1790000000000', err: { message: 'handler crashed' } },
+    ]);
+    expect(backgroundLogger.error).not.toHaveBeenCalled();
+    const written = JSON.stringify(logs);
+    expect(written).not.toContain('Привет');
+    expect(written).not.toContain(SECRET);
   });
 
   it('does not handle a redelivered update twice', async () => {

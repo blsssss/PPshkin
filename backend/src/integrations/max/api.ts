@@ -111,12 +111,30 @@ function retryDelay(attempt: number, retryAfter: string | null): number {
   return FIRST_RETRY_DELAY_MS * 2 ** (attempt - 1);
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text();
+function unreadableBody(error: unknown): MaxApiError {
+  return new MaxApiError(0, 'network.error', 'MAX response body could not be read', { cause: error });
+}
+
+async function readJson(response: Response, signal?: AbortSignal): Promise<unknown> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw unreadableBody(error);
+  }
   try {
     return JSON.parse(text) as unknown;
   } catch {
     return NOT_JSON;
+  }
+}
+
+async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  try {
+    return await reader.read();
+  } catch (error) {
+    throw unreadableBody(error);
   }
 }
 
@@ -130,7 +148,7 @@ async function readLimited(response: Response, maxBytes: number): Promise<Buffer
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readChunk(reader);
     if (done) return Buffer.concat(chunks, total);
     total += value.byteLength;
     if (total > maxBytes) {
@@ -172,8 +190,13 @@ export function createMaxApi(options: MaxApiOptions): MaxApi {
   const unexpected = (status: number) =>
     new MaxApiError(status, 'unexpected.response', 'MAX answered with an unexpected response body');
 
-  async function decode<T>(response: Response, schema: z.ZodType<T>, recipientCall: boolean): Promise<T> {
-    const body = await readJson(response);
+  async function decode<T>(
+    response: Response,
+    schema: z.ZodType<T>,
+    recipientCall: boolean,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const body = await readJson(response, signal);
     if (!response.ok) throw failure(response.status, body, recipientCall);
     if (body === NOT_JSON) throw unexpected(response.status);
     if (isRecord(body) && body.success === false) {
@@ -237,7 +260,7 @@ export function createMaxApi(options: MaxApiOptions): MaxApi {
       timeoutMs: request.timeoutMs ?? REQUEST_TIMEOUT_MS,
       signal: request.signal,
     });
-    return decode(response, request.schema, request.recipientCall ?? false);
+    return decode(response, request.schema, request.recipientCall ?? false, request.signal);
   }
 
   async function retryUntilAttachmentsReady<T>(send: () => Promise<T>): Promise<T> {

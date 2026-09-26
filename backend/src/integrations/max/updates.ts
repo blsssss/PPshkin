@@ -146,6 +146,11 @@ function toEvent(update: Update): IncomingEvent | null {
   }
 }
 
+export function updateTypeOf(raw: unknown): string | null {
+  const type = typeof raw === 'object' && raw !== null && 'update_type' in raw ? raw.update_type : null;
+  return typeof type === 'string' ? type : null;
+}
+
 export function parseUpdate(raw: unknown): IncomingEvent | null {
   try {
     const parsed = UpdateSchema.safeParse(raw);
