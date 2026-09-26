@@ -162,6 +162,14 @@ describe('loadConfig', () => {
     });
   });
 
+  it('turns the mini app buttons on only when asked', () => {
+    expect(loadConfig(required).MINI_APP_ENABLED).toBe(false);
+    expect(loadConfig({ ...required, MINI_APP_ENABLED: '' }).MINI_APP_ENABLED).toBe(false);
+    expect(loadConfig({ ...required, MINI_APP_ENABLED: 'true' }).MINI_APP_ENABLED).toBe(true);
+    expect(loadConfig({ ...required, MINI_APP_ENABLED: 'false' }).MINI_APP_ENABLED).toBe(false);
+    expect(() => loadConfig({ ...required, MINI_APP_ENABLED: 'maybe' })).toThrow(/MINI_APP_ENABLED/);
+  });
+
   it('rejects unknown bot modes, bad API URLs and bad webhook secrets', () => {
     expect(() => loadConfig({ ...required, BOT_MODE: 'push' })).toThrow(/BOT_MODE/);
     expect(() => loadConfig({ ...required, MAX_API_BASE_URL: 'ftp://max.ru' })).toThrow(/MAX_API_BASE_URL/);

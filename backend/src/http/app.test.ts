@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectContract } from '../../test/contract.ts';
-import { bearer, buildTestApp } from '../../test/services.ts';
+import { bearer, buildTestApp, fakeServices, testConfig } from '../../test/services.ts';
+import { createBackgroundTasks } from '../shared/background.ts';
 import { conflict } from '../shared/errors.ts';
-import { quietestLevel, trustProxyOption } from './app.ts';
+import { buildApp, quietestLevel, trustProxyOption } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
@@ -212,6 +213,38 @@ describe('buildApp', () => {
     const response = await instance.inject({ method: 'GET', url: '/docs/json' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ openapi: '3.1.0', info: { title: 'PPshkin API' } });
+  });
+
+  it('accepts MAX webhook deliveries only when the bot runs in webhook mode', async () => {
+    const handler = vi.fn(() => Promise.resolve());
+    const background = createBackgroundTasks({ error: vi.fn() });
+    app = await buildApp({
+      config: testConfig(),
+      services: fakeServices(),
+      maxWebhook: { secret: 'hook_secret-1', handler, background },
+    });
+    const update = {
+      update_type: 'bot_stopped',
+      timestamp: 1_790_000_000_000,
+      chat_id: 5101,
+      user: { user_id: 101, first_name: 'Анна' },
+    };
+    const delivered = await app.inject({
+      method: 'POST',
+      url: '/max/webhook',
+      headers: { 'x-max-bot-api-secret': 'hook_secret-1' },
+      payload: update,
+    });
+    expect(delivered.statusCode).toBe(200);
+    await background.idle();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'stopped', key: expect.any(String) as unknown }),
+    );
+    await app.close();
+
+    const withoutBot = await start();
+    const missing = await withoutBot.inject({ method: 'POST', url: '/max/webhook', payload: update });
+    expect(missing.statusCode).toBe(404);
   });
 });
 

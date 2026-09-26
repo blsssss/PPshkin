@@ -61,6 +61,7 @@ const baseSchema = z.object({
       .regex(/^[A-Za-z0-9_-]{5,256}$/, 'expected 5 to 256 latin letters, digits, "_" or "-"')
       .optional(),
   ),
+  MINI_APP_ENABLED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
