@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { historyLine, nothingFits, offerFacts, profileCollecting, shortDate } from './offer-texts.ts';
+import {
+  bookDeal,
+  bookingItem,
+  historyLine,
+  nothingFits,
+  offerFacts,
+  profileCollecting,
+} from './offer-texts.ts';
 
 describe('offer texts', () => {
   it.each([
@@ -23,10 +30,12 @@ describe('offer texts', () => {
     expect(nothingFits(420, false)).toMatch(/^Сейчас нет подходящих блюд/);
   });
 
-  it('writes history dates as day and month in the venue time zone', () => {
-    const lateEvening = new Date('2026-09-12T21:30:00Z');
-    expect(shortDate(lateEvening, 'Europe/Moscow')).toBe('13.09');
-    expect(shortDate(lateEvening, 'UTC')).toBe('12.09');
+  it('writes prices in rubles on booking buttons and cards', () => {
+    expect(bookDeal('Эклер', 130)).toBe('Забронировать: Эклер, 130 ₽');
+    expect(bookingItem('Эклер [мини]', 130)).toBe('Эклер \\[мини\\], 130 ₽');
+  });
+
+  it('writes a history line with the booking status', () => {
     expect(historyLine('12.09', 'Эклер [мини]', 'Кофейня «Зерно»', 'redeemed')).toBe(
       '12.09 Эклер \\[мини\\], Кофейня «Зерно»: погашена',
     );

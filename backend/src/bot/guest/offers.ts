@@ -12,7 +12,7 @@ import { localDate } from '../../shared/time.ts';
 import { answerStale, byAction, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
 import { command, placeButtons } from '../keyboards.ts';
-import { startFlow, type ActiveFlow } from '../state.ts';
+import { startFlow, type ActiveFlow, type ChatState } from '../state.ts';
 import { bold, BUTTONS, NOTICES, venuePlace } from '../texts.ts';
 import type { OfferCard, OfferQueue } from './offer-card.ts';
 import {
@@ -43,6 +43,10 @@ import {
 const CONTEXTUAL_MIN_SCORE = 0.5;
 
 const RECOMMENDATION_REQUEST: RecommendationRequest = { location: null, limit: 3, channel: 'bot' };
+const CONTEXTUAL_REQUEST: RecommendationRequest = {
+  ...RECOMMENDATION_REQUEST,
+  minScore: CONTEXTUAL_MIN_SCORE,
+};
 const QUEUE_TTL_MS = 30 * 60_000;
 const LOCATION_STALE_MS = 12 * 3_600_000;
 
@@ -119,6 +123,10 @@ export function isLocationStale({ location, locationUpdatedAt }: Whereabouts, no
   return locationUpdatedAt === null || now.getTime() - locationUpdatedAt.getTime() > LOCATION_STALE_MS;
 }
 
+export function withoutTag(queue: OfferQueue, tag: Tag): OfferQueue {
+  return { ...queue, cards: queue.cards.filter((card, index) => index === 0 || !card.tags.includes(tag)) };
+}
+
 export function shownCard(
   queue: OfferQueue | null,
   messageId: string | null,
@@ -143,6 +151,10 @@ function liveQueue(ctx: BotContext): OfferQueue | null {
 function locationFlow(ctx: BotContext): ActiveFlow | null {
   const flow = ctx.state.flow;
   return flow === null || flow.name === 'eat_location' ? startFlow({ name: 'eat_location' }, ctx.now) : flow;
+}
+
+function queuedState(ctx: BotContext, offerQueue: OfferQueue | null, options: OfferCardOptions): ChatState {
+  return { ...ctx.state, offerQueue, flow: options.locationStale ? locationFlow(ctx) : ctx.state.flow };
 }
 
 function cardOptions(ctx: BotContext, whereabouts: Whereabouts): OfferCardOptions {
@@ -178,7 +190,7 @@ export function createMealSuggestion({ services, logger }: BotKit): (ctx: BotCon
     if (!personalizedOffers.granted) return;
     const { profile } = await insights.get(ctx.user.id);
     if (profile.readiness !== 'ready') return;
-    const result = await recommendations.recommend(ctx.user.id, RECOMMENDATION_REQUEST);
+    const result = await recommendations.recommend(ctx.user.id, CONTEXTUAL_REQUEST);
     if (result.status !== 'ok' || (result.items[0]?.score ?? 0) < CONTEXTUAL_MIN_SCORE) return;
     const cards = result.items.map(toOfferCard);
     const [first] = cards;
@@ -187,10 +199,8 @@ export function createMealSuggestion({ services, logger }: BotKit): (ctx: BotCon
     const card = renderOfferCard(first, options);
     const sent = await ctx.reply({ ...card, buttons: [...(card.buttons ?? []), ...stopHintsButtons()] });
     await ctx.saveState({
-      ...ctx.state,
+      ...queuedState(ctx, queueOf(sent.messageId, cards, ctx.now), options),
       contextualOfferOn: today,
-      offerQueue: queueOf(sent.messageId, cards, ctx.now),
-      flow: options.locationStale ? locationFlow(ctx) : ctx.state.flow,
     });
   }
 
@@ -237,11 +247,7 @@ export function createOffersModule({ services }: BotKit): BotModule {
     const { readiness, mealsUntilReady } = insight.profile;
     const note = readiness === 'collecting' ? profileCollecting(mealsUntilReady) : null;
     const messageId = await deliver(note === null ? card : { ...card, text: `${note}\n\n${card.text}` });
-    await ctx.saveState({
-      ...ctx.state,
-      offerQueue: queueOf(messageId, cards, ctx.now),
-      flow: options.locationStale ? locationFlow(ctx) : ctx.state.flow,
-    });
+    await ctx.saveState(queuedState(ctx, queueOf(messageId, cards, ctx.now), options));
   }
 
   async function eat(ctx: BotContext): Promise<void> {
@@ -254,6 +260,10 @@ export function createOffersModule({ services }: BotKit): BotModule {
   }
 
   async function searchAnywhere(ctx: BotContext): Promise<void> {
+    if (ctx.user.location !== null) {
+      await ctx.answer({ notification: NOTICES.staleButton });
+      return;
+    }
     const pressed = ctx.callbackMessageId;
     if (pressed !== null && ctx.state.offerQueue?.messageId === pressed) {
       await ctx.answer({ notification: NOTICES.pressedButton });
@@ -274,8 +284,9 @@ export function createOffersModule({ services }: BotKit): BotModule {
       await ctx.answer({ notification: OFFER_NOTICES.noMoreOffers });
       return;
     }
-    await ctx.saveState({ ...ctx.state, offerQueue: { ...queue, cards: [next, ...rest] } });
-    await ctx.answer({ message: renderOfferCard(next, cardOptions(ctx, ctx.user)) });
+    const options = cardOptions(ctx, ctx.user);
+    await ctx.saveState(queuedState(ctx, { ...queue, cards: [next, ...rest] }, options));
+    await ctx.answer({ message: renderOfferCard(next, options) });
   }
 
   async function decline(
@@ -299,11 +310,11 @@ export function createOffersModule({ services }: BotKit): BotModule {
       await ctx.saveState({ ...ctx.state, offerQueue: null });
       return;
     }
-    const sent = await ctx.reply(renderOfferCard(next, cardOptions(ctx, ctx.user)));
-    await ctx.saveState({
-      ...ctx.state,
-      offerQueue: { ...queue, messageId: sent.messageId, cards: [next, ...rest] },
-    });
+    const options = cardOptions(ctx, ctx.user);
+    const sent = await ctx.reply(renderOfferCard(next, options));
+    await ctx.saveState(
+      queuedState(ctx, { ...queue, messageId: sent.messageId, cards: [next, ...rest] }, options),
+    );
   }
 
   return {

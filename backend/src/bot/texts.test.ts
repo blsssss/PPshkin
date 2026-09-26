@@ -15,6 +15,7 @@ import {
   macros,
   openingStatus,
   RECORD_FORMS,
+  shortDate,
   splitText,
   todayTotal,
   truncate,
@@ -69,6 +70,13 @@ describe('bot texts', () => {
     expect(calendarDate(lateEvening, 'Europe/Moscow')).toBe('26 сентября');
     expect(calendarDate(lateEvening, 'UTC')).toBe('25 сентября');
     expect(localDateLabel('2026-01-01')).toBe('1 января');
+  });
+
+  it('writes short dates as day and month in the given time zone', () => {
+    const lateEvening = new Date('2026-09-12T21:30:00Z');
+    expect(shortDate(lateEvening, 'Europe/Moscow')).toBe('13.09');
+    expect(shortDate(lateEvening, 'UTC')).toBe('12.09');
+    expect(calendarDate(lateEvening, 'UTC')).toBe('12 сентября');
   });
 
   it('describes the day progress', () => {

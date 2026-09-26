@@ -215,6 +215,23 @@ describe('/eat', () => {
     expect(chat.world.recommend).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the search near the shared point when the old question is answered later', async () => {
+    const chat = offersChat();
+    const [question] = sent(await chat.send('/eat'));
+    const [card] = sent(await chat.location(BAUMANA));
+
+    const late = await chat.press('of:any', question?.messageId);
+
+    expect(late).toEqual([
+      { kind: 'answer', messageId: question?.messageId, notification: 'Кнопка устарела', message: null },
+    ]);
+    expect(chat.world.recommend).toHaveBeenCalledTimes(1);
+    expect(chat.states.peek(GUEST_ID).offerQueue?.messageId).toBe(card?.messageId);
+    expect(answers(await chat.press('of:next:501', card?.messageId))[0]?.message?.text).toContain(
+      'Круассан с миндалём',
+    );
+  });
+
   it('leaves the location question when the guest writes something else', async () => {
     const chat = offersChat();
     await chat.send('/eat');
@@ -251,6 +268,28 @@ describe('/eat', () => {
     expect(chat.world.user.location).toEqual({ lat: 55.82, lon: 49.16 });
     expect(sent(moved)).toHaveLength(1);
     expect(labels(sent(moved)[0])).not.toContain('Я в другом месте');
+    expect(chat.world.recommend).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['«Другое»', 'of:next:501'],
+    ['«Не сегодня»', 'of:nt:501'],
+  ])('continues the search from a point shared under a card shown by %s', async (_button, payload) => {
+    const chat = offersChat({ located: 'stale' });
+    const [first] = sent(await chat.send('/eat'));
+    await chat.send('Сырники 350');
+    expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+
+    const replies = await chat.press(payload, first?.messageId);
+
+    const card = sent(replies)[0] ?? answers(replies)[0]?.message;
+    expect(card?.text).toContain('Круассан с миндалём');
+    expect(labels(card)).toContain('Я в другом месте');
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'eat_location' });
+
+    const moved = await chat.location({ lat: 55.8209, lon: 49.1607 });
+    expect(chat.world.user.location).toEqual({ lat: 55.82, lon: 49.16 });
+    expect(texts(moved)).toEqual([ECLAIR_TEXT]);
     expect(chat.world.recommend).toHaveBeenCalledTimes(2);
   });
 
@@ -501,6 +540,34 @@ describe('«Не люблю такое»', () => {
     expect(both?.message?.buttons).toEqual([]);
   });
 
+  it('drops queued dishes with a hidden tag and keeps the card on screen', async () => {
+    const chat = offersChat({ located: 'fresh', offers: [eclairOffer, saladOffer, croissantOffer] });
+    await chat.send('/eat');
+    const [salad] = sent(await chat.press('of:dl:501:dessert,sweet'));
+    expect(salad?.text).toContain('Салат с курицей');
+
+    await chat.press('pf:tag:add:sweet:dessert,sweet');
+
+    expect(chat.states.peek(GUEST_ID).offerQueue).toMatchObject({
+      messageId: salad?.messageId,
+      cards: [{ offerId: 503 }],
+    });
+    const end = answers(await chat.press('of:next:503', salad?.messageId))[0];
+    expect(end?.notification).toBe(NO_MORE);
+  });
+
+  it('keeps the card on screen even when it has the hidden tag', async () => {
+    const chat = offersChat({ located: 'fresh' });
+    await chat.send('/eat');
+    const [croissant] = sent(await chat.press('of:dl:501:dessert,sweet'));
+
+    await chat.press('pf:tag:add:sweet:dessert,sweet');
+
+    expect(chat.states.peek(GUEST_ID).offerQueue?.cards.map((card) => card.offerId)).toEqual([502, 503]);
+    const next = answers(await chat.press('of:next:502', croissant?.messageId))[0];
+    expect(next?.message?.text).toContain('Салат с курицей');
+  });
+
   it('does not update the profile for a tag that is already hidden', async () => {
     const chat = offersChat();
     chat.world.user.dislikedTags = ['sweet'];
@@ -579,7 +646,12 @@ describe('contextual suggestion after a meal', () => {
       ...ECLAIR_BUTTONS,
       [{ type: 'callback', text: 'Не присылать подсказки', payload: 'cs:ad:off' }],
     ]);
-    expect(chat.world.recommend).toHaveBeenCalledWith(GUEST_ID, { location: null, limit: 3, channel: 'bot' });
+    expect(chat.world.recommend).toHaveBeenCalledWith(GUEST_ID, {
+      location: null,
+      limit: 3,
+      channel: 'bot',
+      minScore: 0.5,
+    });
     const state = chat.states.peek(GUEST_ID);
     expect(state.contextualOfferOn).toBe('2026-09-26');
     expect(state.offerQueue).toMatchObject({ messageId: suggestion?.messageId, cards: [{}, {}, {}] });

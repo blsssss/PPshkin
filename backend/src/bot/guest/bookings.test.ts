@@ -6,7 +6,7 @@ import { BAUMANA, sampleDeal, sampleMenuItem, sampleVenue } from '../../../test/
 import type { BookingStatus } from '../../domain/vocabulary.ts';
 import { MaxApiError } from '../../integrations/max/errors.ts';
 import type { RecommendedOffer } from '../../services/recommendations.ts';
-import { conflict, notFound } from '../../shared/errors.ts';
+import { conflict, forbidden, notFound } from '../../shared/errors.ts';
 
 const BOOKING_TEXT = [
   '**Бронь K7M2QX**',
@@ -242,6 +242,17 @@ describe('booking errors', () => {
     expect(texts(replies).at(-1)).toBe('Это предложение уже забронировано вами, код в /bookings.');
     expect(labels(sent(replies)[0])).toEqual(['Мои брони']);
     expect(chat.world.bookings.views).toHaveLength(1);
+  });
+
+  it('asks for the consent again when the booking needs it', async () => {
+    const chat = bookingChat();
+    vi.mocked(chat.world.bookings.create).mockRejectedValueOnce(forbidden('consent_required', 'No consent'));
+
+    const { replies } = await bookFromCard(chat);
+
+    expect(texts(replies).at(-1)).toContain('Чтобы вести дневник, нужно ваше согласие');
+    expect(labels(sent(replies).at(-1))).not.toContain('Что поесть?');
+    expect(chat.logger.error).not.toHaveBeenCalled();
   });
 
   it('reports unexpected failures in general words', async () => {

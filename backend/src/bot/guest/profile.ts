@@ -21,7 +21,7 @@ import {
 } from '../texts.ts';
 import { splitTags } from './offer-keyboards.ts';
 import { OFFER_NOTICES } from './offer-texts.ts';
-import { dislikeMessage } from './offers.ts';
+import { dislikeMessage, withoutTag } from './offers.ts';
 
 export function isGoal(value: string | undefined): value is Goal {
   return GOALS.some((goal) => goal === value);
@@ -126,6 +126,8 @@ export function createProfileModule({ services, states }: BotKit): BotModule {
     const disliked = known
       ? current
       : (await profile.update(ctx.user.id, { dislikedTags: [...current, value] })).user.dislikedTags;
+    const queue = ctx.state.offerQueue;
+    if (queue !== null) await ctx.saveState({ ...ctx.state, offerQueue: withoutTag(queue, value) });
     await ctx.answer({ message: dislikeMessage(onlyKnownTags([...splitTags(offered), value]), disliked) });
   }
 

@@ -277,7 +277,7 @@ export function kcalRange(kcalMin: number, kcalMax: number): string {
   return kcalMin === kcalMax ? `около ${kcalMin} ккал` : `${kcalMin}-${kcalMax} ккал`;
 }
 
-function rub(amount: number): string {
+export function rub(amount: number): string {
   return `${amount} ₽`;
 }
 
@@ -288,15 +288,29 @@ export function distance(meters: number): string {
   return rounded < 1000 ? `${rounded} м` : `${kilometers.format(meters / 1000)} км`;
 }
 
+const DATE_STYLES = {
+  calendar: { day: 'numeric', month: 'long' },
+  short: { day: '2-digit', month: '2-digit' },
+} as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
-export function calendarDate(instant: Date, timeZone: string): string {
-  let formatter = dateFormatters.get(timeZone);
+function formatDate(instant: Date, timeZone: string, style: keyof typeof DATE_STYLES): string {
+  const key = `${style} ${timeZone}`;
+  let formatter = dateFormatters.get(key);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone });
-    dateFormatters.set(timeZone, formatter);
+    formatter = new Intl.DateTimeFormat('ru-RU', { ...DATE_STYLES[style], timeZone });
+    dateFormatters.set(key, formatter);
   }
   return formatter.format(instant);
+}
+
+export function calendarDate(instant: Date, timeZone: string): string {
+  return formatDate(instant, timeZone, 'calendar');
+}
+
+export function shortDate(instant: Date, timeZone: string): string {
+  return formatDate(instant, timeZone, 'short');
 }
 
 export function localDateLabel(date: string): string {

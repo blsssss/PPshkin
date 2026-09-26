@@ -7,7 +7,7 @@ import { answerStale, byAction, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
 import { describeFailure } from '../failures.ts';
 import { command, eatButton, placeButtons } from '../keyboards.ts';
-import { BUTTONS, DEMO_VENUE, errorText, venuePlace } from '../texts.ts';
+import { BUTTONS, DEMO_VENUE, shortDate, venuePlace } from '../texts.ts';
 import { bookingButtons, cancelBookingButtons } from './offer-keyboards.ts';
 import {
   bookingCancelled,
@@ -20,13 +20,12 @@ import {
   historyLine,
   NO_ACTIVE_BOOKINGS,
   OFFER_NOTICES,
-  shortDate,
 } from './offer-texts.ts';
 import { offerCardText, shownCard } from './offers.ts';
 
 const HISTORY_LIMIT = 5;
 const NONE = '0';
-const TO_BOOKINGS = new Set(['too_many_bookings', 'booking_exists', 'offer_already_accepted']);
+const TO_BOOKINGS = new Set(['too_many_bookings', 'booking_exists']);
 
 interface BookRequest {
   menuItemId: number;
@@ -55,11 +54,13 @@ function bookingInput({ menuItemId, dealId, offerId }: BookRequest): BookingInpu
 }
 
 function bookingFailure(error: unknown): OutgoingMessage | null {
-  if (!(error instanceof AppError)) return null;
-  const text = errorText(error.code);
-  if (text === null) return null;
-  const next = TO_BOOKINGS.has(error.code) ? command(BUTTONS.bookings, 'bookings') : eatButton();
-  return { text, buttons: [[next]] };
+  const failure = describeFailure(error);
+  if (failure.kind !== 'known') return null;
+  const toBookings = error instanceof AppError && TO_BOOKINGS.has(error.code);
+  return {
+    ...failure.message,
+    buttons: [[toBookings ? command(BUTTONS.bookings, 'bookings') : eatButton()]],
+  };
 }
 
 function historyText(views: readonly BookingView[]): string | null {

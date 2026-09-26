@@ -1,9 +1,7 @@
 import type { BookingStatus } from '../../domain/vocabulary.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
-import { plural } from '../../shared/plural.ts';
-import { bold, distance } from '../texts.ts';
-
-const MEAL_FORMS = ['приём', 'приёма', 'приёмов'] as const;
+import { MEAL_FORMS, plural } from '../../shared/plural.ts';
+import { bold, distance, rub } from '../texts.ts';
 
 export const OFFER_BUTTONS = {
   book: 'Забронировать',
@@ -59,7 +57,7 @@ export function profileCollecting(mealsUntilReady: number): string {
 }
 
 export function offerFacts(priceRub: number, kcal: number, distanceM: number | null): string {
-  const facts = `${priceRub} ₽, около ${kcal} ккал`;
+  const facts = `${rub(priceRub)}, около ${kcal} ккал`;
   return distanceM === null ? facts : `${facts}, ${distance(distanceM)} от вас`;
 }
 
@@ -72,7 +70,7 @@ export function dislikeTag(label: string): string {
 }
 
 export function bookDeal(itemName: string, priceRub: number): string {
-  return `${OFFER_BUTTONS.book}: ${itemName}, ${priceRub} ₽`;
+  return `${OFFER_BUTTONS.book}: ${itemName}, ${rub(priceRub)}`;
 }
 
 export function bookingTitle(code: string): string {
@@ -80,7 +78,7 @@ export function bookingTitle(code: string): string {
 }
 
 export function bookingItem(itemName: string, priceRub: number): string {
-  return `${escapeMarkdown(itemName)}, ${priceRub} ₽`;
+  return `${escapeMarkdown(itemName)}, ${rub(priceRub)}`;
 }
 
 export function bookingValidUntil(time: string): string {
@@ -106,15 +104,4 @@ export function historyLine(
   status: Exclude<BookingStatus, 'active'>,
 ): string {
   return `${date} ${escapeMarkdown(itemName)}, ${escapeMarkdown(venueName)}: ${BOOKING_STATUS_LABELS[status]}`;
-}
-
-const shortDateFormatters = new Map<string, Intl.DateTimeFormat>();
-
-export function shortDate(instant: Date, timeZone: string): string {
-  let formatter = shortDateFormatters.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', timeZone });
-    shortDateFormatters.set(timeZone, formatter);
-  }
-  return formatter.format(instant);
 }
