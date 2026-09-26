@@ -132,7 +132,7 @@ function proteinShare(meals: readonly LoggedMeal[]): number | null {
       kcal += meal.kcal;
     }
   }
-  return kcal > 0 ? round2(proteinKcal / kcal) : null;
+  return kcal > 0 ? Math.min(1, round2(proteinKcal / kcal)) : null;
 }
 
 export function buildBehaviorProfile(

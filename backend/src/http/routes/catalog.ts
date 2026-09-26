@@ -2,7 +2,7 @@ import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import type { z } from 'zod';
 import type { CatalogQuery, CatalogService } from '../../services/catalog.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
-import { errorResponses, IdParams, success } from '../schemas/common.ts';
+import { errorResponses, IdParams, queryPoint, success } from '../schemas/common.ts';
 import {
   DealCardListSchema,
   NearbyQuery,
@@ -19,8 +19,8 @@ const SEARCH_POINT = [
 ].join(' ');
 const BAD_QUERY = 'Коды ошибок: validation_failed (400, передайте lat и lon вместе, radius от 100 до 10000).';
 
-function catalogQuery({ lat, lon, radius }: z.infer<typeof NearbyQuery>): CatalogQuery {
-  return { point: lat !== undefined && lon !== undefined ? { lat, lon } : null, radiusM: radius };
+function catalogQuery(query: z.infer<typeof NearbyQuery>): CatalogQuery {
+  return { point: queryPoint(query), radiusM: query.radius };
 }
 
 export const catalogRoutes: FastifyPluginCallbackZod<{ catalog: CatalogService }> = (

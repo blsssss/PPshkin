@@ -99,6 +99,9 @@ export type OfferChannel = (typeof OFFER_CHANNELS)[number];
 export const OFFER_STATUSES = ['shown', 'accepted', 'declined'] as const;
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
+export const DECLINE_REASONS = ['not_today', 'dislike'] as const;
+export type DeclineReason = (typeof DECLINE_REASONS)[number];
+
 export const BOOKING_STATUSES = ['active', 'redeemed', 'cancelled', 'expired'] as const;
 export type BookingStatus = (typeof BOOKING_STATUSES)[number];
 

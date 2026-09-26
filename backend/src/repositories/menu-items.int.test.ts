@@ -72,6 +72,19 @@ describe('menu items repository', () => {
     expect(await menuItems.findByIds(pool, [])).toEqual([]);
   });
 
+  it('lists the guest menu of several venues at once', async () => {
+    const shown = await seedMenuItem(pool, venue.id, { name: 'Эклер' });
+    await seedMenuItem(pool, venue.id, { name: 'Скрытый', isAvailable: false });
+    const archived = await seedMenuItem(pool, venue.id, { name: 'Архивный' });
+    await menuItems.archive(pool, archived.id, now);
+    const foreign = await seedMenuItem(pool, other.id, { name: 'Багет' });
+    const third = await seedVenue(pool, 3, { name: 'Столовая' });
+    await seedMenuItem(pool, third.id, { name: 'Борщ' });
+
+    expect(await menuItems.listAvailableInVenues(pool, [other.id, venue.id])).toEqual([shown, foreign]);
+    expect(await menuItems.listAvailableInVenues(pool, [])).toEqual([]);
+  });
+
   it('locks only current items of the given venue', async () => {
     const item = await seedMenuItem(pool, venue.id);
     expect(await menuItems.lockOnMenu(pool, venue.id, item.id)).toEqual(item);

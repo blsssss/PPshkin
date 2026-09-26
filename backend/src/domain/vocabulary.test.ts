@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTag, MENU_CATEGORIES, onlyKnownTags, TAG_LABELS, TAGS } from './vocabulary.ts';
+import { DECLINE_REASONS, isTag, MENU_CATEGORIES, onlyKnownTags, TAG_LABELS, TAGS } from './vocabulary.ts';
 
 describe('vocabulary', () => {
   it('lists every tag with a Russian label', () => {
@@ -31,5 +31,9 @@ describe('vocabulary', () => {
       'snack',
       'drink',
     ]);
+  });
+
+  it('keeps decline reasons aligned with the database constraint', () => {
+    expect(DECLINE_REASONS).toEqual(['not_today', 'dislike']);
   });
 });

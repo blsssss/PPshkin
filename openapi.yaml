@@ -276,6 +276,55 @@ components:
             через 5 минут от текущего времени"
       description: "Изменение приёма пищи: только меняющиеся поля, хотя бы одно.
         Калорийность: либо kcal, либо пара kcalMin и kcalMax"
+    BodyParametersInput:
+      type: object
+      properties:
+        sex:
+          type: string
+          enum:
+            - female
+            - male
+          description: female - женский, male - мужской
+        ageYears:
+          type: integer
+          minimum: 14
+          maximum: 100
+          description: Возраст, полных лет
+        heightCm:
+          type: integer
+          minimum: 120
+          maximum: 230
+          description: Рост, см
+        weightKg:
+          type: number
+          minimum: 35
+          maximum: 250
+          multipleOf: 0.1
+          description: Вес, кг, не больше одного знака после запятой
+        activity:
+          type: string
+          enum:
+            - sedentary
+            - light
+            - moderate
+            - active
+          description: sedentary - сидячий образ жизни; light - тренировки 1-3 раза в
+            неделю; moderate - 3-5 раз; active - 6-7 раз
+        goal:
+          type: string
+          enum:
+            - lose
+            - maintain
+            - gain
+          description: lose - снизить вес, maintain - удерживать, gain - набрать
+      required:
+        - sex
+        - ageYears
+        - heightCm
+        - weightKg
+        - activity
+        - goal
+      description: Параметры тела и цель для расчёта ориентира калорийности
     Problem:
       type: object
       properties:
@@ -1381,6 +1430,337 @@ components:
         тексте нет еды, ничего не сохранено. unavailable: распознавание
         недоступно, предложите ручной ввод; reason unsupported_image - фото не
         удалось прочитать, попросите JPEG или PNG."
+    Insights:
+      type: object
+      properties:
+        readiness:
+          type: string
+          enum:
+            - empty
+            - collecting
+            - ready
+          description: empty - за 14 дней нет записей, подбор блюд вернёт profile_empty;
+            collecting - профиль собирается, вкусы учитываются слабо; ready - не
+            меньше 5 записей и 2 дней с записями
+        mealsCount:
+          type: integer
+          description: Записей в дневнике за последние 14 дней
+        mealsUntilReady:
+          type: integer
+          description: Сколько записей осталось до готового профиля
+        daysTracked:
+          type: integer
+          description: Дней с записями за последние 14 дней
+        averageDailyKcal:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Средняя калорийность дня по дням хотя бы с 2 записями; null, если
+            таких дней нет
+        topTags:
+          type: array
+          items:
+            type: object
+            properties:
+              tag:
+                type: string
+                enum:
+                  - sweet
+                  - dessert
+                  - pastry
+                  - chocolate
+                  - fruit
+                  - berries
+                  - dairy
+                  - cheese
+                  - eggs
+                  - meat
+                  - poultry
+                  - fish
+                  - seafood
+                  - vegetarian
+                  - vegetables
+                  - greens
+                  - salad
+                  - soup
+                  - grain
+                  - pasta
+                  - rice
+                  - potato
+                  - bread
+                  - fried
+                  - grilled
+                  - spicy
+                  - fast_food
+                  - coffee
+                  - tea
+                  - drink
+                  - juice
+                  - high_protein
+                  - light
+                  - hearty
+                  - breakfast
+              label:
+                type: string
+                description: Подпись тега по-русски
+            required:
+              - tag
+              - label
+            additionalProperties: false
+          description: Любимые теги блюд, от самого частого
+        slots:
+          type: array
+          items:
+            type: object
+            properties:
+              slot:
+                type: string
+                enum:
+                  - breakfast
+                  - lunch
+                  - snack
+                  - dinner
+              label:
+                type: string
+                description: Название приёма пищи по-русски
+              share:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Доля дней с этим приёмом пищи
+              averageKcal:
+                anyOf:
+                  - type: integer
+                  - type: "null"
+                description: Средняя калорийность приёма пищи
+              typicalHour:
+                anyOf:
+                  - type: integer
+                    minimum: 0
+                    maximum: 23
+                  - type: "null"
+                description: Обычный час по местному времени
+            required:
+              - slot
+              - label
+              - share
+              - averageKcal
+              - typicalHour
+            additionalProperties: false
+          description: "Привычки по приёмам пищи: завтрак, обед, перекус, ужин"
+        sweetTooth:
+          type: object
+          properties:
+            share:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Доля дней со сладким
+            typicalHour:
+              anyOf:
+                - type: integer
+                  minimum: 0
+                  maximum: 23
+                - type: "null"
+              description: Обычный час сладкого по местному времени
+          required:
+            - share
+            - typicalHour
+          additionalProperties: false
+          description: Тяга к сладкому
+        proteinShare:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: "null"
+          description: Доля калорий из белка по записям, где белок известен; null, если
+            таких записей нет
+        today:
+          type: object
+          properties:
+            date:
+              type: string
+              format: date
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+              description: Сегодняшняя дата в часовом поясе пользователя
+            slot:
+              type: string
+              enum:
+                - breakfast
+                - lunch
+                - snack
+                - dinner
+              description: Приём пищи сейчас
+            targetKcal:
+              type: integer
+              description: Ориентир калорийности на день
+            meals:
+              type: integer
+              description: Записей за сегодня
+            kcal:
+              type: integer
+              description: Съедено за сегодня, ккал
+            remainingKcal:
+              type: integer
+              description: Сколько осталось до ориентира, не меньше 0
+            proteinG:
+              type: number
+              description: Белки за сегодня, г
+            fatG:
+              type: number
+              description: Жиры за сегодня, г
+            carbsG:
+              type: number
+              description: Углеводы за сегодня, г
+          required:
+            - date
+            - slot
+            - targetKcal
+            - meals
+            - kcal
+            - remainingKcal
+            - proteinG
+            - fatG
+            - carbsG
+          additionalProperties: false
+          description: Сводка текущих суток
+      required:
+        - readiness
+        - mealsCount
+        - mealsUntilReady
+        - daysTracked
+        - averageDailyKcal
+        - topTags
+        - slots
+        - sweetTooth
+        - proteinShare
+        - today
+      additionalProperties: false
+      description: Профиль пищевого поведения за последние 14 дней и сводка дня.
+        Калорийность приблизительная, это не медицинская рекомендация
+    TargetEstimate:
+      type: object
+      properties:
+        kcalTarget:
+          type: integer
+          description: Ориентир на день с учётом цели, кратен 50 ккал, от 1000 до 5000
+        bmrKcal:
+          type: integer
+          description: Основной обмен по формуле Миффлина - Сан Жеора
+        maintenanceKcal:
+          type: integer
+          description: Расход с учётом активности, при котором вес сохраняется
+      required:
+        - kcalTarget
+        - bmrKcal
+        - maintenanceKcal
+      additionalProperties: false
+      description: Оценка ориентира калорийности на день. Это не медицинская рекомендация
+    RecommendationItem:
+      type: object
+      properties:
+        offerId:
+          type: integer
+          description: Идентификатор показа, по нему гость отказывается через POST
+            /api/v1/offers/{id}/decline
+        headline:
+          type: string
+          description: Заголовок карточки, например «Можно позволить десерт»
+        facts:
+          type: array
+          items:
+            type: string
+          description: Факты из дневника и о блюде
+        calculations:
+          type: array
+          items:
+            type: string
+          description: "Расчёты: остаток до ориентира, путь до заведения, скидка"
+        assumptions:
+          type: array
+          items:
+            type: string
+          description: Допущения и оговорки, в том числе о приблизительной калорийности
+        score:
+          type: number
+          description: Оценка соответствия, по ней отсортированы предложения
+        item:
+          $ref: "#/components/schemas/MenuItem"
+        venue:
+          $ref: "#/components/schemas/Venue"
+        deal:
+          anyOf:
+            - $ref: "#/components/schemas/Deal"
+            - type: "null"
+          description: Горящее предложение на эту позицию или null
+        distanceM:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Расстояние до заведения в метрах; null, если точка неизвестна
+        priceRub:
+          type: integer
+          description: Цена с учётом горящего предложения
+        kcal:
+          type: integer
+          description: Калорийность позиции
+      required:
+        - offerId
+        - headline
+        - facts
+        - calculations
+        - assumptions
+        - score
+        - item
+        - venue
+        - deal
+        - distanceM
+        - priceRub
+        - kcal
+      additionalProperties: false
+      description: Конкретное блюдо в конкретном заведении и объяснение, почему оно подходит
+    Recommendations:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - budget_exhausted
+            - nothing_fits
+            - profile_empty
+          description: ok - есть предложения; profile_empty - за 14 дней нет записей в
+            дневнике; budget_exhausted - ориентир на сегодня набран;
+            nothing_fits - рядом нет подходящих открытых позиций
+        slot:
+          type: string
+          enum:
+            - breakfast
+            - lunch
+            - snack
+            - dinner
+          description: Приём пищи сейчас по местному времени пользователя
+        remainingKcal:
+          type: integer
+          description: Сколько осталось до ориентира на сегодня, не меньше 0
+        slotBudgetKcal:
+          type: integer
+          description: Разумная калорийность для этого приёма пищи
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecommendationItem"
+          description: Предложения от лучшего к худшему, разные заведения идут первыми;
+            пусто, если status не ok
+      required:
+        - status
+        - slot
+        - remainingKcal
+        - slotBudgetKcal
+        - items
+      additionalProperties: false
+      description: Подбор блюд рядом под остаток калорий и вкусы гостя
 paths:
   /health:
     get:
@@ -4259,6 +4639,312 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/recommendations:
+    get:
+      operationId: getRecommendations
+      summary: Подобрать блюдо рядом
+      tags:
+        - recommendations
+      description: "Подбирает конкретные блюда в открытых заведениях рядом: они
+        укладываются в остаток калорий на сегодня и совпадают со вкусами гостя
+        по дневнику за 14 дней. Предложения формируются только по этому запросу,
+        в чат ничего не отправляется. Каждый ответ со status ok сохраняет
+        показанные предложения, поэтому не больше 30 запросов в минуту. Точка:
+        lat и lon из запроса, иначе сохранённое приблизительное местоположение.
+        С точкой берутся заведения в радиусе 5 км, без точки все заведения, а
+        distanceM равен null. Пустые параметры считаются непереданными. Что
+        делать по status: ok - покажите items с объяснением (headline, facts,
+        calculations, assumptions), offerId нужен для отказа; profile_empty - за
+        14 дней нет ни одной записи, предложите записать первый приём пищи;
+        budget_exhausted - ориентир на сегодня набран, сообщите об этом и ничего
+        не предлагайте; nothing_fits - подходящих открытых позиций рядом нет,
+        предложите каталог горящих предложений GET /api/v1/deals. Коды ошибок:
+        validation_failed (400): передайте lat и lon вместе, limit от 1 до 10.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново."
+      parameters:
+        - schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          in: query
+          name: lat
+          required: false
+          description: Широта точки поиска, вместе с lon
+        - schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          in: query
+          name: lon
+          required: false
+          description: Долгота точки поиска, вместе с lat
+        - schema:
+            default: 5
+            type: integer
+            minimum: 1
+            maximum: 10
+          in: query
+          name: limit
+          required: false
+          description: Сколько блюд подобрать
+      security: *a3
+      responses:
+        "200":
+          description: Подобранные блюда
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recommendations"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/offers/{id}/decline:
+    post:
+      operationId: declineOffer
+      summary: Отказаться от предложения
+      tags:
+        - recommendations
+      description: "not_today скрывает блюдо из подбора на 3 дня, dislike на 30 дней.
+        Повторный отказ безопасен: причина и время отказа обновляются. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        offer_not_found (404): предложения нет или оно показано другому
+        пользователю. offer_already_accepted (409): по предложению уже создана
+        бронь, отказаться нельзя."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  enum:
+                    - not_today
+                    - dislike
+                  description: not_today - не сегодня, блюдо скрывается на 3 дня; dislike - не
+                    нравится, на 30 дней
+              required:
+                - reason
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "204":
+          description: Отказ сохранён
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/insights:
+    get:
+      operationId: getInsights
+      summary: Профиль пищевого поведения
+      tags:
+        - insights
+      description: "Строится по дневнику за последние 14 дней в часовом поясе
+        пользователя: готовность профиля, любимые теги, привычки по приёмам
+        пищи, тяга к сладкому и доля белка. today - сводка текущих суток. Пока
+        readiness равен empty, предложите записать первый приём пищи, при
+        collecting покажите mealsUntilReady. Коды ошибок: consent_required
+        (403): нет согласия на обработку данных, покажите его текст из GET
+        /api/v1/consents и отправьте PUT /api/v1/consents/personal_data.
+        user_not_found (404): аккаунт удалён, войдите заново."
+      security: *a3
+      responses:
+        "200":
+          description: Профиль и сводка дня
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Insights"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/me/target/estimate:
+    post:
+      operationId: estimateKcalTarget
+      summary: Рассчитать ориентир калорийности
+      tags:
+        - me
+      description: "Основной обмен считается по формуле Миффлина - Сан Жеора и
+        умножается на коэффициент активности. Цель lose снижает расход на 15%,
+        но не ниже 1200 ккал и основного обмена, gain добавляет 10%. Ориентир
+        округляется до 50 ккал и лежит в пределах 1000-5000 ккал. Ничего не
+        сохраняет: выбранный гостем ориентир сохраните через PATCH /api/v1/me с
+        полем kcalTarget. Коды ошибок: validation_failed (400): возраст от 14 до
+        100 лет, рост от 120 до 230 см, вес от 35 до 250 кг с одним знаком после
+        запятой."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BodyParametersInput"
+      security: *a3
+      responses:
+        "200":
+          description: Оценка ориентира
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TargetEstimate"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 servers:
   - url: /
     description: Текущий хост
@@ -4277,3 +4963,7 @@ tags:
     description: Кабинет заведения
   - name: catalog
     description: Заведения и горящие предложения рядом
+  - name: recommendations
+    description: Подбор блюд рядом и обратная связь
+  - name: insights
+    description: Профиль пищевого поведения

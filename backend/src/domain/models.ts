@@ -2,6 +2,7 @@ import type {
   BookingStatus,
   ConsentChannel,
   ConsentKind,
+  DeclineReason,
   Goal,
   MealSource,
   MenuCategory,
@@ -158,6 +159,7 @@ export interface Offer {
   score: number;
   explanation: OfferExplanation;
   status: OfferStatus;
+  declineReason: DeclineReason | null;
   createdAt: Date;
   respondedAt: Date | null;
 }

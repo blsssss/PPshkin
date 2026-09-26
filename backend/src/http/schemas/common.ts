@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 import { z } from 'zod';
+import type { GeoPoint } from '../../domain/models.ts';
 
 export const ProblemSchema = z
   .object({
@@ -56,6 +57,31 @@ export const GeoPointSchema = z
   .meta({ id: 'GeoPoint', description: 'Координаты WGS 84' });
 
 export const IdParams = z.object({ id: z.coerce.number().int().positive() });
+
+export const blankAsMissing = (value: unknown) => (value === '' ? undefined : value);
+
+export const PointQueryFields = {
+  lat: z
+    .preprocess(blankAsMissing, z.coerce.number().min(-90).max(90).optional())
+    .describe('Широта точки поиска, вместе с lon'),
+  lon: z
+    .preprocess(blankAsMissing, z.coerce.number().min(-180).max(180).optional())
+    .describe('Долгота точки поиска, вместе с lat'),
+};
+
+interface PointQuery {
+  lat?: number | undefined;
+  lon?: number | undefined;
+}
+
+export const pointTogether = z.refine<PointQuery>(
+  (query) => (query.lat === undefined) === (query.lon === undefined),
+  { message: 'Pass lat and lon together', path: ['lon'] },
+);
+
+export function queryPoint({ lat, lon }: PointQuery): GeoPoint | null {
+  return lat !== undefined && lon !== undefined ? { lat, lon } : null;
+}
 
 export function iso(date: Date): string {
   return date.toISOString();
