@@ -165,6 +165,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin: 0 0 16px;
 }
 
 .group {
@@ -287,4 +288,25 @@
 
 .grid > .field {
   margin: 0;
+}
+
+.itemColumn {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.bookingCode {
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tileValue {
+  font-family: var(--ppsh-font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
 }

@@ -174,6 +174,26 @@ function openInBrowser(url: string): void {
   }
 }
 
+export type ScanResult =
+  { status: 'scanned'; value: string } | { status: 'failed' } | { status: 'unavailable' };
+
+export function canScanQr(): boolean {
+  return insideMax() && bridge()?.openCodeReader !== undefined;
+}
+
+export async function scanQrCode(): Promise<ScanResult> {
+  const webApp = bridge();
+  if (webApp?.openCodeReader === undefined || !insideMax()) return { status: 'unavailable' };
+  try {
+    const result = await webApp.openCodeReader(true);
+    return typeof result.value === 'string' && result.value.length > 0
+      ? { status: 'scanned', value: result.value }
+      : { status: 'failed' };
+  } catch {
+    return { status: 'failed' };
+  }
+}
+
 export function openExternalLink(url: string): void {
   const webApp = bridge();
   if (webApp?.openLink !== undefined && insideMax() && attempt(() => webApp.openLink?.(url))) return;
