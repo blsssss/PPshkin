@@ -94,6 +94,40 @@ components:
           minLength: 1
           maxLength: 64
       description: "Изменение профиля: передаются только меняющиеся поля, хотя бы одно"
+    BookingRequestInput:
+      type: object
+      properties:
+        menuItemId:
+          type: integer
+          exclusiveMinimum: 0
+          description: Позиция меню, которую гость бронирует
+        dealId:
+          description: "Горящее предложение на эту позицию: порция резервируется по цене
+            предложения. Без dealId бронь по цене меню"
+          type: integer
+          exclusiveMinimum: 0
+        offerId:
+          description: "offerId из GET /api/v1/recommendations, если гость бронирует из
+            подбора: предложение отмечается принятым, даже если гость раньше от
+            него отказался"
+          type: integer
+          exclusiveMinimum: 0
+      required:
+        - menuItemId
+      description: Что забронировать
+    RedeemInput:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: "Код брони, который назвал гость, или value из
+            WebApp.openCodeReader как есть: регистр и пробелы не важны,
+            принимается и ppshkin:booking:<код>"
+      required:
+        - code
+      description: Код брони для погашения
     ManualMealInput:
       type: object
       properties:
@@ -600,65 +634,6 @@ components:
         - startParam
         - user
       additionalProperties: false
-    Deal:
-      type: object
-      properties:
-        id:
-          type: integer
-        menuItemId:
-          type: integer
-        itemName:
-          type: string
-        priceRub:
-          type: integer
-          description: Цена по акции в рублях
-        originalPriceRub:
-          type: integer
-          description: Текущая цена позиции в меню
-        discountPercent:
-          type: integer
-          description: Скидка в процентах от цены в меню
-        quantityTotal:
-          type: integer
-        quantityLeft:
-          type: integer
-        startsAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        endsAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        status:
-          type: string
-          enum:
-            - scheduled
-            - active
-            - sold_out
-            - ended
-            - cancelled
-          description: active - продаётся; scheduled - ещё не началась; sold_out - порции
-            закончились; ended - время вышло; cancelled - снята заведением
-      required:
-        - id
-        - menuItemId
-        - itemName
-        - priceRub
-        - originalPriceRub
-        - discountPercent
-        - quantityTotal
-        - quantityLeft
-        - startsAt
-        - endsAt
-        - status
-      additionalProperties: false
-      description: "Горящее предложение: позиция меню со скидкой, ограниченным
-        количеством и сроком"
     MenuItem:
       type: object
       properties:
@@ -924,6 +899,65 @@ components:
         - completedAt
       additionalProperties: false
       description: Импорт меню по фото или тексту
+    Deal:
+      type: object
+      properties:
+        id:
+          type: integer
+        menuItemId:
+          type: integer
+        itemName:
+          type: string
+        priceRub:
+          type: integer
+          description: Цена по акции в рублях
+        originalPriceRub:
+          type: integer
+          description: Текущая цена позиции в меню
+        discountPercent:
+          type: integer
+          description: Скидка в процентах от цены в меню
+        quantityTotal:
+          type: integer
+        quantityLeft:
+          type: integer
+        startsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        endsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        status:
+          type: string
+          enum:
+            - scheduled
+            - active
+            - sold_out
+            - ended
+            - cancelled
+          description: active - продаётся; scheduled - ещё не началась; sold_out - порции
+            закончились; ended - время вышло; cancelled - снята заведением
+      required:
+        - id
+        - menuItemId
+        - itemName
+        - priceRub
+        - originalPriceRub
+        - discountPercent
+        - quantityTotal
+        - quantityLeft
+        - startsAt
+        - endsAt
+        - status
+      additionalProperties: false
+      description: "Горящее предложение: позиция меню со скидкой, ограниченным
+        количеством и сроком"
     Venue:
       type: object
       properties:
@@ -1037,6 +1071,83 @@ components:
         - distanceM
       additionalProperties: false
       description: Горящее предложение в ленте рядом
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          description: "Код брони из 6 символов: латинские буквы без I и O и цифры от 2 до
+            9. Гость называет его на кассе"
+        qrPayload:
+          type: string
+          description: Содержимое QR-кода брони, ppshkin:booking:<code>. Из него можно
+            нарисовать QR на клиенте
+        status:
+          type: string
+          enum:
+            - active
+            - redeemed
+            - cancelled
+            - expired
+          description: active - ждёт гостя до expiresAt; redeemed - погашена заведением;
+            cancelled - отменена гостем; expired - время вышло, порция вернулась
+            в продажу
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+        dealId:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Горящее предложение, по которому зарезервирована порция; null для
+            брони по цене меню
+        item:
+          $ref: "#/components/schemas/MenuItem"
+        venue:
+          $ref: "#/components/schemas/Venue"
+        priceRub:
+          type: integer
+          description: Цена на момент бронирования с учётом горящего предложения
+        kcal:
+          type: integer
+          description: Калорийность порции на момент бронирования
+      required:
+        - id
+        - code
+        - qrPayload
+        - status
+        - expiresAt
+        - createdAt
+        - resolvedAt
+        - dealId
+        - item
+        - venue
+        - priceRub
+        - kcal
+      additionalProperties: false
+      description: Бронь блюда. expiresAt - до какого момента бронь действует,
+        resolvedAt - когда погашена, отменена или истекла. item - текущая
+        позиция меню, она может быть уже убрана из меню. Данных гостя в брони
+        нет
     Meal:
       type: object
       properties:
@@ -1761,6 +1872,134 @@ components:
         - items
       additionalProperties: false
       description: Подбор блюд рядом под остаток калорий и вкусы гостя
+    VenueTopItem:
+      type: object
+      properties:
+        menuItemId:
+          type: integer
+        name:
+          type: string
+          description: Текущее название позиции
+        redeemed:
+          type: integer
+          description: Сколько броней погашено
+        revenueRub:
+          type: integer
+          description: Выручка по погашенным броням
+      required:
+        - menuItemId
+        - name
+        - redeemed
+        - revenueRub
+      additionalProperties: false
+      description: Позиция среди самых продаваемых через брони
+    VenueAnalyticsDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          examples:
+            - 2026-09-25
+        offersShown:
+          type: integer
+        offersAccepted:
+          type: integer
+        bookingsCreated:
+          type: integer
+        bookingsRedeemed:
+          type: integer
+        revenueRub:
+          type: integer
+          description: Рубли
+      required:
+        - date
+        - offersShown
+        - offersAccepted
+        - bookingsCreated
+        - bookingsRedeemed
+        - revenueRub
+      additionalProperties: false
+      description: Показатели за один день по часовому поясу заведения
+    VenueAnalytics:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+          examples:
+            - 2026-09-25
+        to:
+          type: string
+          format: date
+          examples:
+            - 2026-09-25
+        timezone:
+          type: string
+          description: Часовой пояс заведения, по которому считаются дни
+        offersShown:
+          type: integer
+          description: Сколько раз гостям предложили позиции заведения
+        offersAccepted:
+          type: integer
+          description: Сколько из этих предложений гости забронировали
+        bookingsCreated:
+          type: integer
+          description: Сколько броней создано
+        bookingsRedeemed:
+          type: integer
+          description: Сколько из них погашено
+        bookingsExpired:
+          type: integer
+          description: Сколько из них истекло
+        bookingsCancelled:
+          type: integer
+          description: Сколько из них отменили гости
+        acceptRate:
+          type: number
+          description: offersAccepted / offersShown, до сотых; 0, если предложений не было
+        redeemRate:
+          type: number
+          description: bookingsRedeemed / bookingsCreated, до сотых; 0, если броней не было
+        revenueRub:
+          type: integer
+          description: Выручка по погашенным броням
+        surplusUnitsSold:
+          type: integer
+          description: Сколько порций горящих предложений продано вместо списания
+        surplusRevenueRub:
+          type: integer
+          description: Выручка с этих порций
+        topItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueTopItem"
+          description: До 5 позиций с наибольшим числом погашенных броней
+        byDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueAnalyticsDay"
+          description: Каждый день периода, включая дни без событий, от старых к новым
+      required:
+        - from
+        - to
+        - timezone
+        - offersShown
+        - offersAccepted
+        - bookingsCreated
+        - bookingsRedeemed
+        - bookingsExpired
+        - bookingsCancelled
+        - acceptRate
+        - redeemRate
+        - revenueRub
+        - surplusUnitsSold
+        - surplusRevenueRub
+        - topItems
+        - byDay
+      additionalProperties: false
+      description: Итоги заведения за период. Предложения и брони относятся к дню, в
+        который они созданы. Данных гостей в ответе нет
 paths:
   /health:
     get:
@@ -4945,6 +5184,600 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/bookings:
+    post:
+      operationId: createBooking
+      summary: Забронировать блюдо
+      tags:
+        - bookings
+      description: "Резервирует порцию в открытом заведении и выдаёт код из 6 символов
+        и QR. Гость показывает код или QR на кассе, заведение гасит бронь, блюдо
+        попадает в дневник гостя. Бронь действует 60 минут, но не дольше конца
+        горящего предложения и не дольше закрытия заведения: точное время в
+        expiresAt. С dealId одна порция предложения резервируется за гостем по
+        цене предложения и возвращается в продажу при отмене или истечении
+        брони. Без dealId бронь по цене меню. С offerId предложение из подбора
+        отмечается принятым, даже если гость раньше от него отказался. У гостя
+        может быть не больше 3 активных броней и одна активная бронь на позицию.
+        Цена и калорийность фиксируются на момент бронирования. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново. menu_item_not_found (404): позиция убрана из меню или не
+        существует, обновите карточку заведения. deal_not_found (404): горящего
+        предложения нет или оно на другую позицию. offer_not_found (404):
+        предложение показано другому гостю или на другую позицию, бронируйте без
+        offerId. venue_closed (409): заведение сейчас закрыто, покажите часы
+        работы. deal_not_active (409): горящее предложение снято, закончилось
+        или ещё не началось, предложите бронь по цене меню без dealId.
+        booking_exists (409): у гостя уже есть активная бронь этой позиции,
+        откройте её из GET /api/v1/bookings. deal_sold_out (409): порции по
+        предложению закончились, предложите бронь по цене меню без dealId.
+        too_many_bookings (409): уже 3 активные брони, погасите или отмените
+        одну из них. menu_item_unavailable (422): заведение скрыло позицию от
+        гостей."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingRequestInput"
+      security: *a3
+      responses:
+        "201":
+          description: Бронь создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      operationId: listBookings
+      summary: Брони гостя
+      tags:
+        - bookings
+      description: "status=active: действующие брони, первой та, что истекает раньше.
+        status=history: погашенные, отменённые и истёкшие, сначала новые, не
+        больше 50. Брони, время которых вышло, перед ответом переводятся в
+        expired. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors."
+      parameters:
+        - schema:
+            default: active
+            type: string
+            enum:
+              - active
+              - history
+          in: query
+          name: status
+          required: false
+          description: active - действующие брони; history - погашенные, отменённые и
+            истёкшие
+      security: *a3
+      responses:
+        "200":
+          description: Брони
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Booking"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/bookings/{id}:
+    get:
+      operationId: getBooking
+      summary: Бронь
+      tags:
+        - bookings
+      description: "Если время брони вышло, она отдаётся со статусом expired. Коды
+        ошибок: validation_failed (400): id должен быть положительным целым
+        числом. booking_not_found (404): брони нет или она принадлежит другому
+        гостю."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Бронь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/bookings/{id}/qr:
+    get:
+      operationId: getBookingQr
+      summary: QR-код брони
+      tags:
+        - bookings
+      description: "PNG 512 x 512 с QR-кодом qrPayload брони, заведение сканирует его
+        при погашении. Ответ не кэшируется. Мини-приложение авторизуется
+        заголовком Authorization, поэтому <img src> этот адрес не загрузит.
+        Загрузите PNG через fetch с заголовком Authorization и покажите через
+        URL.createObjectURL, либо нарисуйте QR на клиенте из поля qrPayload.
+        Коды ошибок: validation_failed (400): id должен быть положительным целым
+        числом. booking_not_found (404): брони нет или она принадлежит другому
+        гостю."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: QR-код брони
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+                description: PNG 512 x 512 с QR-кодом qrPayload
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/bookings/{id}/cancel:
+    post:
+      operationId: cancelBooking
+      summary: Отменить бронь
+      tags:
+        - bookings
+      description: "Отменяет активную бронь, порция горящего предложения возвращается
+        в продажу. Коды ошибок: validation_failed (400): id должен быть
+        положительным целым числом. booking_not_found (404): брони нет или она
+        принадлежит другому гостю. booking_not_active (409): бронь уже погашена
+        или отменена, обновите её. booking_expired (409): время брони вышло, она
+        переведена в expired, порция уже вернулась в продажу."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Бронь отменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/bookings:
+    get:
+      operationId: listVenueBookings
+      summary: Брони заведения
+      tags:
+        - venue
+      description: "status=active: действующие брони, первой та, что истекает раньше.
+        status=history: погашенные, отменённые и истёкшие за последние 7 дней,
+        сначала последние, не больше 100. С date в обоих случаях только брони,
+        созданные в эти сутки по часовому поясу заведения. Брони, время которых
+        вышло, перед ответом переводятся в expired. Данных гостя в бронях нет,
+        для выдачи достаточно кода. Коды ошибок: validation_failed (400): status
+        active или history, date в формате YYYY-MM-DD. venue_not_found (404):
+        заведения ещё нет, предложите создать его через POST /api/v1/venue."
+      parameters:
+        - schema:
+            default: active
+            type: string
+            enum:
+              - active
+              - history
+          in: query
+          name: status
+          required: false
+          description: active - действующие брони; history - погашенные, отменённые и
+            истёкшие
+        - schema:
+            format: date
+            type: string
+          example: 2026-09-25
+          in: query
+          name: date
+          required: false
+          description: Только брони, созданные в эти сутки YYYY-MM-DD по часовому поясу
+            заведения
+      security: *a3
+      responses:
+        "200":
+          description: Брони
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Booking"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/bookings/redeem:
+    post:
+      operationId: redeemBooking
+      summary: Погасить бронь
+      tags:
+        - venue
+      description: "Гасит бронь по коду, который назвал гость, или по QR-коду:
+        отсканируйте его через WebApp.openCodeReader и отправьте value как есть.
+        Погашение не зависит от часов работы и от того, снято ли горящее
+        предложение: порция уже зарезервирована за гостем. Погашенное блюдо
+        записывается в дневник гостя. Коды ошибок: validation_failed (400):
+        исправьте поля, перечисленные в errors. venue_not_found (404): заведения
+        ещё нет, предложите создать его через POST /api/v1/venue.
+        booking_not_found (404): брони с таким кодом в заведении нет, проверьте
+        код. booking_expired (409): время брони вышло, порция вернулась в
+        продажу, гостю нужно забронировать заново. booking_not_active (409):
+        бронь уже погашена или отменена гостем."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemInput"
+      security: *a3
+      responses:
+        "200":
+          description: Бронь погашена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/analytics:
+    get:
+      operationId: getVenueAnalytics
+      summary: Аналитика заведения
+      tags:
+        - venue
+      description: "Итоги за период from - to включительно по часовому поясу
+        заведения, по умолчанию последние 7 дней включая сегодня. Сколько
+        предложений заведения показано гостям и принято, сколько броней создано,
+        погашено, истекло и отменено, выручка и проданные горящие порции, лучшие
+        позиции и показатели по дням. Коды ошибок: validation_failed (400):
+        передайте from и to в формате YYYY-MM-DD. invalid_period (400): from
+        позже to или период длиннее 92 дней. venue_not_found (404): заведения
+        ещё нет, предложите создать его через POST /api/v1/venue."
+      parameters:
+        - schema:
+            format: date
+            type: string
+          example: 2026-09-25
+          in: query
+          name: from
+          required: false
+          description: Первый день периода YYYY-MM-DD по часовому поясу заведения, по
+            умолчанию 6 дней до to
+        - schema:
+            format: date
+            type: string
+          example: 2026-09-25
+          in: query
+          name: to
+          required: false
+          description: Последний день периода включительно, по умолчанию сегодня
+      security: *a3
+      responses:
+        "200":
+          description: Аналитика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueAnalytics"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 servers:
   - url: /
     description: Текущий хост
@@ -4967,3 +5800,5 @@ tags:
     description: Подбор блюд рядом и обратная связь
   - name: insights
     description: Профиль пищевого поведения
+  - name: bookings
+    description: Брони гостя

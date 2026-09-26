@@ -13,6 +13,8 @@ const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats.default(ajv);
 ajv.addSchema(document, 'openapi');
 
+const isJson = (mediaType: string) => mediaType === 'application/json' || mediaType.endsWith('+json');
+
 const escapePointer = (segment: string) => segment.replaceAll('~', '~0').replaceAll('/', '~1');
 
 function operation(method: string, path: string): Json {
@@ -35,6 +37,7 @@ export function expectContract(response: LightMyRequestResponse, method: string,
   const header = response.headers['content-type'];
   const mediaType = (typeof header === 'string' ? header : '').split(';')[0]?.trim() ?? '';
   expect(Object.keys(content), `${label} content type`).toContain(mediaType);
+  if (!isJson(mediaType)) return;
   const pointer = [
     'paths',
     path,

@@ -138,6 +138,15 @@ export async function findById(db: Queryable, id: number): Promise<Venue | null>
   return row ? mapVenue(row) : null;
 }
 
+export async function findByIds(db: Queryable, ids: readonly number[]): Promise<Venue[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await db.query<VenueRow>(
+    `select ${VENUE_COLUMNS} from venues where id = any($1::bigint[]) order by id`,
+    [ids],
+  );
+  return rows.map(mapVenue);
+}
+
 export async function listAll(db: Queryable): Promise<Venue[]> {
   const { rows } = await db.query<VenueRow>(`select ${VENUE_COLUMNS} from venues order by id`);
   return rows.map(mapVenue);
