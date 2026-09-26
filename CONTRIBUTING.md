@@ -21,6 +21,15 @@ npm test
 
 `npm run format` приводит код к стилю Prettier.
 
+Из каталога `frontend`:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+```
+
 ## Соглашения бэкенда
 
 `backend/` - самостоятельный сервис на Node 24 и TypeScript: Fastify 5, zod 4, PostgreSQL 18. Перед тем как писать новый модуль, откройте соседний готовый (`src/http/routes/auth.ts`, `src/services/auth.ts`, `src/repositories/users.ts`) и повторите его устройство. Ниже собрано то, что проверяется на ревью.

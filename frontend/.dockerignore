@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+src/api/schema.d.ts
+**/*.test.ts
+**/*.test.tsx
+test
+eslint.config.js
+.prettierrc.json
+.prettierignore
+Dockerfile
+.dockerignore

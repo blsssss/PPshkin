@@ -1,0 +1,7 @@
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--ppsh-content-width);
+  margin: 0 auto;
+  padding: 0 var(--ppsh-gutter) calc(var(--ppsh-tabbar-height) + env(safe-area-inset-bottom) + 24px);
+}
