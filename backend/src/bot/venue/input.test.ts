@@ -47,6 +47,13 @@ describe('venue input parsing', () => {
     expect(parseHours(text)).toEqual(hours);
   });
 
+  it('reads opening hours copied from map apps with an en or em dash', () => {
+    for (const dash of [String.fromCodePoint(0x2013), String.fromCodePoint(0x2014)]) {
+      expect(parseHours(`08:00${dash}22:00`)).toEqual({ opensAt: '08:00', closesAt: '22:00' });
+      expect(parseHours(`9:30 ${dash} 21:00`)).toEqual({ opensAt: '09:30', closesAt: '21:00' });
+    }
+  });
+
   it.each(['25:00-10:00', '08:60-22:00', '24:30-02:00', 'с 8 до 22', '0800-2200', '08:00'])(
     'rejects opening hours %j',
     (text) => {

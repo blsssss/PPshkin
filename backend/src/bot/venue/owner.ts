@@ -76,9 +76,10 @@ export function wizardSteps<Current extends WizardFlow>(
   return (steps: readonly Current['step'][], handler: WizardHandler<Current>): CallbackHandler =>
     async (ctx, args) => {
       const flow = current(ctx);
-      if (flow && steps.includes(flow.step)) {
+      const shown = flow !== null && flow.messageId === ctx.callbackMessageId;
+      if (shown && steps.includes(flow.step)) {
         await handler(ctx, flow, args);
-      } else if (flow && flow.messageId === ctx.callbackMessageId) {
+      } else if (shown) {
         await ctx.answer({ notification: NOTICES.pressedButton });
       } else {
         await ctx.answer({ message: staleScreen() });

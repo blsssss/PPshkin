@@ -432,6 +432,51 @@ describe('venue creation wizard', () => {
     expect(chat.states.peek(OWNER_ID).flow).toMatchObject({ step: 'name', messageId: 'mid.connect' });
   });
 
+  it('does not create the venue from the summary of an older wizard', async () => {
+    const chat = venueChat();
+    const [older] = answers(await walkTo(chat, 'confirm'));
+    await chat.press('vn:new', 'mid.connect');
+    await chat.send('Пекарня «Колос»');
+    await chat.send('ул. Пушкина, 5');
+    await chat.send('55.7901, 49.1302');
+    await chat.press('vn:new:cat:cafe');
+    const [newer] = answers(await chat.press('vn:new:hours:0900_2100'));
+
+    const [reply] = answers(await chat.press('vn:new:ok', older?.messageId));
+
+    expect(reply?.message).toEqual({
+      text: WIZARD_STALE,
+      buttons: [[{ type: 'callback', text: 'Создать заведение', payload: 'vn:new' }]],
+      images: [],
+    });
+    expect(chat.fake.services.venues.create).not.toHaveBeenCalled();
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({
+      step: 'confirm',
+      draft: { name: 'Пекарня «Колос»' },
+      messageId: newer?.messageId,
+    });
+
+    await chat.press('vn:new:ok', newer?.messageId);
+    expect(chat.fake.services.venues.create).toHaveBeenCalledWith(
+      OWNER_ID,
+      expect.objectContaining({ name: 'Пекарня «Колос»', category: 'cafe', opensAt: '09:00' }),
+    );
+  });
+
+  it('answers buttons left on an earlier copy of the current step as stale', async () => {
+    const chat = venueChat();
+    const [earlier] = sent(await walkTo(chat, 'category'));
+    const [current] = sent(await chat.send('кофейня'));
+
+    const [reply] = answers(await chat.press('vn:new:cat:coffee', earlier?.messageId));
+
+    expect(reply?.message?.text).toBe(WIZARD_STALE);
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({
+      step: 'category',
+      messageId: current?.messageId,
+    });
+  });
+
   it('starts over when the stored draft misses a part at the summary', async () => {
     const chat = venueChat();
     putFlow(chat, 'confirm');
@@ -444,11 +489,13 @@ describe('venue creation wizard', () => {
 
   it('ignores unknown categories and presets', async () => {
     const chat = venueChat();
-    await walkTo(chat, 'category');
+    const [wizard] = sent(await walkTo(chat, 'category'));
 
-    expect(answers(await chat.press('vn:new:cat:bar', null))[0]?.notification).toBe('Кнопка устарела');
-    await chat.press('vn:new:cat:cafe');
-    expect(answers(await chat.press('vn:new:hours:0700_2000', null))[0]?.notification).toBe(
+    expect(answers(await chat.press('vn:new:cat:bar', wizard?.messageId))[0]?.notification).toBe(
+      'Кнопка устарела',
+    );
+    await chat.press('vn:new:cat:cafe', wizard?.messageId);
+    expect(answers(await chat.press('vn:new:hours:0700_2000', wizard?.messageId))[0]?.notification).toBe(
       'Кнопка устарела',
     );
   });

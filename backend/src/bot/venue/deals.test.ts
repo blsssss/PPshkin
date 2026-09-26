@@ -519,6 +519,41 @@ describe('hot deal wizard', () => {
     expect(chat.fake.services.deals.create).toHaveBeenCalledTimes(1);
   });
 
+  it('does not publish from the summary of an older wizard', async () => {
+    const chat = ownerChat();
+    const eclair = chat.fake.seedItem({ name: 'Эклер', priceRub: 200 });
+    const croissant = chat.fake.seedItem({ name: 'Круассан', priceRub: 150 });
+    await chat.press('vn:dl:new', 'mid.a');
+    await chat.press(`vn:dl:item:${eclair.id}`, 'mid.a');
+    await chat.press('vn:dl:qty:5', 'mid.a');
+    await chat.press('vn:dl:disc:40', 'mid.a');
+    const [older] = answers(await chat.press('vn:dl:until:60', 'mid.a'));
+    expect(older?.message?.text).toBe('Эклер: 120 ₽ вместо 200 ₽ (-40%), 5 шт., до 13:00. Опубликовать?');
+    await chat.press('vn:dl:new', 'mid.b');
+    await chat.press(`vn:dl:item:${croissant.id}`, 'mid.b');
+    await chat.press('vn:dl:qty:10', 'mid.b');
+    await chat.press('vn:dl:disc:50', 'mid.b');
+    await chat.press('vn:dl:until:120', 'mid.b');
+
+    const [reply] = answers(await chat.press('vn:dl:ok', 'mid.a'));
+
+    expect(reply?.message).toEqual({
+      text: 'Мастер устарел, начните заново',
+      buttons: [[NEW_DEAL]],
+      images: [],
+    });
+    expect(chat.fake.services.deals.create).not.toHaveBeenCalled();
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({ step: 'confirm', messageId: 'mid.b' });
+
+    await chat.press('vn:dl:ok', 'mid.b');
+    expect(chat.fake.services.deals.create).toHaveBeenCalledExactlyOnceWith(OWNER_ID, {
+      menuItemId: croissant.id,
+      priceRub: 75,
+      quantity: 10,
+      endsAt: new Date('2026-09-26T11:00:00Z'),
+    });
+  });
+
   it('answers a double tap on a step once', async () => {
     const chat = ownerChat();
     const item = chat.fake.seedItem();

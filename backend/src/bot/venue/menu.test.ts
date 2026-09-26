@@ -12,6 +12,9 @@ const UPLOAD = { type: 'callback', text: 'Загрузить меню', payload:
 const HOME = { type: 'callback', text: 'Главное меню', payload: 'vn:home' };
 const RETRY = { type: 'callback', text: 'Попробовать ещё раз', payload: 'vn:menu:upload' };
 const TEN_MEGABYTES = 10 * 1024 * 1024;
+const FIRST_PHOTO_ONLY = 'Беру первое фото. Следующее пришлите после результата через «Загрузить меню».';
+const TEXT_TOO_LONG =
+  'Текст меню длиннее 8000 символов. Пришлите первую часть, а следующую после результата через «Загрузить меню».';
 
 function ownerChat(options: Parameters<typeof venueChat>[0] = {}): VenueChat {
   const chat = venueChat(options);
@@ -155,6 +158,7 @@ describe('menu import', () => {
           { type: 'callback', text: 'Меню', payload: 'vn:menu' },
           { type: 'callback', text: 'Выставить горящее', payload: 'vn:dl:new' },
         ],
+        [UPLOAD],
       ],
     });
     expect(chat.fake.services.menuImports.apply).toHaveBeenCalledWith(OWNER_ID, importId, [parsedItem()]);
@@ -205,7 +209,7 @@ describe('menu import', () => {
     const replies = await chat.photo(2);
 
     expect(texts(replies)).toEqual([
-      'Беру первое фото, остальные пришлите по одному.\nРаспознаю меню, обычно это 15-30 секунд. Пришлю результат сюда.',
+      `${FIRST_PHOTO_ONLY}\nРаспознаю меню, обычно это 15-30 секунд. Пришлю результат сюда.`,
     ]);
     expect(chat.api.sendAction).toHaveBeenCalledWith(CHAT_ID, 'typing_on');
     expect(chat.api.download).toHaveBeenCalledWith('https://files.max.example/photo-0.jpg', 15 * 1024 * 1024);
@@ -214,6 +218,36 @@ describe('menu import', () => {
       Buffer.from('jpeg bytes'),
     );
     expect(chat.world.recognizePhoto).not.toHaveBeenCalled();
+  });
+
+  it('leads the owner to the next menu photo through a new upload', async () => {
+    const chat = await uploading();
+    recognizes(chat, 0);
+    const [started] = sent(await withBackground(chat, chat.photo(2)));
+    expect(started?.text).toContain(FIRST_PHOTO_ONLY);
+
+    const [added] = sent(await chat.press(`vn:imp:apply:${chat.fake.state.imports[0]?.id}`));
+    expect(added?.buttons.at(-1)).toEqual([UPLOAD]);
+    await chat.press('vn:menu:upload', added?.messageId);
+    await withBackground(chat, chat.photo());
+
+    expect(chat.fake.services.menuImports.fromPhoto).toHaveBeenCalledTimes(2);
+    expect(chat.world.recognizePhoto).not.toHaveBeenCalled();
+  });
+
+  it('leads the owner to the next part of a long menu through a new upload', async () => {
+    const chat = await uploading();
+    recognizes(chat, 0);
+    expect(texts(await chat.send('Эклер 200 ₽\n'.repeat(700)))).toEqual([TEXT_TOO_LONG]);
+    await withBackground(chat, chat.send(MENU_TEXT));
+
+    const [added] = sent(await chat.press(`vn:imp:apply:${chat.fake.state.imports[0]?.id}`));
+    await chat.press('vn:menu:upload', added?.messageId);
+    await withBackground(chat, chat.send('Сырники 250 г 350 ₽'));
+
+    expect(chat.fake.services.menuImports.fromText).toHaveBeenCalledTimes(2);
+    expect(chat.fake.services.menuImports.fromText).toHaveBeenLastCalledWith(OWNER_ID, 'Сырники 250 г 350 ₽');
+    expect(chat.world.recognizeText).not.toHaveBeenCalled();
   });
 
   it('still logs food photos without the upload flow', async () => {
@@ -266,11 +300,7 @@ describe('menu import', () => {
   });
 
   it.each([
-    [
-      'a text longer than 8000 characters',
-      'Эклер 200 ₽\n'.repeat(700),
-      'Текст меню длиннее 8000 символов, пришлите его частями.',
-    ],
+    ['a text longer than 8000 characters', 'Эклер 200 ₽\n'.repeat(700), TEXT_TOO_LONG],
     [
       'a text without prices',
       'отмена',

@@ -10,7 +10,7 @@ export const MESSAGE_LIMIT = 4000;
 export const TITLE_IN_BUTTON_LIMIT = 40;
 export const TITLE_IN_LIST_LIMIT = 60;
 
-type PluralForms = readonly [one: string, few: string, many: string];
+export type PluralForms = readonly [one: string, few: string, many: string];
 
 export const RECORD_FORMS: PluralForms = ['запись', 'записи', 'записей'];
 const DISH_FORMS: PluralForms = ['блюдо', 'блюда', 'блюд'];

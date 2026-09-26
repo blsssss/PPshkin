@@ -9,7 +9,7 @@ import type { Clock } from '../../shared/clock.ts';
 import { answerStale, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit } from '../context.ts';
 import { link, miniAppUrl } from '../keyboards.ts';
-import { BUTTONS, FIRST_PHOTO_ONLY, PHOTO_DOWNLOAD_FAILED } from '../texts.ts';
+import { BUTTONS, PHOTO_DOWNLOAD_FAILED } from '../texts.ts';
 import { looksLikeMenu, MENU_TEXT_LIMIT } from './input.ts';
 import { appRow, homeRow, newDealRow, uploadRow, venueButton } from './keyboards.ts';
 import { clearFlow, knownFailure, ownerCallback, ownerFlow, saveFlow } from './owner.ts';
@@ -20,6 +20,7 @@ import {
   importAppliedText,
   importReadyText,
   MENU_EMPTY,
+  MENU_FIRST_PHOTO_ONLY,
   MENU_PHOTO_TOO_LARGE,
   MENU_TEXT_TOO_LONG,
   MENU_TEXT_WITHOUT_PRICES,
@@ -177,7 +178,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit, waiti
     if (ctx.chatId !== null) await messenger.sendTyping(ctx.chatId);
     const image = await download(ctx, url);
     if (!image) return;
-    const started = several ? `${FIRST_PHOTO_ONLY}\n${RECOGNIZING_PHOTO}` : RECOGNIZING_PHOTO;
+    const started = several ? `${MENU_FIRST_PHOTO_ONLY}\n${RECOGNIZING_PHOTO}` : RECOGNIZING_PHOTO;
     await start(ctx, () => menuImports.fromPhoto(ctx.user.id, image), started);
   }
 
@@ -236,7 +237,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit, waiti
     const skipped = found.items.filter((item) => !hasPrice(item)).map((item) => item.name);
     await ctx.reply({
       text: importAppliedText(added.length, skipped),
-      buttons: [[...menuRow(), ...newDealRow(VENUE_BUTTONS.publishDeal)]],
+      buttons: [[...menuRow(), ...newDealRow(VENUE_BUTTONS.publishDeal)], uploadRow()],
     });
   });
 

@@ -13,13 +13,13 @@ import {
   localDateLabel,
   MESSAGE_LIMIT,
   OFFER_FORMS,
+  rub,
   TITLE_IN_LIST_LIMIT,
   truncate,
+  type PluralForms,
 } from '../texts.ts';
 import type { VenueDraft } from './flows.ts';
 import { DEAL_QUANTITY_LIMIT, MENU_TEXT_LIMIT, VENUE_ADDRESS_LIMIT, VENUE_NAME_LIMIT } from './input.ts';
-
-type PluralForms = readonly [one: string, few: string, many: string];
 
 const ITEM_FORMS: PluralForms = ['позиция', 'позиции', 'позиций'];
 const ITEM_OBJECT_FORMS: PluralForms = ['позицию', 'позиции', 'позиций'];
@@ -125,7 +125,9 @@ export const UPLOAD_PROMPT =
   'Пришлите фото меню (одно, чётко и целиком) или вставьте текст меню: каждая позиция с новой строки, с ценой, например: Эклер 150 г 200 ₽';
 export const UPLOAD_CANCELLED = 'Хорошо, меню не загружаю.';
 export const MENU_PHOTO_TOO_LARGE = 'Фото слишком большое, пришлите до 10 МБ';
-export const MENU_TEXT_TOO_LONG = `Текст меню длиннее ${MENU_TEXT_LIMIT} символов, пришлите его частями.`;
+const NEXT_PART = `после результата через «${VENUE_BUTTONS.upload}»`;
+export const MENU_TEXT_TOO_LONG = `Текст меню длиннее ${MENU_TEXT_LIMIT} символов. Пришлите первую часть, а следующую ${NEXT_PART}.`;
+export const MENU_FIRST_PHOTO_ONLY = `Беру первое фото. Следующее пришлите ${NEXT_PART}.`;
 export const MENU_TEXT_WITHOUT_PRICES =
   'Не вижу цен. Вставьте текст меню: каждая позиция с новой строки, с ценой, например: Эклер 150 г 200 ₽';
 export const RECOGNIZING_PHOTO = 'Распознаю меню, обычно это 15-30 секунд. Пришлю результат сюда.';
@@ -158,10 +160,6 @@ export const CODE_INVALID = 'Код состоит из 6 латинских б�
 export const CODE_RETRY = 'Проверьте код и введите его ещё раз.';
 export const REDEEM_KEPT = 'Хорошо, бронь не погашена.';
 export const STAFF_ONLY = 'Эта ссылка для сотрудников заведения.';
-
-function rub(amount: number): string {
-  return `${amount} ₽`;
-}
 
 function itemName(name: string): string {
   return escapeMarkdown(truncate(name, TITLE_IN_LIST_LIMIT));
