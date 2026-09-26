@@ -397,9 +397,7 @@ describe('logged meal buttons', () => {
     expect(chat.world.meals.map((meal) => meal.title)).toEqual(['Борщ со сметаной', 'Борщ']);
 
     await chat.press('ml:fix:1');
-    expect(texts(await chat.send('Сырники с вареньем'))).toEqual([
-      'Записать «Сырники с вареньем» в дневник?',
-    ]);
+    expect(texts(await chat.send('Ёжик в тумане'))).toEqual(['Записать «Ёжик в тумане» в дневник?']);
     expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_text_confirm' });
   });
 
@@ -670,8 +668,11 @@ describe('text messages', () => {
     const chat = consentedChat();
     await chat.press('ml:manual', 'mid.old');
 
-    expect(texts(await chat.send('Плов'))).toEqual(['Записать «Плов» в дневник?']);
-    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'meal_text_confirm', text: 'Плов' });
+    expect(texts(await chat.send('Ёжик в тумане'))).toEqual(['Записать «Ёжик в тумане» в дневник?']);
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({
+      name: 'meal_text_confirm',
+      text: 'Ёжик в тумане',
+    });
   });
 
   it('cancels manual entry', async () => {
