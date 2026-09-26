@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmSheet } from './ConfirmSheet.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { OfflineBanner } from './OfflineBanner.tsx';
+import { PortalRoot } from './PortalRoot.tsx';
 import { ScreenState } from './ScreenState.tsx';
 import { SegmentedControl } from './SegmentedControl.tsx';
 import { TOAST_DURATION_MS, ToastProvider, useToast } from './Toast.tsx';
@@ -110,15 +111,15 @@ describe('ConfirmSheet', () => {
     expect(screen.getByText('closed')).toBeTruthy();
   });
 
-  it('renders inside the themed app root so the theme applies', () => {
-    const root = document.createElement('div');
-    root.className = 'ppsh-app';
-    document.body.append(root);
-    render(<ConfirmHarness onConfirm={() => Promise.resolve()} />, {
-      container: root.appendChild(document.createElement('div')),
-    });
-    expect(screen.getByRole('dialog', { name: 'Удалить запись?' }).closest('.ppsh-app')).toBe(root);
-    root.remove();
+  it('renders inside the themed app root even when open on the first render', () => {
+    render(
+      <div className="ppsh-app">
+        <PortalRoot>
+          <ConfirmHarness onConfirm={() => Promise.resolve()} />
+        </PortalRoot>
+      </div>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Удалить запись?' }).closest('.ppsh-app')).not.toBeNull();
   });
 
   it('closes on Escape', () => {
