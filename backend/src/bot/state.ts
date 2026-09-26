@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type { Queryable } from '../db/pool.ts';
 import { onlyKnownTags } from '../domain/vocabulary.ts';
 import * as chatStates from '../repositories/chat-states.ts';
+import { isLocalDate } from '../shared/time.ts';
+import { OfferQueueSchema } from './guest/offer-card.ts';
+import { VENUE_FLOWS } from './venue/flows.ts';
 
 export const FLOW_TTL_MS = 30 * 60_000;
 
@@ -22,6 +25,7 @@ const messageId = z.string().min(1);
 const FlowSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('kcal_input'), from: z.enum(['ob', 'pf']) }),
   z.object({ name: z.literal('onboarding_location') }),
+  z.object({ name: z.literal('eat_location') }),
   z.object({ name: z.literal('meal_fix'), mealId: z.number().int().positive() }),
   z.object({ name: z.literal('meal_manual') }),
   z.object({ name: z.literal('meal_text_confirm'), text: z.string().min(1), messageId }),
@@ -30,13 +34,16 @@ const FlowSchema = z.discriminatedUnion('name', [
     candidates: z.array(MealCandidateSchema).min(1),
     messageId,
   }),
+  ...VENUE_FLOWS,
 ]);
 
 const ActiveFlowSchema = FlowSchema.and(z.object({ expiresAt: z.iso.datetime() }));
 
 const ChatStateSchema = z.object({
   flow: ActiveFlowSchema.nullable().default(null),
+  offerQueue: OfferQueueSchema.nullable().default(null),
   pendingStart: z.string().max(128).nullable().default(null),
+  contextualOfferOn: z.string().refine(isLocalDate).nullable().default(null),
 });
 
 export type MealCandidate = z.infer<typeof MealCandidateSchema>;
@@ -45,7 +52,12 @@ export type FlowName = Flow['name'];
 export type ActiveFlow = z.infer<typeof ActiveFlowSchema>;
 export type ChatState = z.infer<typeof ChatStateSchema>;
 
-export const EMPTY_CHAT_STATE: Readonly<ChatState> = Object.freeze({ flow: null, pendingStart: null });
+export const EMPTY_CHAT_STATE: Readonly<ChatState> = Object.freeze({
+  flow: null,
+  offerQueue: null,
+  pendingStart: null,
+  contextualOfferOn: null,
+});
 
 export function parseChatState(raw: unknown): ChatState {
   const parsed = ChatStateSchema.safeParse(raw);

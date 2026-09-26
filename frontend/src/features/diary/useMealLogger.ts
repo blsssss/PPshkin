@@ -76,7 +76,12 @@ export function useMealLogger() {
       if (result.status === 'logged') {
         haptic.success();
         void refresh(result.day);
-        if (id !== run.current) toast.show('Фото распознано и записано в дневник');
+        if (id !== run.current)
+          toast.show(
+            source === 'photo'
+              ? 'Фото распознано и записано в дневник'
+              : 'Описание распознано и записано в дневник',
+          );
       }
       if (id === run.current) setState({ kind: 'result', source, result });
     } catch (error) {

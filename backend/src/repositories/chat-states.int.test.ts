@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { createChatStateStore } from '../bot/state.ts';
+import { eclairCard } from '../../test/offers.ts';
+import { createChatStateStore, EMPTY_CHAT_STATE, type ChatState } from '../bot/state.ts';
 import * as chatStates from './chat-states.ts';
 import * as users from './users.ts';
 
@@ -64,20 +65,20 @@ describe('chat states repository', () => {
 describe('chat state store', () => {
   it('round trips a state through jsonb', async () => {
     const store = createChatStateStore(pool);
-    await store.save(101, {
+    const state: ChatState = {
       flow: { name: 'kcal_input', from: 'ob', expiresAt: fixFlow.expiresAt },
+      offerQueue: { messageId: 'mid.7', cards: [eclairCard], expiresAt: fixFlow.expiresAt },
       pendingStart: null,
-    });
-    expect(await store.load(101)).toEqual({
-      flow: { name: 'kcal_input', from: 'ob', expiresAt: fixFlow.expiresAt },
-      pendingStart: null,
-    });
+      contextualOfferOn: '2026-09-26',
+    };
+    await store.save(101, state);
+    expect(await store.load(101)).toEqual(state);
     await store.clear(101);
-    expect(await store.load(101)).toEqual({ flow: null, pendingStart: null });
+    expect(await store.load(101)).toEqual(EMPTY_CHAT_STATE);
   });
 
   it('reads a broken record as an empty state', async () => {
     await pool.query(`insert into chat_states (user_id, state) values (101, '{"flow":{"name":"lost"}}')`);
-    expect(await createChatStateStore(pool).load(101)).toEqual({ flow: null, pendingStart: null });
+    expect(await createChatStateStore(pool).load(101)).toEqual(EMPTY_CHAT_STATE);
   });
 });
