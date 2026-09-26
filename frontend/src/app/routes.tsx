@@ -1,4 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { DealsScreen, VenuesScreen } from '../features/eat/CatalogScreens.tsx';
+import { EatScreen } from '../features/eat/EatScreen.tsx';
+import { VenueScreen } from '../features/eat/VenueScreen.tsx';
 import { DiaryScreen } from '../features/diary/DiaryScreen.tsx';
 import { InsightsScreen } from '../features/diary/InsightsScreen.tsx';
 import { EditMealScreen, NewMealScreen } from '../features/diary/MealFormScreen.tsx';
@@ -31,10 +34,10 @@ export const appRoutes: RouteObject[] = [
       { path: 'diary/meals/:id', element: <EditMealScreen /> },
       { path: 'diary/:date', element: <DiaryScreen /> },
       { path: 'insights', element: <InsightsScreen /> },
-      { path: 'eat', element: <StubScreen title="Что поесть" /> },
-      { path: 'deals', element: <StubScreen title="Горящее" back="/eat" /> },
-      { path: 'venues', element: <StubScreen title="Заведения" back="/eat" /> },
-      { path: 'venues/:id', element: <StubScreen title="Заведение" back="/eat" /> },
+      { path: 'eat', element: <EatScreen /> },
+      { path: 'deals', element: <DealsScreen /> },
+      { path: 'venues', element: <VenuesScreen /> },
+      { path: 'venues/:id', element: <VenueScreen /> },
       { path: 'bookings', element: <StubScreen title="Брони" /> },
       { path: 'bookings/new', element: <StubScreen title="Бронь" back="/bookings" /> },
       { path: 'bookings/:id', element: <StubScreen title="Бронь" back="/bookings" /> },

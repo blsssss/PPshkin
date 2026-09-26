@@ -8,6 +8,7 @@ import { userMessage } from '../../api/messages.ts';
 import { useProfile } from '../../api/profile.ts';
 import { botLink } from '../../app/startParam.ts';
 import { openMaxLink } from '../../max/bridge.ts';
+import { setDevicePoint } from '../../shared/geo/devicePoint.ts';
 import { geolocationSupported, useGeolocation } from '../../shared/geo/useGeolocation.ts';
 import { useOnline } from '../../shared/useOnline.ts';
 import { ActionBar } from '../../shared/ui/ActionBar.tsx';
@@ -55,6 +56,7 @@ export function LocationStep() {
       setFallback(true);
       return;
     }
+    setDevicePoint(point);
     save.mutate(point);
   };
 
