@@ -14,7 +14,9 @@ import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
 import { BookingScreen, BookingsScreen, NewBookingScreen } from '../features/bookings/BookingScreens.tsx';
 import { ProfileScreen } from '../features/profile/ProfileScreen.tsx';
 import { VenueHomeScreen, VenueLinkScreen, VenueSettingsScreen } from '../features/venue/CabinetScreens.tsx';
+import { EditDealScreen, NewDealScreen, VenueDealsScreen } from '../features/venue/DealScreens.tsx';
 import { ImportReviewScreen, ImportStartScreen } from '../features/venue/ImportScreens.tsx';
+import { AnalyticsScreen, RedeemScreen, VenueBookingsScreen } from '../features/venue/OpsScreens.tsx';
 import { EditItemScreen, MenuScreen, NewItemScreen } from '../features/venue/MenuScreens.tsx';
 import {
   ConsentTextScreen,
@@ -60,6 +62,12 @@ export const appRoutes: RouteObject[] = [
       { path: 'venue/menu/import', element: <ImportStartScreen /> },
       { path: 'venue/menu/import/:importId', element: <ImportReviewScreen /> },
       { path: 'venue/menu/:itemId', element: <EditItemScreen /> },
+      { path: 'venue/deals', element: <VenueDealsScreen /> },
+      { path: 'venue/deals/new', element: <NewDealScreen /> },
+      { path: 'venue/deals/:dealId', element: <EditDealScreen /> },
+      { path: 'venue/bookings', element: <VenueBookingsScreen /> },
+      { path: 'venue/redeem', element: <RedeemScreen /> },
+      { path: 'venue/analytics', element: <AnalyticsScreen /> },
       { path: 'venue/*', element: <Navigate to="/venue" replace /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/target', element: <TargetScreen /> },

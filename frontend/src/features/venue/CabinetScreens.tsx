@@ -37,6 +37,7 @@ import {
   type VenueForm,
   type VenueInput,
 } from './model.ts';
+import { useVenueBookings, useVenueDeals } from './dealQueries.ts';
 import { useReloadVenue, useSaveVenue, useVenue, useVenueMenu, useVenueNotFoundRedirect } from './queries.ts';
 import styles from './Venue.module.css';
 
@@ -74,8 +75,16 @@ function Tile({ title, meta, to }: { title: string; meta?: string; to: string })
   );
 }
 
+function countMeta(count: number | undefined, forms: readonly [string, string, string]): string | undefined {
+  if (count === undefined) return undefined;
+  return count === 0 ? 'Нет активных' : `${String(count)} ${plural(count, forms)}`;
+}
+
 function VenueHome({ venue }: { venue: Venue }) {
+  const navigate = useNavigate();
   const menu = useVenueMenu();
+  const deals = useVenueDeals('active');
+  const bookings = useVenueBookings('active', null, false);
   const open = isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, new Date());
   const count = menu.data?.length;
   return (
@@ -92,7 +101,29 @@ function VenueHome({ venue }: { venue: Venue }) {
           {venue.isDemo && <Label tone="cyan">Заведение и меню тестовые</Label>}
         </div>
       </section>
+      <div className={styles.actions}>
+        <Button
+          size="large"
+          stretched
+          onClick={() => {
+            void navigate('/venue/redeem');
+          }}
+        >
+          Погасить бронь
+        </Button>
+      </div>
       <ul className={styles.tiles}>
+        <Tile
+          title="Горящие позиции"
+          to="/venue/deals"
+          meta={countMeta(deals.data?.length, ['активная', 'активные', 'активных'])}
+        />
+        <Tile
+          title="Брони"
+          to="/venue/bookings"
+          meta={countMeta(bookings.data?.length, ['активная', 'активные', 'активных'])}
+        />
+        <Tile title="Статистика" meta="Выручка, брони и показы" to="/venue/analytics" />
         <Tile
           title="Меню"
           to="/venue/menu"

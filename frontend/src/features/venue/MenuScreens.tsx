@@ -87,25 +87,39 @@ function MenuRow({ item }: { item: MenuItem }) {
   const toggle = useToggleAvailability();
   return (
     <li className={item.isAvailable ? styles.item : `${styles.item} ${styles.hidden}`}>
-      <button
-        type="button"
-        className={styles.itemMain}
-        onClick={() => {
-          void navigate(`/venue/menu/${String(item.id)}`);
-        }}
-      >
-        <span className={styles.itemName}>{item.name}</span>
-        <span className={styles.meta}>
-          {formatPrice(item.priceRub)}, {formatKcal(item.kcal)}
-          {item.weightG !== null && `, ${String(item.weightG)} г`}
-        </span>
-        {(!item.isAvailable || item.nutritionSource === 'estimate') && (
-          <span className={styles.badges}>
-            {!item.isAvailable && <Label tone="pink">Скрыто</Label>}
-            {item.nutritionSource === 'estimate' && <Label tone="cyan">Ккал по оценке</Label>}
+      <div className={styles.itemColumn}>
+        <button
+          type="button"
+          className={styles.itemMain}
+          onClick={() => {
+            void navigate(`/venue/menu/${String(item.id)}`);
+          }}
+        >
+          <span className={styles.itemName}>{item.name}</span>
+          <span className={styles.meta}>
+            {formatPrice(item.priceRub)}, {formatKcal(item.kcal)}
+            {item.weightG !== null && `, ${String(item.weightG)} г`}
           </span>
+          {(!item.isAvailable || item.nutritionSource === 'estimate') && (
+            <span className={styles.badges}>
+              {!item.isAvailable && <Label tone="pink">Скрыто</Label>}
+              {item.nutritionSource === 'estimate' && <Label tone="cyan">Ккал по оценке</Label>}
+            </span>
+          )}
+        </button>
+        {item.isAvailable && (
+          <button
+            type="button"
+            className={styles.inlineButton}
+            aria-label={`Сделать горящей: ${item.name}`}
+            onClick={() => {
+              void navigate(`/venue/deals/new?itemId=${String(item.id)}`);
+            }}
+          >
+            Сделать горящей
+          </button>
         )}
-      </button>
+      </div>
       <label className={styles.switchLabel}>
         <Switch
           checked={item.isAvailable}
@@ -410,6 +424,18 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
         <Button size="large" stretched loading={save.isPending} disabled={!online} onClick={submit}>
           {item === null ? 'Добавить позицию' : 'Сохранить'}
         </Button>
+        {item !== null && item.isAvailable && (
+          <Button
+            size="large"
+            variant="secondary"
+            stretched
+            onClick={() => {
+              void navigate(`/venue/deals/new?itemId=${String(item.id)}`);
+            }}
+          >
+            Сделать горящей
+          </Button>
+        )}
         {item !== null && (
           <Button
             size="large"

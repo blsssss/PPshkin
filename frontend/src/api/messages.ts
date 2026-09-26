@@ -49,6 +49,11 @@ const MESSAGES: Record<string, string> = {
   booking_not_found: 'Бронь не найдена',
   booking_not_active: 'Бронь уже не активна',
   booking_expired: 'Время брони вышло',
+  deal_window_invalid: 'Время окончания должно быть в ближайшие 24 часа',
+  deal_quantity_invalid: 'Остаток не может быть больше исходного количества',
+  deal_exists: 'По этой позиции уже есть горящее предложение',
+  deal_finished: 'Предложение уже завершено или снято, изменить его нельзя',
+  invalid_period: 'Неверный период',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
