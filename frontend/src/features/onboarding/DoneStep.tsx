@@ -23,7 +23,7 @@ export function DoneStep() {
   ] as const;
 
   return (
-    <OnboardingStep title="Готово">
+    <OnboardingStep title="Готово" back="/onboarding/location">
       <div className={styles.summary}>
         {rows.map(([label, value]) => (
           <div key={label} className={styles.summaryRow}>

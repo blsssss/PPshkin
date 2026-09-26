@@ -1,6 +1,6 @@
 import { Button } from '@maxhub/max-ui';
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { unwrap } from '../../api/client.ts';
 import { api } from '../../api/index.ts';
 import { userMessage } from '../../api/messages.ts';
@@ -24,9 +24,15 @@ export function TargetCalculator({ goal, onUse }: { goal: Goal | null; onUse: (k
   const [errors, setErrors] = useState<Partial<Record<BodyField, string>>>({});
   const online = useOnline();
   const estimate = useMutation({
+    gcTime: 0,
     mutationFn: async (body: NonNullable<ReturnType<typeof validateBody>['values']>) =>
       unwrap(await api.POST('/api/v1/me/target/estimate', { body })),
   });
+
+  const { reset } = estimate;
+  useEffect(() => {
+    reset();
+  }, [goal, reset]);
 
   const update = (patch: Partial<BodyForm>) => {
     setForm((current) => ({ ...current, ...patch }));

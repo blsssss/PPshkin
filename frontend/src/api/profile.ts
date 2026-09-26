@@ -6,8 +6,8 @@ import { api, session, useSessionState } from './index.ts';
 export const PROFILE_KEY = ['me'] as const;
 export const CONSENTS_KEY = ['consents'] as const;
 
-export type ProfilePatch = Schemas['ProfilePatchInput'];
-export type ConsentKind = Schemas['ConsentDocument']['kind'];
+type ProfilePatch = Schemas['ProfilePatchInput'];
+type ConsentKind = Schemas['ConsentDocument']['kind'];
 
 export function useProfile() {
   const state = useSessionState();
@@ -24,7 +24,7 @@ export function useProfile() {
   });
 }
 
-export function useStoreProfile(): (user: UserProfile) => void {
+function useStoreProfile(): (user: UserProfile) => void {
   const queryClient = useQueryClient();
   return useCallback(
     (user: UserProfile) => {

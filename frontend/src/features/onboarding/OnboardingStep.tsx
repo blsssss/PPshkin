@@ -5,7 +5,7 @@ import { Page } from '../../shared/ui/Page.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import styles from './Onboarding.module.css';
 
-export const STEP_COUNT = 4;
+const STEP_COUNT = 4;
 
 export function OnboardingStep({
   step,

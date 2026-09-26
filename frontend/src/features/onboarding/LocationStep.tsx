@@ -46,6 +46,10 @@ export function LocationStep() {
   }, [fallback, profile]);
 
   const allow = async () => {
+    if (save.isError) {
+      save.mutate(save.variables);
+      return;
+    }
     const point = await geo.request();
     if (point === null) {
       setFallback(true);

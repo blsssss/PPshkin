@@ -1,7 +1,7 @@
 import type { Schemas } from '../../api/client.ts';
 import type { Activity, Goal, Sex } from '../vocabulary.ts';
 
-export type BodyParameters = Schemas['BodyParametersInput'];
+type BodyParameters = Schemas['BodyParametersInput'];
 
 export interface BodyForm {
   sex: Sex | null;

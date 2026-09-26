@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { geolocationSupported, useGeolocation } from './useGeolocation.ts';
+import { geolocationSupported, useGeolocation, WATCHDOG_MS } from './useGeolocation.ts';
 
 function install(getCurrentPosition: Geolocation['getCurrentPosition'] | null) {
   Object.defineProperty(navigator, 'geolocation', {
@@ -75,6 +75,22 @@ describe('useGeolocation', () => {
     });
     expect(point).toBeNull();
     expect(result.current.status).toBe(status);
+  });
+
+  it('gives up when the WebView never answers the permission prompt', async () => {
+    vi.useFakeTimers();
+    install(() => undefined);
+    const { result } = renderHook(() => useGeolocation());
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => {
+      pending = result.current.request();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WATCHDOG_MS);
+    });
+    await expect(pending).resolves.toBeNull();
+    expect(result.current.status).toBe('unavailable');
+    vi.useRealTimers();
   });
 
   it('reports unavailable without the API or when it throws', async () => {

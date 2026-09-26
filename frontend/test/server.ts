@@ -3,7 +3,7 @@ import { json, problem } from './http.ts';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-export interface ServerCall {
+interface ServerCall {
   method: string;
   path: string;
   search: string;
@@ -69,5 +69,3 @@ export function createServer() {
     },
   };
 }
-
-export type TestServer = ReturnType<typeof createServer>;

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type GeolocationStatus = 'idle' | 'requesting' | 'granted' | 'denied' | 'unavailable';
+export const WATCHDOG_MS = 12_000;
+
+type GeolocationStatus = 'idle' | 'requesting' | 'granted' | 'denied' | 'unavailable';
 
 export interface GeoPoint {
   lat: number;
   lon: number;
 }
 
-export interface GeolocationOptions {
+interface GeolocationOptions {
   highAccuracy?: boolean;
 }
 
-export interface GeolocationState {
+interface GeolocationState {
   status: GeolocationStatus;
   point: GeoPoint | null;
   request: () => Promise<GeoPoint | null>;
@@ -40,23 +42,33 @@ function locate(
     return Promise.resolve({ status: 'unavailable', point: null });
   }
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: { status: GeolocationStatus; point: GeoPoint | null }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      resolve(result);
+    };
+    const watchdog = setTimeout(() => {
+      finish({ status: 'unavailable', point: null });
+    }, WATCHDOG_MS);
     try {
       geolocation.getCurrentPosition(
         (position) => {
-          resolve({
+          finish({
             status: 'granted',
             point: { lat: position.coords.latitude, lon: position.coords.longitude },
           });
         },
         (error) => {
-          resolve({ status: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable', point: null });
+          finish({ status: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable', point: null });
         },
         options.highAccuracy === true
           ? { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 }
           : { enableHighAccuracy: false, timeout: 10_000, maximumAge: 600_000 },
       );
     } catch {
-      resolve({ status: 'unavailable', point: null });
+      finish({ status: 'unavailable', point: null });
     }
   });
 }

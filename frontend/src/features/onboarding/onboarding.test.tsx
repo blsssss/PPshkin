@@ -99,14 +99,19 @@ describe('gate', () => {
     expect(router.state.location.pathname).toBe('/onboarding/goal');
   });
 
-  it('returns to the consent screen on 403 consent_required', async () => {
+  it('returns to the consent screen on 403 consent_required and asks again', async () => {
     await start(TEST_USER);
-    server.on('PATCH', '/api/v1/me', () => problem(403, 'consent_required'));
+    server.on('PATCH', '/api/v1/me', () => {
+      profile = { ...profile, consents: { ...profile.consents, personalData: NO_CONSENT } };
+      return problem(403, 'consent_required');
+    });
     const { router } = await renderApp('/onboarding/goal');
     fireEvent.click(await screen.findByRole('button', { name: 'Сохранить' }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/onboarding/consent');
     });
+    expect(await screen.findByRole('button', { name: 'Даю согласие' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Далее' })).toBeNull();
   });
 });
 
@@ -237,6 +242,29 @@ describe('goal and target', () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
+  it('drops a stale result when the goal changes', async () => {
+    await start(TEST_USER);
+    server.reply('POST', '/api/v1/me/target/estimate', {
+      kcalTarget: 1550,
+      bmrKcal: 1320,
+      maintenanceKcal: 1815,
+    });
+    await renderApp('/onboarding/goal');
+    fireEvent.click(await screen.findByLabelText('Снизить вес'));
+    fireEvent.click(screen.getByRole('button', { name: 'Рассчитать по параметрам' }));
+    fireEvent.click(screen.getByLabelText('Мужской'));
+    fireEvent.change(screen.getByLabelText('Возраст, лет'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('Рост, см'), { target: { value: '180' } });
+    fireEvent.change(screen.getByLabelText('Вес, кг'), { target: { value: '80,5' } });
+    fireEvent.click(screen.getByLabelText('Сидячий образ жизни'));
+    fireEvent.click(screen.getByRole('button', { name: 'Рассчитать' }));
+    await screen.findByText(/^Ориентир для цели: 1550.ккал$/);
+    fireEvent.click(screen.getByLabelText('Набрать вес'));
+    await waitFor(() => {
+      expect(screen.queryByText(/^Ориентир для цели/)).toBeNull();
+    });
+  });
+
   it('shows field errors from the calculator before sending', async () => {
     await start(TEST_USER);
     await renderApp('/onboarding/goal');
@@ -274,6 +302,26 @@ describe('location', () => {
     });
     expect(server.callsTo('PUT', '/api/v1/me/location')[0]?.body).toEqual({ lat: 55.7887, lon: 49.1221 });
     expect(await screen.findByText('Указана')).toBeTruthy();
+  });
+
+  it('retries a failed save with the same point', async () => {
+    const getCurrentPosition = vi.fn<Geolocation['getCurrentPosition']>((success) => {
+      success({ coords: { latitude: 55.7887, longitude: 49.1221 } } as GeolocationPosition);
+    });
+    mockGeolocation(getCurrentPosition);
+    await start(TEST_USER);
+    server.on('PUT', '/api/v1/me/location', () => problem(503, 'unavailable'));
+    const { router } = await renderApp('/onboarding/location');
+    fireEvent.click(await screen.findByRole('button', { name: 'Разрешить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Повторить' }));
+    server.on('PUT', '/api/v1/me/location', (call) =>
+      json({ location: call.body, updatedAt: '2026-09-26T10:00:00.000Z' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/onboarding/done');
+    });
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
   });
 
   it('offers the bot when the user denies access', async () => {

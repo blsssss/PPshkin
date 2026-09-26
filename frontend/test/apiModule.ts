@@ -27,7 +27,7 @@ export const apiModule = {
   useSession: () => current.useSession(),
 };
 
-export function signInResponse(user: unknown = TEST_USER, startParam: string | null = null) {
+function signInResponse(user: unknown = TEST_USER, startParam: string | null = null) {
   return json({ token: 'token-1', expiresAt: '2026-09-27T00:00:00.000Z', startParam, user });
 }
 
