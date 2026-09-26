@@ -13,7 +13,7 @@ import {
   useUpdateProfile,
 } from '../../api/profile.ts';
 import { botLink } from '../../app/startParam.ts';
-import { openMaxLink } from '../../max/bridge.ts';
+import { haptic, openMaxLink } from '../../max/bridge.ts';
 import { formatKcal } from '../../shared/format.ts';
 import { setDevicePoint } from '../../shared/geo/devicePoint.ts';
 import { useGeolocation } from '../../shared/geo/useGeolocation.ts';
@@ -116,6 +116,7 @@ function SettingsForm({ profile, children }: { profile: UserProfile; children: R
         toast.show('Сохранено');
       },
       onError: (error) => {
+        haptic.error();
         const fields = isApiError(error, 'validation_failed') ? error.fieldErrors : {};
         if (isApiError(error, 'invalid_timezone')) {
           setErrors({ timezone: userMessage(error) });
@@ -216,7 +217,7 @@ function SettingsForm({ profile, children }: { profile: UserProfile; children: R
           </button>
         )}
       </Section>
-      <ActionBar>
+      <ActionBar sends>
         <Button size="large" stretched disabled={!dirty || !online} loading={update.isPending} onClick={save}>
           Сохранить
         </Button>
@@ -459,6 +460,7 @@ export function ProfileScreen() {
           status="error"
           title="Не удалось загрузить профиль"
           description={userMessage(profile.error)}
+          error={profile.error}
           action={{
             label: 'Повторить',
             onClick: () => {

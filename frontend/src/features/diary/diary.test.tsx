@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderApp } from '../../../test/app.tsx';
 import { json, problem, TEST_USER } from '../../../test/http.ts';
@@ -270,6 +270,23 @@ describe('photo', () => {
     const panel = (await screen.findByText(text)).closest('section');
     expect(panel).not.toBeNull();
     expect(within(panel!).getByRole('button', { name: 'Ввести вручную' })).toBeTruthy();
+    expect(within(panel!).getByRole('button', { name: 'Описать словами' })).toBeTruthy();
+  });
+
+  it('changes the waiting text after 10 seconds of photo recognition', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await start();
+    server.on('POST', '/api/v1/diary/meals/photo', () => new Promise<Response>(() => undefined));
+    await renderApp('/diary');
+    fireEvent.click(await screen.findByRole('button', { name: 'Сфотографировать еду' }));
+    chooseFile();
+    expect(await screen.findByText('Распознаём блюдо, обычно 5-10 секунд')).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    const panel = screen.getByText('Ещё немного, фото иногда распознаётся до минуты').closest('section');
+    vi.useRealTimers();
+    expect(panel).not.toBeNull();
     expect(within(panel!).getByRole('button', { name: 'Описать словами' })).toBeTruthy();
   });
 

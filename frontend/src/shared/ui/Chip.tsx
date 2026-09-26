@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cx } from './cx.ts';
 import styles from './Chip.module.css';
+import { haptic } from '../../max/bridge.ts';
 
 export function ChipRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -14,11 +15,13 @@ export function Chip({
   pressed,
   onClick,
   disabled,
+  toggles = false,
   children,
 }: {
   pressed: boolean;
   onClick: () => void;
   disabled?: boolean;
+  toggles?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -27,7 +30,10 @@ export function Chip({
       className={cx(styles.chip, pressed && styles.pressed)}
       aria-pressed={pressed}
       disabled={disabled}
-      onClick={onClick}
+      onClick={() => {
+        if (!pressed || toggles) haptic.selection();
+        onClick();
+      }}
     >
       {children}
     </button>

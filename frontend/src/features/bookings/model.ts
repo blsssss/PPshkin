@@ -48,16 +48,19 @@ export type CreateAction = 'bookings' | 'venue' | 'eat' | 'refresh';
 
 const UNAVAILABLE_TEXT = 'Эта позиция больше недоступна';
 
-export const CREATE_ERRORS: Record<string, { actions: readonly CreateAction[]; text?: string }> = {
-  too_many_bookings: { actions: ['bookings'] },
-  booking_exists: { actions: ['bookings'] },
-  venue_closed: { actions: ['venue', 'eat'] },
-  deal_not_active: { actions: ['refresh', 'eat'] },
-  deal_sold_out: { actions: ['refresh', 'eat'] },
+export const CREATE_ERRORS: Record<string, { actions: readonly CreateAction[]; text: string }> = {
+  too_many_bookings: {
+    actions: ['bookings'],
+    text: 'У вас уже 3 активные брони. Отмените одну или дождитесь её окончания',
+  },
+  booking_exists: { actions: ['bookings'], text: 'Эта горящая позиция уже забронирована вами' },
+  venue_closed: { actions: ['venue', 'eat'], text: 'Заведение сейчас закрыто, бронь недоступна' },
+  deal_not_active: { actions: ['refresh', 'eat'], text: 'Горящая позиция закончилась' },
+  deal_sold_out: { actions: ['refresh', 'eat'], text: 'Горящая позиция закончилась' },
   menu_item_not_found: { actions: ['venue', 'eat'], text: UNAVAILABLE_TEXT },
-  deal_not_found: { actions: ['venue', 'eat'] },
-  menu_item_unavailable: { actions: ['venue', 'eat'] },
-  offer_not_found: { actions: ['eat'] },
+  deal_not_found: { actions: ['venue', 'eat'], text: UNAVAILABLE_TEXT },
+  menu_item_unavailable: { actions: ['venue', 'eat'], text: UNAVAILABLE_TEXT },
+  offer_not_found: { actions: ['eat'], text: 'Предложение устарело, обновите подборку' },
 };
 
 export const HISTORY_LABELS: Record<Exclude<BookingStatus, 'active'>, string> = {

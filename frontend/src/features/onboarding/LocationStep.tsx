@@ -88,7 +88,7 @@ export function LocationStep() {
         </Notice>
       )}
       {save.isError && <Notice tone="error">{userMessage(save.error)}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         {hasLocation && fallback ? (
           <Button
             size="large"

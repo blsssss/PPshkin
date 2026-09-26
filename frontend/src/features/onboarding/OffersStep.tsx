@@ -54,6 +54,7 @@ export function OffersStep() {
           status="error"
           title="Не удалось загрузить текст согласия"
           description={userMessage(consents.error)}
+          error={consents.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -77,7 +78,7 @@ export function OffersStep() {
             с предложениями, не чаще 2 раз в день. Отключить можно в профиле.
           </p>
           {notice !== null && <Notice tone="error">{notice}</Notice>}
-          <ActionBar>
+          <ActionBar sends>
             {granted ? (
               <>
                 <Notice>Предложения в чате включены</Notice>

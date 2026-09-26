@@ -1,7 +1,8 @@
 import { Button } from '@maxhub/max-ui';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { BottomSheet } from './BottomSheet.tsx';
 import styles from './ConfirmSheet.module.css';
+import { haptic } from '../../max/bridge.ts';
 
 export function ConfirmSheet({
   open,
@@ -22,6 +23,9 @@ export function ConfirmSheet({
   onConfirm: () => Promise<void> | void;
   onCancel: () => void;
 }) {
+  useEffect(() => {
+    if (open && destructive) haptic.warning();
+  }, [open, destructive]);
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {

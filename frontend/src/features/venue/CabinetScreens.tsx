@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { isApiError } from '../../api/errors.ts';
 import { userMessage } from '../../api/messages.ts';
 import { buildStartAppLink } from '../../app/startParam.ts';
-import { openExternalLink } from '../../max/bridge.ts';
+import { haptic, openExternalLink } from '../../max/bridge.ts';
 import { plural } from '../../shared/format.ts';
 import { useGeolocation } from '../../shared/geo/useGeolocation.ts';
 import { isOpenNow } from '../../shared/openNow.ts';
@@ -40,6 +40,7 @@ import {
 import { useVenueBookings, useVenueDeals } from './dealQueries.ts';
 import { useReloadVenue, useSaveVenue, useVenue, useVenueMenu, useVenueNotFoundRedirect } from './queries.ts';
 import styles from './Venue.module.css';
+import { useLeave } from '../../shared/appHistory.ts';
 
 const CATEGORY_OPTIONS = (Object.keys(VENUE_CATEGORY_LABELS) as VenueCategory[]).map((value) => ({
   value,
@@ -52,6 +53,7 @@ function VenueLoadError({ error, retry }: { error: unknown; retry: () => void })
       status="error"
       title="Не удалось загрузить заведение"
       description={userMessage(error)}
+      error={error}
       action={{ label: 'Повторить', onClick: retry }}
     />
   );
@@ -182,7 +184,7 @@ function sameForm(a: VenueForm, b: VenueForm): boolean {
 }
 
 function VenueSettingsForm({ venue }: { venue: Venue | null }) {
-  const navigate = useNavigate();
+  const leave = useLeave();
   const toast = useToast();
   const online = useOnline();
   const save = useSaveVenue();
@@ -219,20 +221,23 @@ function VenueSettingsForm({ venue }: { venue: Venue | null }) {
       venue === null ? { create: result.input } : { patch: venuePatch(result.input, venue) };
     if ('patch' in request && Object.keys(request.patch).length === 0) {
       release();
-      void navigate('/venue');
+      leave('/venue');
       return;
     }
     save.mutate(request, {
       onSuccess: () => {
         release();
         toast.show(venue === null ? 'Заведение создано' : 'Сохранено');
-        void navigate('/venue', { replace: true });
+        leave('/venue');
       },
       onError: (error) => {
+        haptic.error();
         if (isApiError(error, 'venue_exists')) {
           release();
           toast.show(userMessage(error), { tone: 'error' });
-          void reload().then(() => navigate('/venue', { replace: true }));
+          void reload().then(() => {
+            leave('/venue');
+          });
           return;
         }
         if (isApiError(error, 'invalid_timezone')) {
@@ -387,7 +392,7 @@ function VenueSettingsForm({ venue }: { venue: Venue | null }) {
         {errors.timezone !== undefined && <p className={styles.error}>{errors.timezone}</p>}
       </div>
       {notice !== null && <Notice tone="error">{notice}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button size="large" stretched loading={save.isPending} disabled={!online} onClick={submit}>
           {venue === null ? 'Создать заведение' : 'Сохранить'}
         </Button>

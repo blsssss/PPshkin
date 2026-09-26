@@ -452,3 +452,32 @@ describe('resilience', () => {
     expect(await screen.findByText('Активных броней нет')).toBeTruthy();
   });
 });
+
+describe('deep link', () => {
+  it('goes back to the list after closing the QR of a booking opened by link', async () => {
+    current = booking();
+    await startSession({ startParam: 'booking_5' });
+    server.on('GET', '/api/v1/bookings/{id}', () => json(current));
+    server.on(
+      'GET',
+      '/api/v1/bookings/{id}/qr',
+      () =>
+        new Response(new Uint8Array([137, 80, 78, 71]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        }),
+    );
+    server.on('GET', '/api/v1/bookings', () => json({ items: [current] }));
+    const { router } = await renderApp('/');
+    fireEvent.click(await screen.findByRole('button', { name: 'Показать сотруднику' }));
+    await screen.findByRole('dialog', { name: 'QR для сотрудника' });
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }));
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/bookings');
+    });
+  });
+});

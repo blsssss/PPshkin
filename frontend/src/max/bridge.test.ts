@@ -13,9 +13,9 @@ import {
   ready,
   requestMaxBrightness,
   restoreBrightness,
-  setClosingConfirmation,
   shareInMax,
   useBackButton,
+  useClosingConfirmation,
 } from './bridge.ts';
 
 describe('without window.WebApp', () => {
@@ -31,7 +31,11 @@ describe('without window.WebApp', () => {
       haptic.error();
       haptic.impact('light');
       ready();
-      setClosingConfirmation(true);
+      haptic.warning();
+      haptic.selection();
+      renderHook(() => {
+        useClosingConfirmation(true);
+      }).unmount();
     }).not.toThrow();
     await expect(requestMaxBrightness()).resolves.toBe(false);
     await expect(restoreBrightness()).resolves.toBeUndefined();
@@ -147,12 +151,42 @@ describe('inside MAX', () => {
     expect(closeApp()).toBe(false);
   });
 
-  it('toggles closing confirmation', () => {
+  it('turns closing confirmation on, off and off on unmount', () => {
     const webApp = fakeWebApp();
-    setClosingConfirmation(true);
-    setClosingConfirmation(false);
+    const { rerender, unmount } = renderHook(
+      ({ active }) => {
+        useClosingConfirmation(active);
+      },
+      { initialProps: { active: true } },
+    );
     expect(webApp.enableClosingConfirmation).toHaveBeenCalledTimes(1);
-    expect(webApp.disableClosingConfirmation).toHaveBeenCalledTimes(1);
+    rerender({ active: false });
+    expect(webApp.disableClosingConfirmation).toHaveBeenCalled();
+    rerender({ active: true });
+    unmount();
+    expect(webApp.enableClosingConfirmation).toHaveBeenCalledTimes(2);
+    expect(webApp.disableClosingConfirmation.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('vibrates warning and selection only on phones and swallows refusals', async () => {
+    const phone = fakeWebApp({
+      HapticFeedback: {
+        impactOccurred: vi.fn(() => Promise.resolve({})),
+        notificationOccurred: vi.fn(() => Promise.reject(new Error('busy'))),
+        selectionChanged: vi.fn(() => Promise.resolve({})),
+      },
+    });
+    haptic.warning();
+    haptic.selection();
+    await Promise.resolve();
+    expect(phone.HapticFeedback.notificationOccurred).toHaveBeenCalledWith('warning');
+    expect(phone.HapticFeedback.selectionChanged).toHaveBeenCalled();
+
+    const desktop = fakeWebApp({ platform: 'desktop' });
+    haptic.warning();
+    haptic.selection();
+    expect(desktop.HapticFeedback.notificationOccurred).not.toHaveBeenCalled();
+    expect(desktop.HapticFeedback.selectionChanged).not.toHaveBeenCalled();
   });
 
   it('shows the system back button while mounted and calls the latest handler', () => {

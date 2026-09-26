@@ -1,11 +1,12 @@
 import { Button, Switch } from '@maxhub/max-ui';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { unwrap } from '../../api/client.ts';
 import { isApiError } from '../../api/errors.ts';
 import { api } from '../../api/index.ts';
 import { userMessage } from '../../api/messages.ts';
-import { haptic, setClosingConfirmation } from '../../max/bridge.ts';
+import { haptic } from '../../max/bridge.ts';
+import { useUnsavedChanges } from '../../shared/useUnsavedChanges.tsx';
 import { useOnline } from '../../shared/useOnline.ts';
 import { ActionBar } from '../../shared/ui/ActionBar.tsx';
 import { Chip, ChipRow } from '../../shared/ui/Chip.tsx';
@@ -34,6 +35,7 @@ import {
 } from './mealForm.ts';
 import { useDiaryDay, useRefreshDiary, type Meal, type MealCandidate } from './queries.ts';
 import styles from './Diary.module.css';
+import { useLeave } from '../../shared/appHistory.ts';
 
 const TAGS = Object.keys(TAG_LABELS) as Tag[];
 
@@ -48,7 +50,7 @@ function MealForm({
   candidate: MealCandidate | null;
   timeZone: string;
 }) {
-  const navigate = useNavigate();
+  const leaveTo = useLeave();
   const toast = useToast();
   const online = useOnline();
   const refresh = useRefreshDiary();
@@ -67,12 +69,7 @@ function MealForm({
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const back = date === null ? '/diary' : `/diary/${date}`;
 
-  useEffect(() => {
-    setClosingConfirmation(dirty);
-    return () => {
-      setClosingConfirmation(false);
-    };
-  }, [dirty]);
+  const { prompt, release } = useUnsavedChanges(dirty);
 
   const update = (patch: Partial<MealFormState>) => {
     setForm((current) => ({ ...current, ...patch }));
@@ -80,8 +77,8 @@ function MealForm({
   };
 
   const leave = () => {
-    setClosingConfirmation(false);
-    void navigate(back, { replace: true });
+    release();
+    leaveTo(back);
   };
 
   const save = async () => {
@@ -108,6 +105,7 @@ function MealForm({
       await refresh();
       leave();
     } catch (error) {
+      haptic.error();
       if (isApiError(error, 'eaten_at_out_of_range')) {
         setErrors({ eatenAt: 'Можно указать время за последние 7 дней' });
       } else if (isApiError(error, 'meal_not_found')) {
@@ -131,6 +129,7 @@ function MealForm({
       toast.show('Запись удалена');
     } catch (error) {
       if (!isApiError(error, 'meal_not_found')) {
+        haptic.error();
         setConfirmDelete(false);
         setNotice(userMessage(error));
         return;
@@ -265,7 +264,7 @@ function MealForm({
       )}
       {errors.tags !== undefined && <p className={styles.fieldError}>{errors.tags}</p>}
       {notice !== null && <Notice tone="error">{notice}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button
           size="large"
           stretched
@@ -302,6 +301,7 @@ function MealForm({
         }}
         onConfirm={remove}
       />
+      {prompt}
     </>
   );
 }
@@ -347,6 +347,7 @@ export function EditMealScreen() {
           status="error"
           title="Не удалось загрузить запись"
           description={userMessage(day.error)}
+          error={day.error}
           action={{
             label: 'Повторить',
             onClick: () => {

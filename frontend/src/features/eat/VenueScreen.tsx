@@ -71,6 +71,7 @@ export function VenueScreen() {
           status="error"
           title="Не удалось загрузить заведение"
           description={userMessage(details.error)}
+          error={details.error}
           action={{
             label: 'Повторить',
             onClick: () => {

@@ -37,6 +37,7 @@ import {
 } from './model.ts';
 import { useBooking, useBookingQr, useBookings, useCancelBooking, useCreateBooking } from './queries.ts';
 import styles from './Bookings.module.css';
+import { useOnline } from '../../shared/useOnline.ts';
 
 function Countdown({ expiresAt, className }: { expiresAt: string; className?: string }) {
   const left = msLeft(expiresAt, useNow());
@@ -88,6 +89,7 @@ function Unavailable({ text, venueId }: { text: string; venueId: number | null }
 function Confirm({ params }: { params: NewBookingParams }) {
   const navigate = useNavigate();
   const create = useCreateBooking();
+  const online = useOnline();
   const [failure, setFailure] = useState<{ text: string; actions: readonly CreateAction[] } | null>(null);
   const details = useQuery({
     queryKey: ['venue-details', params.venueId],
@@ -105,6 +107,7 @@ function Confirm({ params }: { params: NewBookingParams }) {
         status="error"
         title="Не удалось загрузить заведение"
         description={userMessage(details.error)}
+        error={details.error}
         action={{
           label: 'Повторить',
           onClick: () => {
@@ -125,7 +128,7 @@ function Confirm({ params }: { params: NewBookingParams }) {
 
   const act = (action: CreateAction): ScreenAction => {
     const go = (path: string) => () => {
-      void navigate(path);
+      void navigate(path, { replace: true });
     };
     switch (action) {
       case 'bookings':
@@ -160,8 +163,9 @@ function Confirm({ params }: { params: NewBookingParams }) {
           void navigate(`/bookings/${String(booking.id)}`, { replace: true });
         },
         onError: (error) => {
+          haptic.error();
           const known = error instanceof ApiError ? CREATE_ERRORS[error.code] : undefined;
-          setFailure({ text: known?.text ?? userMessage(error), actions: known?.actions ?? [] });
+          setFailure(known ?? { text: userMessage(error), actions: [] });
         },
       },
     );
@@ -200,8 +204,8 @@ function Confirm({ params }: { params: NewBookingParams }) {
           )}
         </Notice>
       )}
-      <ActionBar>
-        <Button size="large" stretched loading={create.isPending} onClick={submit}>
+      <ActionBar sends>
+        <Button size="large" stretched loading={create.isPending} disabled={!online} onClick={submit}>
           Забронировать
         </Button>
       </ActionBar>
@@ -419,6 +423,7 @@ function ActiveBooking({ booking, refetch }: { booking: Booking; refetch: () => 
             toast.show('Бронь отменена');
           } catch (error) {
             if (!isApiError(error, 'booking_not_active') && !isApiError(error, 'booking_expired')) {
+              haptic.error();
               toast.show(userMessage(error), { tone: 'error' });
             }
           }
@@ -483,6 +488,7 @@ export function BookingScreen() {
             status="error"
             title="Не удалось загрузить бронь"
             description={userMessage(booking.error)}
+            error={booking.error}
             action={{
               label: 'Повторить',
               onClick: () => {
@@ -566,6 +572,7 @@ export function BookingsScreen() {
           status="error"
           title="Не удалось загрузить брони"
           description={userMessage(list.error)}
+          error={list.error}
           action={{
             label: 'Повторить',
             onClick: () => {

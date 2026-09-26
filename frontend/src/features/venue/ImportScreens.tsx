@@ -44,6 +44,8 @@ import {
   useVenueNotFoundRedirect,
 } from './queries.ts';
 import styles from './Venue.module.css';
+import { haptic } from '../../max/bridge.ts';
+import { useLeave } from '../../shared/appHistory.ts';
 
 const PHOTO_MAX_SIDE = 2048;
 const TEXT_LIMIT = 8000;
@@ -61,6 +63,9 @@ function importErrorText(error: unknown): string {
   }
   if (error instanceof ImageDecodeError) return 'Не удалось прочитать фото, выберите другой файл';
   if (isApiError(error, 'image_required') || isApiError(error, 'image_empty')) return 'Выберите фото меню';
+  if (isApiError(error, 'import_limit_reached')) {
+    return 'Сегодня загружено 20 меню, это дневной лимит. Добавьте позиции вручную или попробуйте завтра';
+  }
   if (isApiError(error, 'invalid_multipart') || isApiError(error, 'upload_too_many_parts')) {
     return 'Не удалось отправить фото, выберите один файл и попробуйте ещё раз';
   }
@@ -87,9 +92,10 @@ export function ImportStartScreen() {
     onSuccess: (created) => {
       const venueId = venue.data?.id;
       if (venueId !== undefined) saveImportDraft({ venueId, importId: created.id, rows: null });
-      void navigate(`/venue/menu/import/${String(created.id)}`);
+      void navigate(`/venue/menu/import/${String(created.id)}`, { replace: true });
     },
     onError: (error) => {
+      haptic.error();
       const draft = readImportDraft();
       setFailure({
         text: importErrorText(error),
@@ -155,7 +161,7 @@ export function ImportStartScreen() {
               }
             }}
           />
-          <ActionBar>
+          <ActionBar sends>
             <Button
               size="large"
               stretched
@@ -187,7 +193,7 @@ export function ImportStartScreen() {
           <p className={styles.muted}>
             {text.length} из {TEXT_LIMIT}
           </p>
-          <ActionBar>
+          <ActionBar sends>
             <Button
               size="large"
               stretched
@@ -288,6 +294,7 @@ function RowCard({
 
 function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
   const navigate = useNavigate();
+  const leave = useLeave();
   const toast = useToast();
   const queryClient = useQueryClient();
   const online = useOnline();
@@ -318,6 +325,7 @@ function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
         status="error"
         title="Не удалось загрузить меню для сверки"
         description={userMessage(menu.error)}
+        error={menu.error}
         action={{
           label: 'Повторить',
           onClick: () => {
@@ -364,15 +372,17 @@ function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
     if (payload.items.length === 0) return;
     apply.mutate(payload.items, {
       onSuccess: (result) => {
+        haptic.success();
         release();
         clearImportDraft(data.id);
         void queryClient.invalidateQueries({ queryKey: MENU_KEY });
         toast.show(
           `Добавлено ${String(result.items.length)} ${plural(result.items.length, ['позиция', 'позиции', 'позиций'])}`,
         );
-        void navigate('/venue/menu', { replace: true });
+        leave('/venue/menu');
       },
       onError: (error) => {
+        haptic.error();
         if (isApiError(error, 'validation_failed')) {
           const mapped = mapApplyErrors(error.fieldErrors, payload.keys);
           if (mapped.size > 0) {
@@ -385,7 +395,7 @@ function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
           clearImportDraft(data.id);
           void queryClient.invalidateQueries({ queryKey: MENU_KEY });
           toast.show(userMessage(error));
-          void navigate('/venue/menu', { replace: true });
+          leave('/venue/menu');
           return;
         }
         if (isApiError(error, 'import_not_ready')) {
@@ -444,7 +454,7 @@ function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
           />
         ))}
       </ul>
-      <ActionBar>
+      <ActionBar sends>
         {firstError !== undefined && (
           <p className={styles.error}>
             Исправьте {errors.size} {plural(errors.size, ['позицию', 'позиции', 'позиций'])}.{' '}
@@ -553,6 +563,7 @@ export function ImportReviewScreen() {
             status="error"
             title="Не удалось получить статус"
             description={userMessage(query.error)}
+            error={query.error}
             action={{ label: 'Повторить', onClick: restart }}
           />
         ))}

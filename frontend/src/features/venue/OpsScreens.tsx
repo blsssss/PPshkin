@@ -24,6 +24,7 @@ import { useRedeem, useVenueAnalytics, useVenueBookings } from './dealQueries.ts
 import type { Venue } from './model.ts';
 import { useVenue, useVenueNotFoundRedirect } from './queries.ts';
 import styles from './Venue.module.css';
+import { useOnline } from '../../shared/useOnline.ts';
 
 const SOON_MS = 10 * 60_000;
 
@@ -39,6 +40,7 @@ function redeemError(error: unknown): string {
 
 function ActiveRow({ booking, venue }: { booking: Booking; venue: Venue }) {
   const redeem = useRedeem();
+  const online = useOnline();
   const [confirm, setConfirm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const left = new Date(booking.expiresAt).getTime() - useNow();
@@ -64,6 +66,8 @@ function ActiveRow({ booking, venue }: { booking: Booking; venue: Venue }) {
         <Button
           size="medium"
           stretched
+          disabled={!online}
+          aria-label={`Погасить ${booking.code}`}
           onClick={() => {
             setNotice(null);
             setConfirm(true);
@@ -158,6 +162,7 @@ export function VenueBookingsScreen() {
           status="error"
           title="Не удалось загрузить брони"
           description={userMessage(list.error)}
+          error={list.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -172,7 +177,7 @@ export function VenueBookingsScreen() {
         </p>
       )}
       {items.length > 0 && data !== undefined && data !== null && (
-        <ul className={styles.review}>
+        <ul className={styles.review} aria-live="polite">
           {items.map((booking) =>
             tab === 'active' ? (
               <ActiveRow key={booking.id} booking={booking} venue={data} />
@@ -212,6 +217,7 @@ export function RedeemScreen() {
   const navigate = useNavigate();
   useVenueNotFoundRedirect();
   const redeem = useRedeem();
+  const online = useOnline();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [scanFailed, setScanFailed] = useState(false);
@@ -241,6 +247,7 @@ export function RedeemScreen() {
   };
 
   const scan = () => {
+    haptic.impact('light');
     setError(null);
     setScanFailed(false);
     void scanQrCode().then((result) => {
@@ -280,7 +287,7 @@ export function RedeemScreen() {
       <ScreenHeader title="Погашение" back="/venue" />
       {scanner && (
         <div className={styles.actions}>
-          <Button size="large" stretched disabled={redeem.isPending} onClick={scan}>
+          <Button size="large" stretched disabled={redeem.isPending || !online} onClick={scan}>
             Сканировать QR гостя
           </Button>
         </div>
@@ -303,6 +310,11 @@ export function RedeemScreen() {
           </button>
         </Notice>
       )}
+      {!online && (
+        <p className={styles.error} role="status">
+          Нет соединения с интернетом, отправьте, когда сеть появится
+        </p>
+      )}
       <h2 className={styles.sectionTitle}>Ввести код</h2>
       <Field
         label="Код брони"
@@ -323,7 +335,7 @@ export function RedeemScreen() {
           size="large"
           stretched
           loading={redeem.isPending}
-          disabled={code.length !== 6}
+          disabled={code.length !== 6 || !online}
           onClick={() => {
             submit(code);
           }}
@@ -407,6 +419,7 @@ function Analytics({ venue }: { venue: Venue }) {
               : 'Не удалось загрузить статистику'
           }
           description={userMessage(analytics.error)}
+          error={analytics.error}
           action={{
             label: 'Повторить',
             onClick: () => {

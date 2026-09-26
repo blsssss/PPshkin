@@ -6,7 +6,6 @@ import { isApiError } from '../../api/errors.ts';
 import { api } from '../../api/index.ts';
 import { userMessage } from '../../api/messages.ts';
 import { useConsents, useProfile, useUpdateProfile } from '../../api/profile.ts';
-import { haptic } from '../../max/bridge.ts';
 import { validateKcalTarget } from '../../shared/target/body.ts';
 import { KcalTargetPicker } from '../../shared/target/KcalTargetPicker.tsx';
 import { TargetCalculator } from '../../shared/target/TargetCalculator.tsx';
@@ -26,12 +25,14 @@ import { useForgetAccount } from '../../app/forgetAccount.ts';
 import { ConsentText } from '../onboarding/OnboardingStep.tsx';
 import { MAX_DISLIKED_TAGS } from './model.ts';
 import styles from './Profile.module.css';
+import { useLeave } from '../../shared/appHistory.ts';
+import { haptic } from '../../max/bridge.ts';
 
 const TAGS = Object.keys(TAG_LABELS) as Tag[];
 const GOAL_OPTIONS = GOALS.map((value) => ({ value, label: GOAL_LABELS[value] }));
 
 export function TargetScreen() {
-  const navigate = useNavigate();
+  const leave = useLeave();
   const toast = useToast();
   const online = useOnline();
   const profile = useProfile().data;
@@ -51,9 +52,10 @@ export function TargetScreen() {
       {
         onSuccess: () => {
           toast.show('Ориентир сохранён');
-          void navigate('/profile', { replace: true });
+          leave('/profile');
         },
         onError: (failure) => {
+          haptic.error();
           if (!isApiError(failure, 'consent_required')) toast.show(userMessage(failure), { tone: 'error' });
         },
       },
@@ -87,7 +89,7 @@ export function TargetScreen() {
         }}
         error={error}
       />
-      <ActionBar>
+      <ActionBar sends>
         <Button size="large" stretched loading={update.isPending} disabled={!online} onClick={save}>
           Сохранить ориентир
         </Button>
@@ -97,7 +99,7 @@ export function TargetScreen() {
 }
 
 export function TagsScreen() {
-  const navigate = useNavigate();
+  const leave = useLeave();
   const toast = useToast();
   const online = useOnline();
   const profile = useProfile().data;
@@ -120,9 +122,9 @@ export function TagsScreen() {
             <Chip
               key={tag}
               pressed={pressed}
+              toggles
               disabled={!pressed && selected.length >= MAX_DISLIKED_TAGS}
               onClick={() => {
-                haptic.impact('light');
                 setSelected((current) =>
                   pressed ? current.filter((item) => item !== tag) : [...current, tag],
                 );
@@ -133,7 +135,7 @@ export function TagsScreen() {
           );
         })}
       </ChipRow>
-      <ActionBar>
+      <ActionBar sends>
         <Button
           size="large"
           stretched
@@ -145,7 +147,7 @@ export function TagsScreen() {
               {
                 onSuccess: () => {
                   toast.show('Сохранено');
-                  void navigate('/profile', { replace: true });
+                  leave('/profile');
                 },
                 onError: (error) => {
                   if (!isApiError(error, 'consent_required'))
@@ -187,6 +189,7 @@ export function ConsentTextScreen() {
           status="error"
           title="Не удалось загрузить текст согласия"
           description={userMessage(consents.error)}
+          error={consents.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -222,6 +225,7 @@ const CONSEQUENCES = [
 
 export function DeleteAccountScreen() {
   const forget = useForgetAccount();
+  const online = useOnline();
   const [confirm, setConfirm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const remove = useMutation({
@@ -239,13 +243,13 @@ export function DeleteAccountScreen() {
         ))}
       </ul>
       {notice !== null && <Notice tone="error">{notice}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button
           size="large"
           stretched
           variant="destructive"
+          disabled={!online}
           onClick={() => {
-            haptic.impact('medium');
             setConfirm(true);
           }}
         >
@@ -268,6 +272,7 @@ export function DeleteAccountScreen() {
             setConfirm(false);
             forget();
           } catch (error) {
+            haptic.error();
             setConfirm(false);
             setNotice(userMessage(error));
           }

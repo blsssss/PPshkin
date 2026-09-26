@@ -156,7 +156,10 @@ describe('consents', () => {
     await start();
     server.on('GET', '/api/v1/consents', () => problem(503, 'unavailable'));
     await renderApp('/onboarding/consent');
-    expect(await screen.findByText('Не удалось загрузить текст согласия')).toBeTruthy();
+    expect(
+      await screen.findByText('Не удалось загрузить текст согласия', {}, { timeout: 3000 }),
+    ).toBeTruthy();
+    expect(server.callsTo('GET', '/api/v1/consents')).toHaveLength(2);
     server.reply('GET', '/api/v1/consents', CONSENTS);
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByText('Первый абзац согласия.')).toBeTruthy();

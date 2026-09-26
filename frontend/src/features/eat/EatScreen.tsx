@@ -147,6 +147,7 @@ export function EatScreen() {
           status="error"
           title="Не удалось подобрать блюда"
           description={userMessage(recommendations.error)}
+          error={recommendations.error}
           action={{
             label: 'Повторить',
             onClick: () => {

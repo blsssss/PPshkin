@@ -47,6 +47,8 @@ import {
   useVenueNotFoundRedirect,
 } from './queries.ts';
 import styles from './Venue.module.css';
+import { haptic } from '../../max/bridge.ts';
+import { useLeave } from '../../shared/appHistory.ts';
 
 const SEARCH_FROM = 15;
 const ALL_TAGS = Object.keys(TAG_LABELS) as Tag[];
@@ -169,6 +171,7 @@ export function MenuScreen() {
           status="error"
           title="Не удалось загрузить заведение"
           description={userMessage(venue.error)}
+          error={venue.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -182,6 +185,7 @@ export function MenuScreen() {
           status="error"
           title="Не удалось загрузить меню"
           description={userMessage(menu.error)}
+          error={menu.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -312,6 +316,7 @@ export function ItemFields({
             <Chip
               key={tag}
               pressed={pressed}
+              toggles
               disabled={!pressed && form.tags.length >= MAX_ITEM_TAGS}
               onClick={() => {
                 onChange('tags', pressed ? form.tags.filter((item) => item !== tag) : [...form.tags, tag]);
@@ -333,6 +338,7 @@ function sameItemForm(a: ItemForm, b: ItemForm): boolean {
 
 function ItemEditor({ item }: { item: MenuItem | null }) {
   const navigate = useNavigate();
+  const leaveTo = useLeave();
   const toast = useToast();
   const online = useOnline();
   const save = useSaveItem();
@@ -351,7 +357,7 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
 
   const leave = () => {
     release();
-    void navigate('/venue/menu', { replace: true });
+    leaveTo('/venue/menu');
   };
 
   const gone = () => {
@@ -376,12 +382,15 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
         leave();
       },
       onError: (error) => {
+        haptic.error();
         if (isApiError(error, 'menu_item_not_found')) {
           gone();
           return;
         }
         if (isApiError(error, 'deal_price_not_lower')) {
-          setErrors({ priceRub: userMessage(error) });
+          setErrors({
+            priceRub: 'Есть горящее предложение по цене не ниже новой. Снимите его или укажите цену выше',
+          });
           return;
         }
         if (isApiError(error, 'validation_failed')) {
@@ -420,7 +429,7 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
         В продаже
       </label>
       {notice !== null && <Notice tone="error">{notice}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button size="large" stretched loading={save.isPending} disabled={!online} onClick={submit}>
           {item === null ? 'Добавить позицию' : 'Сохранить'}
         </Button>
@@ -467,6 +476,7 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
               toast.show('Позиция удалена');
               leave();
             } catch (error) {
+              haptic.error();
               setConfirm(false);
               if (isApiError(error, 'menu_item_not_found')) gone();
               else setNotice(userMessage(error));
@@ -504,6 +514,7 @@ export function EditItemScreen() {
           status="error"
           title="Не удалось загрузить меню"
           description={userMessage(menu.error)}
+          error={menu.error}
           action={{
             label: 'Повторить',
             onClick: () => {

@@ -41,6 +41,7 @@ import { useCancelDeal, useCreateDeal, useUpdateDeal, useVenueDeals } from './de
 import { normalizeName, type MenuItem, type Venue } from './model.ts';
 import { useVenue, useVenueMenu, useVenueNotFoundRedirect } from './queries.ts';
 import styles from './Venue.module.css';
+import { useLeave } from '../../shared/appHistory.ts';
 
 const FORM_ERRORS: Record<string, string> = {
   deal_price_not_lower: 'Цена со скидкой должна быть ниже обычной цены',
@@ -128,6 +129,7 @@ function DealCard({ deal, venue, finished }: { deal: Deal; venue: Venue; finishe
             await cancel.mutateAsync(deal.id);
             toast.show('Горящая позиция снята');
           } catch (error) {
+            haptic.error();
             toast.show(dealError(error), { tone: 'error' });
           }
           setConfirm(false);
@@ -178,6 +180,7 @@ export function VenueDealsScreen() {
           status="error"
           title="Не удалось загрузить горящие позиции"
           description={userMessage(deals.error)}
+          error={deals.error}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -306,6 +309,7 @@ function initialQuantity(params: URLSearchParams): Quantity {
 
 function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; active: Deal[] }) {
   const navigate = useNavigate();
+  const leave = useLeave();
   const online = useOnline();
   const [params] = useSearchParams();
   const create = useCreateDeal();
@@ -363,7 +367,7 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
             size="large"
             stretched
             onClick={() => {
-              void navigate('/venue/deals', { replace: true });
+              leave('/venue/deals');
             }}
           >
             К списку
@@ -536,7 +540,7 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
           )}
         </Notice>
       )}
-      <ActionBar>
+      <ActionBar sends>
         <Button
           size="large"
           stretched
@@ -570,6 +574,7 @@ export function NewDealScreen() {
           status="error"
           title="Не удалось загрузить данные"
           description={userMessage(failed)}
+          error={failed}
           action={{
             label: 'Повторить',
             onClick: () => {
@@ -588,7 +593,7 @@ export function NewDealScreen() {
 }
 
 function EditDeal({ deal, venue }: { deal: Deal; venue: Venue }) {
-  const navigate = useNavigate();
+  const leave = useLeave();
   const toast = useToast();
   const online = useOnline();
   const update = useUpdateDeal();
@@ -619,9 +624,10 @@ function EditDeal({ deal, venue }: { deal: Deal; venue: Venue }) {
         onSuccess: () => {
           release();
           toast.show('Сохранено');
-          void navigate('/venue/deals', { replace: true });
+          leave('/venue/deals');
         },
         onError: (failure) => {
+          haptic.error();
           if (isApiError(failure, 'validation_failed') && Object.keys(failure.fieldErrors).length > 0) {
             setFieldErrors(failure.fieldErrors);
             return;
@@ -665,7 +671,7 @@ function EditDeal({ deal, venue }: { deal: Deal; venue: Venue }) {
       {!endValid && <p className={styles.error}>Время окончания должно быть в ближайшие 24 часа</p>}
       {fieldErrors.endsAt !== undefined && <p className={styles.error}>{fieldErrors.endsAt}</p>}
       {error !== null && <Notice tone="error">{error}</Notice>}
-      <ActionBar>
+      <ActionBar sends>
         <Button
           size="large"
           stretched
@@ -698,6 +704,7 @@ export function EditDealScreen() {
           status="error"
           title="Не удалось загрузить горящие позиции"
           description={userMessage(active.error)}
+          error={active.error}
           action={{
             label: 'Повторить',
             onClick: () => {
