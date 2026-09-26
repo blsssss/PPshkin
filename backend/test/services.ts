@@ -43,6 +43,35 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       remove: notStubbed('diary.remove'),
     },
     account: { deleteAccount: notStubbed('account.deleteAccount') },
+    venues: {
+      get: notStubbed('venues.get'),
+      create: notStubbed('venues.create'),
+      update: notStubbed('venues.update'),
+    },
+    menu: {
+      list: notStubbed('menu.list'),
+      create: notStubbed('menu.create'),
+      update: notStubbed('menu.update'),
+      archive: notStubbed('menu.archive'),
+    },
+    menuImports: {
+      fromPhoto: notStubbed('menuImports.fromPhoto'),
+      fromText: notStubbed('menuImports.fromText'),
+      get: notStubbed('menuImports.get'),
+      apply: notStubbed('menuImports.apply'),
+    },
+    deals: {
+      list: notStubbed('deals.list'),
+      create: notStubbed('deals.create'),
+      update: notStubbed('deals.update'),
+      cancel: notStubbed('deals.cancel'),
+    },
+    catalog: {
+      venues: notStubbed('catalog.venues'),
+      venue: notStubbed('catalog.venue'),
+      deals: notStubbed('catalog.deals'),
+      deal: notStubbed('catalog.deal'),
+    },
     ...overrides,
   };
 }

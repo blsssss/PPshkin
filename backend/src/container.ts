@@ -4,11 +4,16 @@ import type { Pool } from './db/pool.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
 import { createAuthService } from './services/auth.ts';
+import { createCatalogService } from './services/catalog.ts';
 import { createConsentsService } from './services/consents.ts';
+import { createDealsService } from './services/deals.ts';
 import { createDiaryService } from './services/diary.ts';
 import { createHealthService } from './services/health.ts';
 import type { Services } from './services/index.ts';
+import { createMenuImportsService } from './services/menu-imports.ts';
+import { createMenuService } from './services/menu.ts';
 import { createProfileService } from './services/profile.ts';
+import { createVenuesService } from './services/venues.ts';
 import type { BackgroundTasks } from './shared/background.ts';
 import type { Clock } from './shared/clock.ts';
 
@@ -20,7 +25,7 @@ export interface ContainerOptions {
   background: BackgroundTasks;
 }
 
-export function createServices({ config, pool, clock, recognition }: ContainerOptions): Services {
+export function createServices({ config, pool, clock, recognition, background }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
   return {
     health: createHealthService(pool),
@@ -41,5 +46,10 @@ export function createServices({ config, pool, clock, recognition }: ContainerOp
     consents,
     diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
     account: createAccountService({ pool, clock }),
+    venues: createVenuesService({ pool, clock }),
+    menu: createMenuService({ pool, clock }),
+    menuImports: createMenuImportsService({ pool, clock, menus: recognition.menus, background }),
+    deals: createDealsService({ pool, clock }),
+    catalog: createCatalogService({ pool, clock }),
   };
 }
