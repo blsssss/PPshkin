@@ -94,6 +94,7 @@ describe('catalog routes', () => {
         'lat=55.79&lon=49.12&radius=50',
         'radius=20000',
         'lat=abc&lon=1',
+        'lat=&lon=49.12',
       ]) {
         const response = await app.inject({ method: 'GET', url: `${path}?${query}`, headers: guest });
         expect(response.statusCode, `${path}?${query}`).toBe(400);
@@ -101,6 +102,19 @@ describe('catalog routes', () => {
         expect(response.json()).toMatchObject({ code: 'validation_failed' });
       }
     }
+  });
+
+  it('treats blank search parameters as missing', async () => {
+    const venues = vi.fn<CatalogService['venues']>(() => Promise.resolve([venueCard]));
+    const deals = vi.fn<CatalogService['deals']>(() => Promise.resolve([dealCard]));
+    app = await buildTestApp({ services: { catalog: catalogStub({ venues, deals }) } });
+    for (const path of ['/api/v1/venues', '/api/v1/deals'] as const) {
+      const response = await app.inject({ method: 'GET', url: `${path}?lat=&lon=&radius=`, headers: guest });
+      expect(response.statusCode).toBe(200);
+      expectContract(response, 'GET', path);
+    }
+    expect(venues).toHaveBeenCalledWith(GUEST_ID, { point: null, radiusM: 3000 });
+    expect(deals).toHaveBeenCalledWith(GUEST_ID, { point: null, radiusM: 3000 });
   });
 
   it('shows the venue card with its menu and deals', async () => {

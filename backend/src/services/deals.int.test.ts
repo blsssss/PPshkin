@@ -175,6 +175,55 @@ describe('changing deals', () => {
     });
   });
 
+  it('refuses to change a sold out deal after its end time', async () => {
+    const { deal } = await service.create(OWNER, input({ endsAt: inHours(1) }));
+    await service.update(OWNER, deal.id, { quantityLeft: 0 });
+    clock.advance(2 * HOUR);
+    for (const patch of [
+      { quantityLeft: 3, endsAt: inHours(3) },
+      { quantityLeft: 3 },
+      { endsAt: inHours(3) },
+    ]) {
+      await expect(service.update(OWNER, deal.id, patch)).rejects.toMatchObject({
+        status: 409,
+        code: 'deal_finished',
+      });
+    }
+    const [finished] = await service.list(OWNER, 'finished');
+    expect(finished).toMatchObject({ status: 'sold_out', deal: { id: deal.id, quantityLeft: 0 } });
+  });
+
+  it('checks the menu price and availability again before bringing back a sold out deal', async () => {
+    const { deal } = await service.create(OWNER, input({ priceRub: 150 }));
+    await service.update(OWNER, deal.id, { quantityLeft: 0 });
+    await menu.update(OWNER, item.id, { priceRub: 100 });
+    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 })).rejects.toMatchObject({
+      status: 422,
+      code: 'deal_price_not_lower',
+    });
+    await menu.update(OWNER, item.id, { priceRub: 150 });
+    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 })).rejects.toMatchObject({
+      code: 'deal_price_not_lower',
+    });
+    expect((await service.update(OWNER, deal.id, { endsAt: inHours(3) })).status).toBe('sold_out');
+
+    await menu.update(OWNER, item.id, { priceRub: 300, isAvailable: false });
+    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 })).rejects.toMatchObject({
+      status: 422,
+      code: 'menu_item_unavailable',
+    });
+    await menu.update(OWNER, item.id, { isAvailable: true });
+    const revived = await service.update(OWNER, deal.id, { quantityLeft: 3 });
+    expect(revived).toMatchObject({ status: 'active', deal: { quantityLeft: 3, priceRub: 150 } });
+  });
+
+  it('keeps a live deal editable while its item is hidden from guests', async () => {
+    const { deal } = await service.create(OWNER, input());
+    await menu.update(OWNER, item.id, { isAvailable: false });
+    const updated = await service.update(OWNER, deal.id, { quantityLeft: 2, endsAt: inHours(3) });
+    expect(updated).toMatchObject({ status: 'active', deal: { quantityLeft: 2, endsAt: inHours(3) } });
+  });
+
   it('does not bring back a sold out deal while a newer one is live or the item is archived', async () => {
     const { deal } = await service.create(OWNER, input());
     await service.update(OWNER, deal.id, { quantityLeft: 0 });
@@ -202,6 +251,19 @@ describe('changing deals', () => {
     await service.cancel(OWNER, deal.id);
     const [finished] = await service.list(OWNER, 'finished');
     expect(finished).toMatchObject({ status: 'cancelled', deal: { id: deal.id, cancelledAt } });
+  });
+
+  it('keeps the final status of sold out and ended deals when they are cancelled', async () => {
+    const { deal } = await service.create(OWNER, input());
+    await service.update(OWNER, deal.id, { quantityLeft: 0 });
+    const ended = await seedDeal(pool, item, { startsAt: inHours(-3), endsAt: inHours(-1) });
+    await service.cancel(OWNER, deal.id);
+    await service.cancel(OWNER, ended.id);
+    const finished = await service.list(OWNER, 'finished');
+    expect(finished.map((view) => [view.deal.id, view.status, view.deal.cancelledAt])).toEqual([
+      [deal.id, 'sold_out', null],
+      [ended.id, 'ended', null],
+    ]);
   });
 });
 

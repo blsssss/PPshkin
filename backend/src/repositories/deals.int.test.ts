@@ -56,19 +56,32 @@ describe('deals repository', () => {
     await deals.update(pool, deal.id, { quantityLeft: 0, endsAt: deal.endsAt });
     expect(await deals.findLiveForItem(pool, item.id, now)).toBeNull();
     const next = await seedDeal(pool, item, { startsAt: now, endsAt: inHours(1) });
-    expect(await deals.cancelInVenue(pool, venue.id, next.id, now)).toBe(true);
+    await deals.cancelLiveInVenue(pool, venue.id, next.id, now);
     expect(await deals.findLiveForItem(pool, item.id, now)).toBeNull();
   });
 
   it('keeps the first cancellation time and ignores deals of other venues', async () => {
     const deal = await seedDeal(pool, item, { startsAt: now, endsAt: inHours(1) });
     const other = await seedVenue(pool, 2, { name: 'Пекарня' });
-    expect(await deals.cancelInVenue(pool, other.id, deal.id, now)).toBe(false);
+    await deals.cancelLiveInVenue(pool, other.id, deal.id, now);
+    expect(await deals.findInVenue(pool, venue.id, deal.id)).toMatchObject({ cancelledAt: null });
     expect(await deals.findInVenue(pool, other.id, deal.id)).toBeNull();
     expect(await deals.lockInVenue(pool, other.id, deal.id)).toBeNull();
-    await deals.cancelInVenue(pool, venue.id, deal.id, now);
-    await deals.cancelInVenue(pool, venue.id, deal.id, inHours(1));
+    await deals.cancelLiveInVenue(pool, venue.id, deal.id, now);
+    await deals.cancelLiveInVenue(pool, venue.id, deal.id, inHours(1));
     expect(await deals.lockInVenue(pool, venue.id, deal.id)).toMatchObject({ cancelledAt: now });
+  });
+
+  it('leaves sold out and ended deals as they are when cancelling', async () => {
+    const soldOut = await seedDeal(pool, item, { startsAt: now, endsAt: inHours(2) });
+    await deals.update(pool, soldOut.id, { quantityLeft: 0, endsAt: soldOut.endsAt });
+    const ended = await seedDeal(pool, item, { startsAt: inHours(-3), endsAt: inHours(-1) });
+    const scheduled = await seedDeal(pool, item, { startsAt: inHours(1), endsAt: inHours(2) });
+    for (const deal of [soldOut, ended, scheduled])
+      await deals.cancelLiveInVenue(pool, venue.id, deal.id, now);
+    expect(await deals.findInVenue(pool, venue.id, soldOut.id)).toMatchObject({ cancelledAt: null });
+    expect(await deals.findInVenue(pool, venue.id, ended.id)).toMatchObject({ cancelledAt: null });
+    expect(await deals.findInVenue(pool, venue.id, scheduled.id)).toMatchObject({ cancelledAt: now });
   });
 
   it('cancels only the live deal when an item leaves the menu', async () => {

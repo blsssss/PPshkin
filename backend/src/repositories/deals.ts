@@ -73,12 +73,17 @@ export async function update(db: Queryable, id: number, changes: DealChanges): P
   return mapDeal(row);
 }
 
-export async function cancelInVenue(db: Queryable, venueId: number, id: number, now: Date): Promise<boolean> {
-  const { rowCount } = await db.query(
-    'update deals set cancelled_at = coalesce(cancelled_at, $3) where venue_id = $1 and id = $2',
+export async function cancelLiveInVenue(
+  db: Queryable,
+  venueId: number,
+  id: number,
+  now: Date,
+): Promise<void> {
+  await db.query(
+    `update deals as d set cancelled_at = $3
+      where d.venue_id = $1 and d.id = $2 and ${LIVE} and d.ends_at > $3`,
     [venueId, id, now],
   );
-  return rowCount === 1;
 }
 
 export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<void> {

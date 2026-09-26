@@ -15,7 +15,7 @@ import {
 
 const SEARCH_POINT = [
   'Точка поиска: lat и lon из запроса, иначе сохранённое приблизительное местоположение пользователя.',
-  'Если точки нет, радиус не применяется и distanceM равен null.',
+  'Если точки нет, радиус не применяется и distanceM равен null. Пустые параметры считаются непереданными.',
 ].join(' ');
 const BAD_QUERY = 'Коды ошибок: validation_failed (400, передайте lat и lon вместе, radius от 100 до 10000).';
 
@@ -61,7 +61,8 @@ export const catalogRoutes: FastifyPluginCallbackZod<{ catalog: CatalogService }
         summary: 'Карточка заведения',
         description: [
           'Меню из доступных позиций и горящие предложения, которые можно забронировать сейчас.',
-          'Коды ошибок: venue_not_found (404, заведение не найдено, вернитесь к списку).',
+          'Коды ошибок: venue_not_found (404, заведение не найдено, вернитесь к списку),',
+          'validation_failed (400, id должен быть положительным целым числом).',
         ].join(' '),
         security: bearerSecurity,
         params: IdParams,

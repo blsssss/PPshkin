@@ -36,6 +36,7 @@ interface VenueRouteOptions {
 
 const NO_VENUE = 'venue_not_found (404, заведения ещё нет, предложите создать его через POST /api/v1/venue)';
 const BAD_INPUT = 'validation_failed (400, исправьте поля из errors)';
+const BAD_ID = 'validation_failed (400, id должен быть положительным целым числом)';
 
 const IMPORT_POLLING =
   'Ответ 202 со статусом processing, распознавание идёт в фоне: опрашивайте GET /api/v1/venue/menu/imports/{id} раз в 2 секунды.';
@@ -193,7 +194,8 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         summary: 'Убрать позицию из меню',
         description: [
           'Позиция архивируется: пропадает из меню, каталога и рекомендаций, её горящее предложение снимается. Уже оформленные брони действуют.',
-          `Коды ошибок: menu_item_not_found (404, позиция уже удалена или принадлежит другому заведению), ${NO_VENUE}.`,
+          'Коды ошибок: menu_item_not_found (404, позиция уже удалена или принадлежит другому заведению),',
+          `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
         params: IdParams,
@@ -216,7 +218,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         tags: ['venue'],
         summary: 'Распознать меню по фото',
         description: [
-          'Фото меню в multipart/form-data, поле image: JPEG, PNG или WebP до 10 МБ. Распознавание фото обычно занимает 15-30 секунд, фото не сохраняется.',
+          'Фото меню в multipart/form-data, поле image: JPEG, PNG или WebP до 10 МБ. Распознавание фото обычно занимает 10-25 секунд, фото не сохраняется.',
           IMPORT_POLLING,
           IMPORT_LIMITS,
           'image_required, image_empty, invalid_multipart (400, приложите одно фото в поле image),',
@@ -274,7 +276,8 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         description: [
           'processing: продолжайте опрос; ready: покажите позиции владельцу для проверки и примените их; failed: покажите текст error.',
           'Импорт, который распознаётся дольше 30 минут, отдаётся как failed.',
-          `Коды ошибок: import_not_found (404, импорт принадлежит другому заведению или не существует), ${NO_VENUE}.`,
+          'Коды ошибок: import_not_found (404, импорт принадлежит другому заведению или не существует),',
+          `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
         params: IdParams,
@@ -381,8 +384,10 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         description: [
           'Меняет остаток порций или время окончания, нужно хотя бы одно поле.',
           'Коды ошибок: deal_not_found (404, предложение принадлежит другому заведению или не существует),',
-          'deal_finished (409, предложение снято или его время вышло, выставьте новое),',
+          'deal_finished (409, предложение снято, его время вышло или позиция удалена, выставьте новое),',
           'deal_exists (409, вернуть порции распроданному предложению нельзя: на позицию уже выставлено новое),',
+          'menu_item_unavailable (422, чтобы вернуть порции распроданному предложению, сначала включите позицию),',
+          'deal_price_not_lower (422, цена в меню стала не выше цены предложения, выставьте новое предложение),',
           'deal_quantity_invalid (422, остаток не может быть больше quantityTotal),',
           `deal_window_invalid (422, выберите окончание в ближайшие 24 часа), ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
@@ -414,8 +419,10 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         tags: ['venue'],
         summary: 'Снять горящее предложение',
         description: [
-          'Снимает предложение с продажи, повторный вызов тоже отвечает 204. Уже оформленные брони действуют.',
-          `Коды ошибок: deal_not_found (404, предложение принадлежит другому заведению или не существует), ${NO_VENUE}.`,
+          'Снимает идущее или запланированное предложение с продажи. Уже оформленные брони действуют.',
+          'Распроданное, закончившееся или уже снятое предложение не меняется, ответ тоже 204.',
+          'Коды ошибок: deal_not_found (404, предложение принадлежит другому заведению или не существует),',
+          `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
         params: IdParams,

@@ -81,16 +81,18 @@ export const VenuePatchBody = VenueBody.partial()
   .refine((patch) => Object.keys(patch).length > 0, 'Provide at least one field to change')
   .meta({ minProperties: 1 });
 
+const blankAsMissing = (value: unknown) => (value === '' ? undefined : value);
+
 export const NearbyQuery = z
   .object({
-    lat: z.coerce.number().min(-90).max(90).optional().describe('Широта точки поиска, вместе с lon'),
-    lon: z.coerce.number().min(-180).max(180).optional().describe('Долгота точки поиска, вместе с lat'),
-    radius: z.coerce
-      .number()
-      .int()
-      .min(100)
-      .max(10_000)
-      .default(3000)
+    lat: z
+      .preprocess(blankAsMissing, z.coerce.number().min(-90).max(90).optional())
+      .describe('Широта точки поиска, вместе с lon'),
+    lon: z
+      .preprocess(blankAsMissing, z.coerce.number().min(-180).max(180).optional())
+      .describe('Долгота точки поиска, вместе с lat'),
+    radius: z
+      .preprocess(blankAsMissing, z.coerce.number().int().min(100).max(10_000).default(3000))
       .describe('Радиус поиска в метрах, применяется при известной точке'),
   })
   .refine((query) => (query.lat === undefined) === (query.lon === undefined), {

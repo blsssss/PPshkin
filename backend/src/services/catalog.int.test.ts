@@ -139,7 +139,7 @@ describe('nearby venues', () => {
     const soldOut = await liveDeal(extra);
     await deals.update(pool, soldOut.id, { quantityLeft: 0, endsAt: soldOut.endsAt });
     const cancelled = await liveDeal(extra);
-    await deals.cancelInVenue(pool, venue.id, cancelled.id, clock.now());
+    await deals.cancelLiveInVenue(pool, venue.id, cancelled.id, clock.now());
     await seedDeal(pool, extra, { startsAt: inHours(1), endsAt: inHours(2) });
     await seedDeal(pool, extra, { startsAt: inHours(-2), endsAt: inHours(-1) });
     const other = await seedVenue(pool, 2, { name: 'Пусто', location: KREMLIN });

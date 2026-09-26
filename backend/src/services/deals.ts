@@ -76,6 +76,18 @@ function assertWindow(endsAt: Date, now: Date, startsAt: Date = now): void {
   }
 }
 
+function assertSellable(item: MenuItem, priceRub: number): void {
+  if (!item.isAvailable) {
+    throw unprocessable('menu_item_unavailable', 'The item is hidden from guests, make it available first');
+  }
+  if (priceRub >= item.priceRub) {
+    throw unprocessable(
+      'deal_price_not_lower',
+      `The deal price must be lower than the menu price of ${item.priceRub} RUB`,
+    );
+  }
+}
+
 function dealExists() {
   return conflict('deal_exists', 'This item already has a live hot deal, change or cancel it instead');
 }
@@ -96,18 +108,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       const venue = await requireOwnedVenue(pool, ownerId);
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, input.menuItemId);
-        if (!item.isAvailable) {
-          throw unprocessable(
-            'menu_item_unavailable',
-            'The item is hidden from guests, make it available first',
-          );
-        }
-        if (input.priceRub >= item.priceRub) {
-          throw unprocessable(
-            'deal_price_not_lower',
-            `The deal price must be lower than the menu price of ${item.priceRub} RUB`,
-          );
-        }
+        assertSellable(item, input.priceRub);
         const now = clock.now();
         assertWindow(input.endsAt, now);
         if (await deals.findLiveForItem(client, item.id, now)) throw dealExists();
@@ -135,8 +136,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
         const deal = await deals.lockInVenue(client, venue.id, dealId);
         if (!deal) throw dealNotFound();
         const now = clock.now();
-        const status = dealStatus(deal, now);
-        if (status === 'cancelled' || status === 'ended' || item.archivedAt) {
+        if (deal.cancelledAt || deal.endsAt <= now || item.archivedAt) {
           throw conflict('deal_finished', 'The deal is cancelled or over, create a new one');
         }
         const quantityLeft = patch.quantityLeft ?? deal.quantityLeft;
@@ -148,6 +148,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
         }
         if (patch.endsAt) assertWindow(patch.endsAt, now, deal.startsAt);
         if (quantityLeft > 0) {
+          if (deal.quantityLeft === 0) assertSellable(item, deal.priceRub);
           const live = await deals.findLiveForItem(client, item.id, now);
           if (live && live.id !== deal.id) throw dealExists();
         }
@@ -161,7 +162,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
 
     async cancel(ownerId, dealId) {
       const venue = await requireOwnedVenue(pool, ownerId);
-      if (!(await deals.cancelInVenue(pool, venue.id, dealId, clock.now()))) throw dealNotFound();
+      if (!(await deals.findInVenue(pool, venue.id, dealId))) throw dealNotFound();
+      await deals.cancelLiveInVenue(pool, venue.id, dealId, clock.now());
     },
   };
 }
