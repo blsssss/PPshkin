@@ -1,7 +1,7 @@
 import type { ParsedMenuItem } from '../domain/models.ts';
 import type { MenuCategory, Tag } from '../domain/vocabulary.ts';
 import { finishMenuItems, stem, weightWithinBounds, words, type MenuItemDraft } from './normalize.ts';
-import { CATEGORY_DEFAULTS, findReferenceDish } from './reference.ts';
+import { CATEGORY_DEFAULTS, findReferenceDish, type ReferenceDish } from './reference.ts';
 
 const CATEGORY_KEYWORDS: readonly (readonly [MenuCategory, readonly string[]])[] = [
   [
@@ -42,8 +42,8 @@ const TAG_STEMS = TAG_KEYWORDS.map(([tags, keywords]) => [tags, toStems(keywords
 
 const NUMBER = String.raw`\d+(?:[.,]\d+)?`;
 const SLASHED_NUMBERS = String.raw`${NUMBER}(?:\s*\/\s*${NUMBER})*`;
-const GROUPED_PRICE = String.raw`\d(?:[ \u{a0}\u{202f}]\d{3})+(?=\s*(?:\u{20bd}|руб|р\.|р(?!\p{L})))`;
-const UNIT = String.raw`\s*(?:(гр|г|g)|(мл|ml|л))\.?(?!\p{L})`;
+const GROUPED_PRICE = String.raw`\d(?:[ \u{a0}\u{202f}]\d{3})+(?=\s*(?:\u{20bd}|руб|р\.|р(?!\p{L})|$))`;
+const UNIT = String.raw`\s*(?:(гр|г|g)|(мл|ml|л)|(шт|штук[аи]?|pcs))\.?(?!\p{L})`;
 const QUANTITY = new RegExp(`(${GROUPED_PRICE}|${SLASHED_NUMBERS})(?:${UNIT})?`, 'giu');
 const LIST_MARKER = /^\s*\d{1,2}[.)]\s+/u;
 const SEPARATORS = String.raw`[\s.,:;|(/\-\u{2013}\u{2014}\u{2026}\u{2022}\u{b7}*]+`;
@@ -52,21 +52,26 @@ const NAME_EDGES = new RegExp(`^${SEPARATORS}|${SEPARATORS}$`, 'gu');
 interface Quantity {
   index: number;
   values: number[];
-  unit: 'weight' | 'volume' | null;
+  unit: 'weight' | 'volume' | 'count' | null;
+}
+
+function unitOf(match: RegExpExecArray): Quantity['unit'] {
+  if (match[2] !== undefined) return 'weight';
+  if (match[3] !== undefined) return 'volume';
+  if (match[4] !== undefined) return 'count';
+  return null;
 }
 
 function quantities(line: string): Quantity[] {
   return [...line.matchAll(QUANTITY)].map((match) => ({
     index: match.index,
     values: (match[1] ?? '').split('/').map((part) => Number(part.replace(/\s/g, '').replace(',', '.'))),
-    unit: match[2] !== undefined ? 'weight' : match[3] !== undefined ? 'volume' : null,
+    unit: unitOf(match),
   }));
 }
 
-function categoryOf(stems: readonly string[]): MenuCategory {
-  return (
-    CATEGORY_STEMS.find(([, keywords]) => stems.some((wordStem) => keywords.has(wordStem)))?.[0] ?? 'main'
-  );
+function keywordCategory(stems: readonly string[]): MenuCategory | undefined {
+  return CATEGORY_STEMS.find(([, keywords]) => stems.some((wordStem) => keywords.has(wordStem)))?.[0];
 }
 
 function keywordTags(stems: readonly string[]): Tag[] {
@@ -75,8 +80,7 @@ function keywordTags(stems: readonly string[]): Tag[] {
   );
 }
 
-function nutrition(name: string, category: MenuCategory, weightG: number | null) {
-  const dish = findReferenceDish(name);
+function nutrition(dish: ReferenceDish | null, category: MenuCategory, weightG: number | null) {
   if (dish === null) return CATEGORY_DEFAULTS[category];
   const scale = weightG === null ? 1 : weightG / dish.portionG;
   return {
@@ -98,8 +102,9 @@ function parseLine(rawLine: string): MenuItemDraft | null {
   const weight = found.find((quantity) => quantity.unit === 'weight');
   const weightG = weightWithinBounds(weight ? weight.values.reduce((sum, value) => sum + value, 0) : null);
   const stems = words(name).map(stem);
-  const category = categoryOf(stems);
-  const estimate = nutrition(name, category, weightG);
+  const dish = findReferenceDish(name);
+  const category = keywordCategory(stems) ?? dish?.category ?? 'main';
+  const estimate = nutrition(dish, category, weightG);
   return {
     name,
     description: null,

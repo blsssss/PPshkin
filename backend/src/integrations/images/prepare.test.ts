@@ -43,6 +43,39 @@ describe('prepareImage', () => {
     expect(metadata.icc).toBeUndefined();
   });
 
+  it.each(['png', 'webp'] as const)(
+    'puts a transparent %s on a white background instead of black',
+    async (format) => {
+      const transparent = await sharp({
+        create: { width: 200, height: 100, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+      })
+        .toFormat(format)
+        .toBuffer();
+      const { channels } = await sharp(await prepareImage(transparent)).stats();
+      for (const channel of channels) expect(channel.mean).toBeGreaterThan(200);
+    },
+  );
+
+  it('keeps dark content drawn on a transparent background readable', async () => {
+    const text = await sharp({
+      create: { width: 100, height: 40, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
+    })
+      .png()
+      .toBuffer();
+    const menu = await sharp({
+      create: { width: 400, height: 200, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: text, left: 150, top: 80 }])
+      .png()
+      .toBuffer();
+    const output = sharp(await prepareImage(menu));
+    const pixel = async (left: number, top: number) => [
+      ...(await output.clone().extract({ left, top, width: 1, height: 1 }).raw().toBuffer()),
+    ];
+    expect(Math.min(...(await pixel(10, 10)))).toBeGreaterThan(240);
+    expect(Math.max(...(await pixel(200, 100)))).toBeLessThan(20);
+  });
+
   it('rejects bytes that are not an image', async () => {
     await expect(prepareImage(Buffer.from('definitely not a photo'))).rejects.toBeInstanceOf(
       UnsupportedImageError,

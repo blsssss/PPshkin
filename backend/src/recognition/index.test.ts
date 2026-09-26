@@ -59,6 +59,11 @@ describe('createRecognition without an API key', () => {
       model: 'reference',
       items: [{ title: 'Борщ', confidence: 0.4 }],
     });
+    await expect(recognition.dishes.fromText('выпил кофе')).resolves.toMatchObject({
+      status: 'recognized',
+      model: 'reference',
+      items: [{ title: 'Кофе', tags: ['coffee', 'drink', 'light'] }],
+    });
     await expect(recognition.dishes.fromText('что-то вкусное')).resolves.toEqual({
       status: 'unavailable',
       reason: 'disabled',

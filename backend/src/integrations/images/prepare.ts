@@ -5,6 +5,7 @@ export const MIN_IMAGE_SIDE_PX = 32;
 export const MAX_IMAGE_PIXELS = 50_000_000;
 
 const JPEG_QUALITY = 80;
+const TRANSPARENT_BACKGROUND = '#ffffff';
 const PHOTO_FORMATS: ReadonlySet<string> = new Set(['jpeg', 'png', 'webp', 'gif', 'avif', 'heif', 'tiff']);
 
 export class UnsupportedImageError extends Error {
@@ -41,6 +42,7 @@ export async function prepareImage(input: Buffer): Promise<Buffer> {
         fit: 'inside',
         withoutEnlargement: true,
       })
+      .flatten({ background: TRANSPARENT_BACKGROUND })
       .jpeg({ quality: JPEG_QUALITY })
       .toBuffer();
   } catch (error) {

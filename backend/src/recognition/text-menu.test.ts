@@ -19,6 +19,15 @@ describe('parseTextMenu', () => {
     ['Салат греческий: 200 g, 390 рублей', 'Салат греческий', 390, 200, 'salad'],
     ['Сырники со сметаной 3 шт. 340 ₽', 'Сырники со сметаной', 340, null, 'breakfast'],
     ['Стейк рибай 1 200 ₽', 'Стейк рибай', 1200, null, 'main'],
+    ['Стейк рибай 1 200', 'Стейк рибай', 1200, null, 'main'],
+    ['Кальмар 150 г 1 250', 'Кальмар', 1250, 150, 'main'],
+    ['Кальмар 150 г 1 250  ', 'Кальмар', 1250, 150, 'main'],
+    ['Пельмени 250 р / 3 шт', 'Пельмени', 250, null, 'main'],
+    ['Пельмени 390 руб, 10 штук', 'Пельмени', 390, null, 'main'],
+    ['Роллы 8 pcs 450', 'Роллы', 450, null, 'main'],
+    ['Какао 200', 'Какао', 200, null, 'drink'],
+    ['Картофель фри 150 г 190', 'Картофель фри', 190, 150, 'side'],
+    ['Том ям 450', 'Том ям', 450, null, 'soup'],
     ['2. Омлет с сыром, 200г ........ 350', 'Омлет с сыром', 350, 200, 'breakfast'],
     ['Лимонад домашний 0,5 л 250', 'Лимонад домашний', 250, null, 'drink'],
     ['Морс ягодный 300ml 150.00', 'Морс ягодный', 150, null, 'drink'],
@@ -57,6 +66,26 @@ describe('parseTextMenu', () => {
     expect(plain).toMatchObject({ kcal: 260, proteinG: 4, fatG: 15, carbsG: 27, description: null });
     const [heavier] = parseTextMenu('Эклер 140 г 180');
     expect(heavier).toMatchObject({ weightG: 140, kcal: 520, proteinG: 8, fatG: 30, carbsG: 54 });
+  });
+
+  it.each([
+    ['Горячий шоколад 250', 'drink', 'chocolate'],
+    ['Флэт уайт 230', 'drink', 'coffee'],
+    ['Гречка 150 г 90', 'side', 'grain'],
+    ['Мороженое пломбир 150', 'dessert', 'dessert'],
+    ['Панкейки 320', 'breakfast', 'breakfast'],
+    ['Сэндвич с курицей 290', 'snack', 'poultry'],
+  ])('takes the category of the reference dish for %j', (line, category, tag) => {
+    const [item] = parseTextMenu(line);
+    expect(item).toMatchObject({ category });
+    expect(item?.tags).toContain(tag);
+  });
+
+  it('prefers a category keyword over the reference dish category', () => {
+    expect(parseTextMenu('Каша гречневая 180')[0]).toMatchObject({
+      category: 'breakfast',
+      tags: ['grain', 'vegetarian'],
+    });
   });
 
   it('falls back to category defaults when no reference dish matches', () => {

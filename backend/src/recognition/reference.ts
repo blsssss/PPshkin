@@ -203,6 +203,8 @@ const REFERENCE_ROWS: readonly ReferenceRow[] = [
   ['Раф', [], 'drink', 300, [280, 380], [6, 22, 26], ['coffee', 'drink', 'dairy', 'sweet']],
   ['Флэт уайт', ['флет уайт'], 'drink', 200, [100, 140], [6, 6, 9], ['coffee', 'drink', 'dairy']],
   ['Американо', [], 'drink', 250, [5, 15], [0.5, 0.1, 1.5], ['coffee', 'drink', 'light']],
+  ['Кофе', ['черный кофе'], 'drink', 200, [5, 15], [0.5, 0.1, 1.5], ['coffee', 'drink', 'light']],
+  ['Кофе с молоком', [], 'drink', 250, [40, 70], [2.5, 2.5, 4], ['coffee', 'drink', 'dairy']],
   [
     'Какао',
     ['горячий шоколад'],
@@ -258,6 +260,7 @@ export const CATEGORY_DEFAULTS: Record<
 };
 
 const MIN_SIGNIFICANT_LENGTH = 3;
+const GENERIC_STEMS: ReadonlySet<string> = new Set(['кофе'].map(stem));
 const FILLER_STEMS: ReadonlySet<string> = new Set(
   [
     'съел',
@@ -295,13 +298,13 @@ const MATCHERS: readonly DishMatcher[] = REFERENCE_DISHES.map((dish) => ({
 
 interface Candidate {
   dish: ReferenceDish;
-  matched: number;
+  specificStems: number;
   position: number;
 }
 
 function isBetter(candidate: Candidate, best: Candidate | null): boolean {
   if (best === null) return true;
-  if (candidate.matched !== best.matched) return candidate.matched > best.matched;
+  if (candidate.specificStems !== best.specificStems) return candidate.specificStems > best.specificStems;
   return candidate.position < best.position;
 }
 
@@ -313,7 +316,7 @@ export function findReferenceDish(text: string): ReferenceDish | null {
       if (!variant.every((variantStem) => textStems.includes(variantStem))) continue;
       const candidate = {
         dish,
-        matched: variant.length,
+        specificStems: variant.filter((variantStem) => !GENERIC_STEMS.has(variantStem)).length,
         position: Math.min(...variant.map((variantStem) => textStems.indexOf(variantStem))),
       };
       if (isBetter(candidate, best)) best = candidate;

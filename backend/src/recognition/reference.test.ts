@@ -15,7 +15,20 @@ describe('findReferenceDish', () => {
     ['котлета с пюре', 'Котлета с пюре'],
     ['сёмга', 'Лосось на гриле'],
     ['хлеб и борщ', 'Хлеб (ломтик)'],
+    ['выпил кофе', 'Кофе'],
+    ['чашка чёрного кофе', 'Кофе'],
+    ['кофе с молоком', 'Кофе с молоком'],
   ])('finds %s as %s', (text, name) => {
+    expect(findReferenceDish(text)?.name).toBe(name);
+  });
+
+  it.each([
+    ['кофе латте', 'Латте'],
+    ['кофе капучино', 'Капучино'],
+    ['кофе раф', 'Раф'],
+    ['кофе американо', 'Американо'],
+    ['кофе и круассан', 'Круассан'],
+  ])('prefers a specific dish over plain coffee in %s', (text, name) => {
     expect(findReferenceDish(text)?.name).toBe(name);
   });
 
