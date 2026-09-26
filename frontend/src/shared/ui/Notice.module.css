@@ -1,0 +1,27 @@
+.notice {
+  position: relative;
+  margin: 12px 0;
+  padding: 12px 28px 12px 14px;
+  color: var(--text-primary);
+  background: var(--ppsh-panel);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.notice::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--ppsh-cyan);
+  content: '';
+}
+
+.error {
+  background: var(--ppsh-pink-soft);
+}
+
+.error::after {
+  background: var(--ppsh-pink);
+}

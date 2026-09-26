@@ -1,4 +1,10 @@
-import type { RouteObject } from 'react-router';
+import { Navigate, type RouteObject } from 'react-router';
+import { ConsentStep } from '../features/onboarding/ConsentStep.tsx';
+import { DoneStep } from '../features/onboarding/DoneStep.tsx';
+import { GoalStep } from '../features/onboarding/GoalStep.tsx';
+import { LocationStep } from '../features/onboarding/LocationStep.tsx';
+import { OffersStep } from '../features/onboarding/OffersStep.tsx';
+import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
 import { AppShell } from './AppShell.tsx';
 import { RouteErrorScreen } from './screens/RouteErrorScreen.tsx';
 import { NotFoundScreen, StubScreen } from './screens/StubScreen.tsx';
@@ -10,7 +16,13 @@ export const appRoutes: RouteObject[] = [
     errorElement: <RouteErrorScreen />,
     children: [
       { index: true, element: <StartRedirect /> },
-      { path: 'onboarding/*', element: <StubScreen title="Знакомство" /> },
+      { path: 'onboarding', element: <WelcomeStep /> },
+      { path: 'onboarding/consent', element: <ConsentStep /> },
+      { path: 'onboarding/offers', element: <OffersStep /> },
+      { path: 'onboarding/goal', element: <GoalStep /> },
+      { path: 'onboarding/location', element: <LocationStep /> },
+      { path: 'onboarding/done', element: <DoneStep /> },
+      { path: 'onboarding/*', element: <Navigate to="/onboarding" replace /> },
       { path: 'diary', element: <StubScreen title="Дневник" /> },
       { path: 'diary/meals/:id', element: <StubScreen title="Запись" back="/diary" /> },
       { path: 'diary/:date', element: <StubScreen title="Дневник" back="/diary" /> },
