@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { answers, labels, payloads, sent, texts, type Outgoing } from '../../../test/bot.ts';
+import { fakeDemo } from '../../../test/demo.ts';
 import { OWNER_ID, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
+import type { DemoService } from '../../services/demo.ts';
+import { conflict } from '../../shared/errors.ts';
 import { FLOW_TTL_MS } from '../state.ts';
 import type { VenueCreateStep } from './flows.ts';
 
@@ -497,6 +500,52 @@ describe('venue creation wizard', () => {
     await chat.press('vn:new:cat:cafe', wizard?.messageId);
     expect(answers(await chat.press('vn:new:hours:0700_2000', wizard?.messageId))[0]?.notification).toBe(
       'Кнопка устарела',
+    );
+  });
+});
+
+describe('demo venue', () => {
+  const CLAIMED =
+    'Готово, вы управляете копией кофейни «Зерно». Заведение и меню тестовые. Копию видите только вы: в поиске она заменяет исходное заведение.';
+  const DEMO_BUTTON = { type: 'callback', text: 'Взять демо-заведение', payload: 'vn:demo' };
+
+  it('offers a demo venue only in demo mode', async () => {
+    const off = venueChat();
+    const on = venueChat({ services: { demo: fakeDemo() } });
+
+    expect(sent(await off.send('/venue'))[0]?.buttons).not.toContainEqual([DEMO_BUTTON]);
+    expect(sent(await on.send('/venue'))[0]?.buttons).toEqual([
+      [{ type: 'callback', text: 'Создать заведение', payload: 'vn:new' }],
+      [DEMO_BUTTON],
+    ]);
+  });
+
+  it('gives a copy of the demo venue and opens its workspace', async () => {
+    const claimVenue = vi.fn<DemoService['claimVenue']>();
+    const chat = venueChat({ services: { demo: fakeDemo({ claimVenue }) } });
+    claimVenue.mockImplementation(() => Promise.resolve(chat.fake.seedVenue({ isDemo: true })));
+    const [connect] = sent(await chat.send('/venue'));
+
+    const replies = await chat.press('vn:demo', connect?.messageId);
+
+    expect(claimVenue).toHaveBeenCalledWith(OWNER_ID);
+    expect(answers(replies)[0]?.message?.text).toBe(
+      `${CLAIMED}\n\n${homeText({ place: 'ул. Баумана, 36, 08:00-22:00, сейчас открыто', demo: true })}`,
+    );
+    expect(answers(replies)[0]?.message?.buttons).toEqual(HOME_BUTTONS);
+  });
+
+  it('shows the existing venue when the user already has one', async () => {
+    const claimVenue = vi.fn<DemoService['claimVenue']>(() =>
+      Promise.reject(conflict('venue_exists', 'Venue already exists')),
+    );
+    const chat = venueChat({ services: { demo: fakeDemo({ claimVenue }) } });
+    chat.fake.seedVenue();
+
+    const replies = await chat.press('vn:demo', 'mid.connect');
+
+    expect(answers(replies)[0]?.message?.text).toBe(
+      `У вас уже есть заведение\n\n${homeText({ place: 'ул. Баумана, 36, 08:00-22:00, сейчас открыто' })}`,
     );
   });
 });

@@ -12,6 +12,7 @@ export const OFFER_BUTTONS = {
   anywhere: 'Искать по всему городу',
   howToLog: 'Как записать еду',
   stopHints: 'Не присылать подсказки',
+  demoDiary: 'Заполнить дневник примером',
   showQr: 'Показать QR',
   cancelBooking: 'Отменить бронь',
   confirmCancel: 'Да, отменить',
@@ -28,6 +29,10 @@ export const OFFER_NOTICES = {
 export const WHERE_ARE_YOU = 'Где вы? Отправьте местоположение, чтобы искать рядом.';
 export const PROFILE_EMPTY = 'Пока в дневнике нет записей. Пришлите фото еды, и я начну подбирать под вас.';
 export const WHY = 'Почему:';
+export const FAR_FROM_KAZAN =
+  'Вы далеко от Казани, поэтому показываем тестовые заведения в центре Казани, расстояние считаем от ул. Баумана.';
+export const DEMO_DIARY_ADDED =
+  'Добавили пример дневника за 5 дней. Теперь подбор учитывает привычки, например десерт около 16:00.';
 export const NOT_TODAY_ACCEPTED = 'Хорошо, сегодня это не предложу.';
 export const DISLIKE_ACCEPTED = 'Понял, это блюдо больше не предложу.';
 export const NO_ACTIVE_BOOKINGS = 'Активных броней нет. Подобрать блюдо: /eat';

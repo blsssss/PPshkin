@@ -95,6 +95,8 @@ const ERROR_TEXTS: Readonly<Record<string, string>> = {
   offer_already_accepted: 'По этому предложению уже есть бронь, код в /bookings.',
   meal_not_found: RECORD_GONE,
   demo_account_protected: 'Демо-аккаунт удалить нельзя.',
+  demo_diary_exists: 'Пример уже добавлен',
+  demo_mode_disabled: 'Демо-режим на сервере выключен.',
   validation_failed: 'Проверьте ввод и попробуйте ещё раз.',
   eaten_at_out_of_range: 'Проверьте ввод и попробуйте ещё раз.',
 };

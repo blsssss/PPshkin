@@ -27,6 +27,10 @@ export function elsewhereButtons(): Button[][] {
   return [[locationRequest(OFFER_BUTTONS.elsewhere)]];
 }
 
+export function demoDiaryButtons(): Button[][] {
+  return [[callback(OFFER_BUTTONS.demoDiary, payload('of', 'demo'))]];
+}
+
 export function stopHintsButtons(): Button[][] {
   return [[callback(OFFER_BUTTONS.stopHints, payload('cs', 'ad', 'off'))]];
 }

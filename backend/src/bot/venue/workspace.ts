@@ -18,6 +18,7 @@ import {
   CHOOSE_BUTTON,
   CONNECT_VENUE,
   CREATE_CANCELLED,
+  DEMO_VENUE_CLAIMED,
   homeText,
   HOURS_INVALID,
   HOURS_PROMPT,
@@ -72,8 +73,14 @@ function cancelRow(): Button[] {
   return [venueButton(BUTTONS.cancel, 'new', 'cancel')];
 }
 
-function connectScreen(): OutgoingMessage {
-  return { text: CONNECT_VENUE, buttons: [[venueButton(VENUE_BUTTONS.create, 'new')]] };
+function connectScreen(demoEnabled: boolean): OutgoingMessage {
+  return {
+    text: CONNECT_VENUE,
+    buttons: [
+      [venueButton(VENUE_BUTTONS.create, 'new')],
+      ...(demoEnabled ? [[venueButton(VENUE_BUTTONS.demo, 'demo')]] : []),
+    ],
+  };
 }
 
 function staleScreen(): OutgoingMessage {
@@ -169,7 +176,7 @@ function inputReply(
 }
 
 export function createWorkspace({ services }: BotKit) {
-  const { venues, bookings, deals } = services;
+  const { venues, bookings, deals, demo } = services;
   const onStep = wizardSteps(createFlowOf, staleScreen);
 
   async function homeScreen(ctx: BotContext, venue: Venue): Promise<OutgoingMessage> {
@@ -191,11 +198,11 @@ export function createWorkspace({ services }: BotKit) {
 
   async function workspaceScreen(ctx: BotContext): Promise<OutgoingMessage> {
     const venue = await findVenue(venues, ctx.user.id);
-    return venue ? homeScreen(ctx, venue) : connectScreen();
+    return venue ? homeScreen(ctx, venue) : connectScreen(demo.enabled);
   }
 
   async function existingScreen(ctx: BotContext, venue: Venue | null): Promise<OutgoingMessage> {
-    if (!venue) return connectScreen();
+    if (!venue) return connectScreen(demo.enabled);
     const home = await homeScreen(ctx, venue);
     return { ...home, text: withNote(VENUE_ERROR_TEXTS.venue_exists, home.text) };
   }
@@ -255,6 +262,24 @@ export function createWorkspace({ services }: BotKit) {
     });
   });
 
+  async function claimDemo(ctx: BotContext): Promise<void> {
+    if (!demo.enabled) {
+      await ctx.answer({ message: await workspaceScreen(ctx) });
+      return;
+    }
+    let venue: Venue;
+    try {
+      venue = await demo.claimVenue(ctx.user.id);
+    } catch (error) {
+      knownFailure(error, ['venue_exists']);
+      await ctx.answer({ message: await existingScreen(ctx, await findVenue(venues, ctx.user.id)) });
+      return;
+    }
+    await clearFlow(ctx, 'venue_create');
+    const home = await homeScreen(ctx, venue);
+    await ctx.answer({ message: { ...home, text: withNote(DEMO_VENUE_CLAIMED, home.text) } });
+  }
+
   async function cancel(ctx: BotContext): Promise<void> {
     await clearFlow(ctx, 'venue_create');
     await ctx.answer({ message: { text: CREATE_CANCELLED } });
@@ -267,6 +292,7 @@ export function createWorkspace({ services }: BotKit) {
     home: async (ctx: BotContext) => {
       await ctx.answer({ message: await workspaceScreen(ctx) });
     },
+    claimDemo,
     create: withDefault(begin, { cat: chooseCategory, hours: chooseHours, restart, ok: confirm, cancel }),
     onInput: async (ctx: BotContext, message: MessageInput): Promise<boolean> => {
       const flow = createFlowOf(ctx);

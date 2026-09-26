@@ -2,7 +2,7 @@ import type { User } from '../../domain/models.ts';
 import { onlyKnownTags, TAG_LABELS, type DeclineReason, type Tag } from '../../domain/vocabulary.ts';
 import { UserUnreachableError } from '../../integrations/max/errors.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
-import type { OutgoingMessage } from '../../ports/messenger.ts';
+import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
 import type {
   RecommendationRequest,
   RecommendationsResult,
@@ -11,12 +11,13 @@ import type {
 import { localDate } from '../../shared/time.ts';
 import { answerStale, byAction, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
-import { command, placeButtons } from '../keyboards.ts';
+import { command, eatButton, placeButtons } from '../keyboards.ts';
 import { startFlow, type ActiveFlow, type ChatState } from '../state.ts';
 import { bold, BUTTONS, NOTICES, venuePlace } from '../texts.ts';
 import type { OfferCard, OfferQueue } from './offer-card.ts';
 import {
   bookButton,
+  demoDiaryButtons,
   dislikeButtons,
   eatLocationButtons,
   elsewhereButtons,
@@ -27,8 +28,10 @@ import {
 } from './offer-keyboards.ts';
 import {
   budgetExhausted,
+  DEMO_DIARY_ADDED,
   DISLIKE_ACCEPTED,
   dislikedNow,
+  FAR_FROM_KAZAN,
   NOT_TODAY_ACCEPTED,
   nothingFits,
   OFFER_BUTTONS,
@@ -214,8 +217,14 @@ export function createMealSuggestion({ services, logger }: BotKit): (ctx: BotCon
   };
 }
 
+function withLead(message: OutgoingMessage, notes: readonly string[], rows: Button[][]): OutgoingMessage {
+  if (notes.length === 0 && rows.length === 0) return message;
+  const text = [...notes, message.text].join('\n\n');
+  return { ...message, text, buttons: [...(message.buttons ?? []), ...rows] };
+}
+
 export function createOffersModule({ services }: BotKit): BotModule {
-  const { insights, profile, recommendations } = services;
+  const { demo, insights, profile, recommendations } = services;
 
   const replyWith =
     (ctx: BotContext): Deliver =>
@@ -236,17 +245,19 @@ export function createOffersModule({ services }: BotKit): BotModule {
     ]);
     const cards = result.status === 'ok' ? result.items.map(toOfferCard) : [];
     const [first] = cards;
+    const { readiness, mealsUntilReady } = insight.profile;
+    const far = result.demoCenterUsed ? [FAR_FROM_KAZAN] : [];
+    const sample = demo.enabled && readiness !== 'ready' ? demoDiaryButtons() : [];
     if (first === undefined) {
       const nearby = whereabouts.location !== null;
-      await deliver(statusMessage(result, nearby));
+      await deliver(withLead(statusMessage(result, nearby), far, sample));
       if (result.status === 'nothing_fits') await ctx.saveState({ ...ctx.state, flow: locationFlow(ctx) });
       return;
     }
     const options = cardOptions(ctx, whereabouts);
     const card = renderOfferCard(first, options);
-    const { readiness, mealsUntilReady } = insight.profile;
-    const note = readiness === 'collecting' ? profileCollecting(mealsUntilReady) : null;
-    const messageId = await deliver(note === null ? card : { ...card, text: `${note}\n\n${card.text}` });
+    const collecting = readiness === 'collecting' ? [profileCollecting(mealsUntilReady)] : [];
+    const messageId = await deliver(withLead(card, [...far, ...collecting], sample));
     await ctx.saveState(queuedState(ctx, queueOf(messageId, cards, ctx.now), options));
   }
 
@@ -317,10 +328,16 @@ export function createOffersModule({ services }: BotKit): BotModule {
     );
   }
 
+  async function fillDemoDiary(ctx: BotContext): Promise<void> {
+    await demo.fillDiary(ctx.user.id);
+    await ctx.answer({ message: { text: DEMO_DIARY_ADDED, buttons: [[eatButton()]] } });
+  }
+
   return {
     commands: { eat },
     callbacks: {
       of: byAction({
+        demo: fillDemoDiary,
         next: showNext,
         any: searchAnywhere,
         nt: (ctx, [value]) => decline(ctx, value, 'not_today', { text: NOT_TODAY_ACCEPTED }),
