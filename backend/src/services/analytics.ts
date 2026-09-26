@@ -3,6 +3,7 @@ import * as analytics from '../repositories/analytics.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, type ErrorDetail } from '../shared/errors.ts';
 import { addDays, dayRange, isLocalDate, localDate } from '../shared/time.ts';
+import type { BookingsService } from './bookings.ts';
 import { requireOwnedVenue } from './venues.ts';
 
 export const DEFAULT_ANALYTICS_DAYS = 7;
@@ -47,6 +48,7 @@ export interface AnalyticsService {
 interface AnalyticsDependencies {
   pool: Pool;
   clock: Clock;
+  bookings: Pick<BookingsService, 'expireDue'>;
 }
 
 type Totals = Omit<analytics.DayActivity, 'date'>;
@@ -67,7 +69,7 @@ const EMPTY_TOTALS: Totals = {
 };
 
 function share(part: number, whole: number): number {
-  return whole === 0 ? 0 : Math.round((part / whole) * 100) / 100;
+  return whole === 0 ? 0 : Math.round((part * 100) / whole) / 100;
 }
 
 interface ResolvedPeriod {
@@ -125,12 +127,13 @@ function sumDays(days: readonly analytics.DayActivity[]): Totals {
   );
 }
 
-export function createAnalyticsService({ pool, clock }: AnalyticsDependencies): AnalyticsService {
+export function createAnalyticsService({ pool, clock, bookings }: AnalyticsDependencies): AnalyticsService {
   return {
     async get(ownerId, period) {
       assertDates(period);
       const venue = await requireOwnedVenue(pool, ownerId);
       const { from, to, days } = resolvePeriod(period, localDate(clock.now(), venue.timezone));
+      await bookings.expireDue({ venueId: venue.id });
       const windows = Array.from({ length: days }, (_, index) => {
         const date = addDays(from, index);
         return { date, ...dayRange(date, venue.timezone) };

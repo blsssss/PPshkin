@@ -78,10 +78,6 @@ export interface FinishedFilter {
   resolvedSince: Date | null;
 }
 
-export async function lockUser(db: Queryable, userId: number): Promise<boolean> {
-  return (await maybeOne(db, 'select id from users where id = $1 for update', [userId])) !== null;
-}
-
 export async function insertIfCodeFree(db: Queryable, booking: NewBooking): Promise<Booking | null> {
   await db.query('savepoint booking_code');
   try {
@@ -234,6 +230,18 @@ export async function release(
     [id, status, at],
   );
   return mapBooking(row);
+}
+
+export async function cancelActiveForUser(db: Queryable, userId: number, at: Date): Promise<void> {
+  await db.query(
+    `with cancelled as (
+       update bookings set status = 'cancelled', resolved_at = $2
+        where user_id = $1 and status = 'active'
+       returning deal_id
+     )
+     ${restockDeals('cancelled', '$2')}`,
+    [userId, at],
+  );
 }
 
 export async function markRedeemed(db: Queryable, id: number, at: Date): Promise<Booking> {

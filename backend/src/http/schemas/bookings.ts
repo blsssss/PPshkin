@@ -2,19 +2,11 @@ import { z } from 'zod';
 import { qrPayload } from '../../domain/bookings.ts';
 import { BOOKING_STATUSES } from '../../domain/vocabulary.ts';
 import { BOOKING_LIST_FILTERS, type BookingView } from '../../services/bookings.ts';
-import { isLocalDate } from '../../shared/time.ts';
-import { IsoDateTime, iso, isoOrNull } from './common.ts';
+import { IsoDateTime, iso, isoOrNull, optionalLocalDate } from './common.ts';
 import { MenuItemSchema, toMenuItem } from './menu.ts';
 import { toVenue, VenueSchema } from './venues.ts';
 
 const Id = z.number().int().positive();
-
-export const optionalLocalDate = (description: string) =>
-  z
-    .string()
-    .refine(isLocalDate, 'expected a calendar date in YYYY-MM-DD format')
-    .optional()
-    .meta({ format: 'date', examples: ['2026-09-25'], description });
 
 export const BookingBody = z
   .object({

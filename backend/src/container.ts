@@ -39,6 +39,7 @@ const silentNotifier: Notifier = {
 
 export function createServices({ config, pool, clock, recognition, background }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
+  const bookings = createBookingsService({ pool, clock, consents, notifier: silentNotifier, background });
   return {
     health: createHealthService(pool),
     auth: createAuthService(
@@ -65,7 +66,7 @@ export function createServices({ config, pool, clock, recognition, background }:
     catalog: createCatalogService({ pool, clock }),
     recommendations: createRecommendationsService({ pool, clock, consents }),
     insights: createInsightsService({ pool, clock, consents }),
-    bookings: createBookingsService({ pool, clock, consents, notifier: silentNotifier, background }),
-    analytics: createAnalyticsService({ pool, clock }),
+    bookings,
+    analytics: createAnalyticsService({ pool, clock, bookings }),
   };
 }

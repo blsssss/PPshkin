@@ -46,7 +46,7 @@ export const bookingsRoutes: FastifyPluginCallbackZod<{ bookings: BookingsServic
             'deal_not_active (409): горящее предложение снято, закончилось или ещё не началось, предложите бронь по цене меню без dealId.',
             'booking_exists (409): у гостя уже есть активная бронь этой позиции, откройте её из GET /api/v1/bookings.',
             'deal_sold_out (409): порции по предложению закончились, предложите бронь по цене меню без dealId.',
-            `too_many_bookings (409): уже ${MAX_ACTIVE_BOOKINGS} активные брони, погасите или отмените одну из них.`,
+            `too_many_bookings (409): уже ${MAX_ACTIVE_BOOKINGS} активные брони, отмените одну из них или дождитесь, пока заведение её погасит.`,
             'menu_item_unavailable (422): заведение скрыло позицию от гостей.',
           ),
         ].join(' '),

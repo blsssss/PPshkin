@@ -15,6 +15,7 @@ import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as offers from '../repositories/offers.ts';
+import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
@@ -153,7 +154,7 @@ export function createBookingsService({
     input: BookingInput,
     now: Date,
   ): Promise<BookingView> {
-    if (!(await bookings.lockUser(client, userId))) throw notFound('user_not_found', 'User not found');
+    if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
     const item = await lockBookableItem(client, input.menuItemId);
     const venue = await venues.findById(client, item.venueId);
     if (!venue) throw new Error(`Menu item ${item.id} refers to a missing venue`);

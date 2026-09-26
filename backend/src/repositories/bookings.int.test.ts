@@ -78,13 +78,6 @@ describe('bookings repository', () => {
     ).rejects.toMatchObject({ code: '23514' });
   });
 
-  it('locks the user row only for an existing user', async () => {
-    await withTransaction(pool, async (client) => {
-      expect(await bookings.lockUser(client, GUEST)).toBe(true);
-      expect(await bookings.lockUser(client, 404)).toBe(false);
-    });
-  });
-
   it('finds the latest booking with a code in the venue', async () => {
     await seedBooking(pool, {
       userId: GUEST,
@@ -167,6 +160,60 @@ describe('bookings repository', () => {
     expect(rest).toEqual([
       expect.objectContaining({ id: second, status: 'expired', resolvedAt: now, userId: null }),
     ]);
+  });
+
+  it('cancels every active booking of a user and returns units to running deals', async () => {
+    const ended = await seedDeal(pool, eclair, {
+      quantity: 2,
+      startsAt: new Date(now.getTime() - 2 * HOUR),
+      endsAt: now,
+    });
+    await pool.query('update deals set quantity_left = 0 where id = $1', [ended.id]);
+    const live = await seedBooking(pool, {
+      userId: GUEST,
+      item: eclair,
+      code: 'AAAAA2',
+      dealId: deal.id,
+      createdAt: now,
+    });
+    const late = await seedBooking(pool, {
+      userId: GUEST,
+      item: eclair,
+      code: 'BBBBB2',
+      dealId: ended.id,
+      createdAt: now,
+    });
+    const redeemed = await seedBooking(pool, {
+      userId: GUEST,
+      item: eclair,
+      code: 'CCCCC2',
+      dealId: deal.id,
+      status: 'redeemed',
+      createdAt: now,
+    });
+    const anonymous = await seedBooking(pool, {
+      userId: null,
+      item: eclair,
+      code: 'DDDDD2',
+      dealId: deal.id,
+      createdAt: now,
+    });
+    await bookings.cancelActiveForUser(pool, GUEST, now);
+    const { rows } = await pool.query<{ id: number; status: string; resolved_at: Date | null }>(
+      'select id, status, resolved_at from bookings order by id',
+    );
+    expect(rows).toEqual([
+      { id: live, status: 'cancelled', resolved_at: now },
+      { id: late, status: 'cancelled', resolved_at: now },
+      { id: redeemed, status: 'redeemed', resolved_at: now },
+      { id: anonymous, status: 'active', resolved_at: null },
+    ]);
+    expect(await quantityLeft()).toBe(2);
+    const { rows: endedRows } = await pool.query<{ quantity_left: number }>(
+      'select quantity_left from deals where id = $1',
+      [ended.id],
+    );
+    expect(endedRows).toEqual([{ quantity_left: 0 }]);
   });
 
   it('marks a booking redeemed', async () => {

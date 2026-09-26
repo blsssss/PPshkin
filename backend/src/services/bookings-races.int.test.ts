@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { seedGuest } from '../../test/bookings.ts';
+import { seedGuest, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { raceBehindLock, type RowLock } from '../../test/locks.ts';
+import { raceBehindLock, waitForLockWaits, type RowLock } from '../../test/locks.ts';
 import { seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
 import type { Booking, Deal, MenuItem } from '../domain/models.ts';
 import type { Notifier } from '../ports/notifier.ts';
@@ -10,12 +10,14 @@ import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import { createBackgroundTasks, type BackgroundTasks } from '../shared/background.ts';
+import { createAccountService } from './account.ts';
 import { createBookingsService, type BookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
 const consents = createConsentsService({ pool, clock });
+const account = createAccountService({ pool, clock });
 
 const OWNER = 202;
 const GUEST = 101;
@@ -54,6 +56,18 @@ async function quantityLeft(dealId: number): Promise<number> {
     [dealId],
   );
   return rows[0]?.quantity_left ?? -1;
+}
+
+const afterFirstWaiter =
+  <T>(start: () => Promise<T>) =>
+  async (): Promise<T> => {
+    await waitForLockWaits(pool, 1);
+    return start();
+  };
+
+async function userExists(userId: number): Promise<boolean> {
+  const { rows } = await pool.query('select id from users where id = $1', [userId]);
+  return rows.length > 0;
 }
 
 async function statusOf(bookingId: number): Promise<string | undefined> {
@@ -160,6 +174,58 @@ describe('concurrent bookings', () => {
       { status: 'rejected', reason: { status: 404, code: 'menu_item_not_found' } },
     ]);
     expect(await quantityLeft(deal.id)).toBe(2);
+  });
+});
+
+describe('account deletion during bookings', () => {
+  it('waits for an in-flight booking instead of deadlocking on its deal and offer', async () => {
+    const { booking: held } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const offerId = await seedOffer(pool, { userId: GUEST, item: tart, createdAt: clock.now() });
+    const [created, deleted] = await raceBehindLock<unknown>(pool, itemLock(tart), [
+      () => service.create(GUEST, { menuItemId: tart.id, offerId }),
+      afterFirstWaiter(() => account.deleteAccount(GUEST)),
+    ]);
+    expect(created).toMatchObject({ status: 'fulfilled', value: { booking: { status: 'active' } } });
+    expect(deleted).toEqual({ status: 'fulfilled', value: undefined });
+    expect(await userExists(GUEST)).toBe(false);
+    const { rows } = await pool.query<{ id: number; user_id: number | null; status: string }>(
+      'select id, user_id, status from bookings order by id',
+    );
+    expect(rows).toEqual([
+      { id: held.id, user_id: null, status: 'cancelled' },
+      { id: expect.any(Number) as number, user_id: null, status: 'cancelled' },
+    ]);
+    expect(await quantityLeft(deal.id)).toBe(2);
+    const offer = await pool.query('select user_id, status from offers where id = $1', [offerId]);
+    expect(offer.rows).toEqual([{ user_id: null, status: 'accepted' }]);
+  });
+
+  it('lets a redemption finish while the guest deletes the account', async () => {
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const [redeemed, deleted] = await raceBehindLock<unknown>(pool, bookingLock(booking), [
+      () => service.redeem(OWNER, booking.code),
+      afterFirstWaiter(() => account.deleteAccount(GUEST)),
+    ]);
+    expect(redeemed).toMatchObject({ status: 'fulfilled', value: { booking: { status: 'redeemed' } } });
+    expect(deleted).toEqual({ status: 'fulfilled', value: undefined });
+    expect(await userExists(GUEST)).toBe(false);
+    expect(await statusOf(booking.id)).toBe('redeemed');
+    expect(await quantityLeft(deal.id)).toBe(1);
+  });
+
+  it('answers user_not_found to a booking that waited for the deletion', async () => {
+    const results = await raceBehindLock<unknown>(
+      pool,
+      { text: 'select id from users where id = $1 for no key update', values: [GUEST] },
+      [
+        () => account.deleteAccount(GUEST),
+        afterFirstWaiter(() => service.create(GUEST, { menuItemId: tart.id })),
+      ],
+    );
+    expect(results).toMatchObject([
+      { status: 'fulfilled' },
+      { status: 'rejected', reason: { status: 404, code: 'user_not_found' } },
+    ]);
   });
 });
 

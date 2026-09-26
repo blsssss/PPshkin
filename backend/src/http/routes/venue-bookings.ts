@@ -99,6 +99,7 @@ export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOpti
         description: [
           `Итоги за период from - to включительно по часовому поясу заведения, по умолчанию последние ${DEFAULT_ANALYTICS_DAYS} дней включая сегодня.`,
           'Сколько предложений заведения показано гостям и принято, сколько броней создано, погашено, истекло и отменено, выручка и проданные горящие порции, лучшие позиции и показатели по дням.',
+          'Брони, время которых вышло, перед подсчётом переводятся в expired.',
           describeErrors(
             'validation_failed (400): передайте from и to в формате YYYY-MM-DD.',
             `invalid_period (400): from позже to или период длиннее ${MAX_ANALYTICS_DAYS} дней.`,

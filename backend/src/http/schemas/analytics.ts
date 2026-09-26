@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { TOP_ITEMS_LIMIT, type VenueAnalytics } from '../../services/analytics.ts';
-import { optionalLocalDate } from './bookings.ts';
-
-const LocalDate = z.string().meta({ format: 'date', examples: ['2026-09-25'] });
+import { LocalDate, optionalLocalDate } from './common.ts';
 
 export const AnalyticsQuery = z.object({
   from: optionalLocalDate(
