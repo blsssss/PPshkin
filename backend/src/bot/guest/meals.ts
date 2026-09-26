@@ -6,7 +6,7 @@ import type { DiaryDay, DiaryMeal, ManualMealInput, MealLogResult } from '../../
 import { formatLocalTime } from '../../shared/time.ts';
 import { answerStale, byAction, parseId, payload } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule, MessageInput } from '../context.ts';
-import { callback, openApp } from '../keyboards.ts';
+import { callback, eatButton, openApp } from '../keyboards.ts';
 import { helpMessage } from '../messages.ts';
 import { createQuota } from '../quota.ts';
 import { startFlow, type MealCandidate } from '../state.ts';
@@ -52,6 +52,7 @@ import {
   UNSUPPORTED_IMAGE,
 } from '../texts.ts';
 import { classifyText, parseFixInput, parseManualEntry } from './meal-text.ts';
+import { createMealSuggestion } from './offers.ts';
 
 type RecognitionSource = 'photo' | 'text';
 
@@ -173,7 +174,9 @@ function todayMessage(day: DiaryDay, miniAppEnabled: boolean): OutgoingMessage {
     (last, meal) => (last === null || meal.createdAt >= last.createdAt ? meal : last),
     null,
   );
-  if (latest === null) return { text: `${title}\n${todayEmpty(day.targetKcal)}`, buttons: appRow };
+  if (latest === null) {
+    return { text: `${title}\n${todayEmpty(day.targetKcal)}`, buttons: [[eatButton()], ...appRow] };
+  }
   const lines = limitedLines(
     day.meals.map((meal) => `${formatLocalTime(meal.eatenAt, day.timezone)} ${mealLine(meal)}`),
     TODAY_LIMIT,
@@ -188,7 +191,11 @@ function todayMessage(day: DiaryDay, miniAppEnabled: boolean): OutgoingMessage {
       todayTotal(day.totals.kcal, day.targetKcal, day.remainingKcal),
       ...(nutrients ? [nutrients] : []),
     ].join('\n'),
-    buttons: [[callback(BUTTONS.removeLast, payload('ml', 'del', latest.id, TODAY_ORIGIN))], ...appRow],
+    buttons: [
+      [eatButton()],
+      [callback(BUTTONS.removeLast, payload('ml', 'del', latest.id, TODAY_ORIGIN))],
+      ...appRow,
+    ],
   };
 }
 
@@ -217,9 +224,11 @@ async function rejectInput(ctx: BotContext, text: string, hint: OutgoingMessage)
   return true;
 }
 
-export function createMealsModule({ services, messenger, logger }: BotKit): BotModule {
+export function createMealsModule(kit: BotKit): BotModule {
+  const { services, messenger, logger } = kit;
   const { diary } = services;
   const quota = createQuota({ limit: RECOGNITIONS_PER_HOUR, windowMs: HOUR_MS });
+  const suggestOffer = createMealSuggestion(kit);
 
   async function logManual(ctx: BotContext, input: ManualMealInput): Promise<OutgoingMessage> {
     const meal = await diary.addManual(ctx.user.id, input);
@@ -233,6 +242,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
   ): Promise<void> {
     const result = await run();
     const sent = await ctx.settle(resultMessage(result, source));
+    if (result.status === 'logged') await suggestOffer(ctx);
     const candidates = result.status === 'uncertain' ? result.candidates.slice(0, DISHES_LIMIT) : [];
     if (candidates.length === 0) return;
     await ctx.saveState({
@@ -281,6 +291,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
     switch (intent.kind) {
       case 'manual':
         await ctx.reply(await logManual(ctx, intent.entry));
+        await suggestOffer(ctx);
         return;
       case 'recognize':
         await logText(ctx, text);
@@ -374,6 +385,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
     const message = await logManual(ctx, candidateInput(candidate));
     await ctx.saveState({ ...ctx.state, flow: null });
     await ctx.answer({ message });
+    await suggestOffer(ctx);
   }
 
   async function startManual(ctx: BotContext): Promise<void> {
@@ -438,6 +450,7 @@ export function createMealsModule({ services, messenger, logger }: BotKit): BotM
         if (!entry) return rejectInput(ctx, message.text, withCancel(MANUAL_INVALID, 'manual'));
         await ctx.saveState({ ...ctx.state, flow: null });
         await ctx.reply(await logManual(ctx, entry));
+        await suggestOffer(ctx);
         return true;
       },
     },

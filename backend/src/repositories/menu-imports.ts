@@ -1,4 +1,5 @@
 import { jsonb, maybeOne, one, type Queryable } from '../db/pool.ts';
+import { STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
 import type { MenuImport, ParsedMenuItem } from '../domain/models.ts';
 import { onlyKnownTags, type MenuImportStatus } from '../domain/vocabulary.ts';
 
@@ -94,6 +95,16 @@ export async function complete(
     [id, outcome.status, jsonb(outcome.items), outcome.error, outcome.model, now, processingSince],
   );
   return row ? mapMenuImport(row) : null;
+}
+
+export async function failStale(db: Queryable, now: Date): Promise<number> {
+  const { rowCount } = await db.query(
+    `update menu_imports
+        set status = 'failed', error = $2, completed_at = created_at + make_interval(secs => $3)
+      where status = 'processing' and created_at < $1`,
+    [new Date(now.getTime() - STALE_IMPORT_MS), STALE_IMPORT_ERROR, STALE_IMPORT_MS / 1000],
+  );
+  return rowCount ?? 0;
 }
 
 export async function markApplied(db: Queryable, id: number): Promise<void> {

@@ -334,6 +334,29 @@ describe('write errors', () => {
   });
 });
 
+describe('logged result after switching day', () => {
+  it('opens the meal on its own day', async () => {
+    await start();
+    const logged = meal({ id: 2, title: 'Борщ', slot: 'lunch', eatenAt: '2026-09-26T10:00:00.000Z' });
+    server.on('POST', '/api/v1/diary/meals/photo', () =>
+      json({ status: 'logged', meals: [logged], basis: 'по фото', day: day(TODAY, [meal({}), logged]) }),
+    );
+    const { router } = await renderApp('/diary');
+    fireEvent.click(await screen.findByRole('button', { name: 'Сфотографировать еду' }));
+    chooseFile();
+    expect(await screen.findByText('Записали')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Предыдущий день' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).not.toBe('/diary');
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Исправить' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/diary/meals/2');
+    });
+    expect(router.state.location.search).toBe(`?date=${TODAY}`);
+  });
+});
+
 describe('text', () => {
   it('logs a description', async () => {
     await start();

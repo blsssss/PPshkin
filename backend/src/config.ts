@@ -62,6 +62,7 @@ const baseSchema = z.object({
       .optional(),
   ),
   MINI_APP_ENABLED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
+  PROACTIVE_OFFERS: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
