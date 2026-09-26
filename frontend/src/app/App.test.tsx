@@ -144,7 +144,7 @@ describe('navigation', () => {
 
   it('highlights the section tab on nested screens', async () => {
     renderAt('/deals?highlight=3');
-    await screen.findByRole('heading', { name: 'Горящее' });
+    await screen.findByRole('heading', { name: 'Горящее рядом' });
     expect(screen.getByRole('link', { name: 'Что поесть' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('link', { name: 'Моё заведение' }).getAttribute('aria-current')).toBeNull();
   });
@@ -232,7 +232,7 @@ describe('startParam', () => {
   it('opens the deal list with a highlight', async () => {
     fake.set({ status: 'ready', user: TEST_USER, startParam: 'deal_9' }, 'deal_9');
     const router = renderAt('/');
-    await screen.findByRole('heading', { name: 'Горящее' });
+    await screen.findByRole('heading', { name: 'Горящее рядом' });
     expect(router.state.location.search).toBe('?highlight=9');
   });
 

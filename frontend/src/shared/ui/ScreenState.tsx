@@ -18,6 +18,7 @@ type ScreenStateProps =
       description?: ReactNode;
       action: ScreenAction;
       secondaryAction?: ScreenAction;
+      tertiaryAction?: ScreenAction | undefined;
     };
 
 export function ScreenState(props: ScreenStateProps) {
@@ -64,6 +65,18 @@ export function ScreenState(props: ScreenStateProps) {
             disabled={props.secondaryAction.disabled}
           >
             {props.secondaryAction.label}
+          </Button>
+        )}
+        {props.tertiaryAction !== undefined && (
+          <Button
+            size="large"
+            variant="ghost"
+            stretched
+            onClick={props.tertiaryAction.onClick}
+            loading={props.tertiaryAction.loading}
+            disabled={props.tertiaryAction.disabled}
+          >
+            {props.tertiaryAction.label}
           </Button>
         )}
       </div>

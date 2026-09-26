@@ -404,6 +404,9 @@ describe('manual entry', () => {
         title: 'Сырники со сметаной',
       });
     });
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/diary');
+    });
 
     await router.navigate(`/diary/meals/1?date=${TODAY}`);
     fireEvent.click(await screen.findByRole('button', { name: 'Удалить запись' }));
