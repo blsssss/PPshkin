@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sampleBooking } from '../../test/bookings.ts';
-import { fakeLogger, fakeMaxApi } from '../../test/max-api.ts';
+import { fakeLogger, fakeMaxApi, fakeMessenger } from '../../test/max-api.ts';
 import { sampleVenue } from '../../test/venues.ts';
 import { EMPTY_TOTALS } from '../domain/nutrition/totals.ts';
 import { MaxApiError, UserUnreachableError } from '../integrations/max/errors.ts';
@@ -24,20 +24,11 @@ const day: DiaryDay = {
   meals: [],
 };
 
-const notStubbed = (name: string) => () => Promise.reject(new Error(`${name} is not stubbed`));
-
 function setup(
   options: { messenger?: Messenger | null; diaryDay?: (userId: number) => Promise<DiaryDay> } = {},
 ) {
   const sendToUser = vi.fn<Messenger['sendToUser']>(() => Promise.resolve({ messageId: 'mid.1' }));
-  const messenger: Messenger = {
-    sendToUser,
-    editMessage: notStubbed('editMessage'),
-    answerCallback: notStubbed('answerCallback'),
-    uploadImage: notStubbed('uploadImage'),
-    sendTyping: notStubbed('sendTyping'),
-    downloadFile: notStubbed('downloadFile'),
-  };
+  const messenger = fakeMessenger({ sendToUser });
   const diaryDay = vi.fn(options.diaryDay ?? (() => Promise.resolve(day)));
   const logger = fakeLogger();
   const current = options.messenger === undefined ? messenger : options.messenger;

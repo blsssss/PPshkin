@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { fakeLogger } from '../../test/max-api.ts';
+import { fakeLogger, fakeMessenger } from '../../test/max-api.ts';
 import { testConfig } from '../../test/services.ts';
 import { seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
 import { createServices } from '../container.ts';
@@ -18,16 +18,8 @@ const OWNER = 202;
 const GUEST = 101;
 const HOUR = 3_600_000;
 
-const notStubbed = (name: string) => () => Promise.reject(new Error(`${name} is not stubbed`));
 const sendToUser = vi.fn<Messenger['sendToUser']>(() => Promise.resolve({ messageId: 'mid.1' }));
-const messenger: Messenger = {
-  sendToUser,
-  editMessage: notStubbed('editMessage'),
-  answerCallback: notStubbed('answerCallback'),
-  uploadImage: notStubbed('uploadImage'),
-  sendTyping: notStubbed('sendTyping'),
-  downloadFile: notStubbed('downloadFile'),
-};
+const messenger = fakeMessenger({ sendToUser });
 const config = testConfig();
 const background = createBackgroundTasks({ error: () => undefined });
 const notifier = createMessengerNotifier({

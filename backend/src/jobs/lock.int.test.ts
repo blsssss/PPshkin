@@ -106,4 +106,35 @@ describe('advisory job lock', () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(await isFree('proactive_offers')).toBe(true);
   });
+
+  it('runs every due job on a one-connection work pool when locks use their own pool', async () => {
+    const work = createPool(TEST_DATABASE_URL, { max: 1, onError: () => undefined });
+    const names = ['expire_bookings', 'fail_stale_imports', 'purge_processed_updates'];
+    const jobs = names.map((name): Job => ({
+      name,
+      schedule: { everyMs: 60_000 },
+      run: vi.fn(async () => {
+        await work.query('select 1');
+      }),
+    }));
+    const lockPool = createPool(TEST_DATABASE_URL, { max: jobs.length, onError: () => undefined });
+    const logger = fakeLogger();
+    const scheduler = createScheduler({
+      lock: createAdvisoryLock(lockPool),
+      clock: fixedClock('2026-09-26T09:00:00Z'),
+      logger,
+      jobs,
+    });
+
+    try {
+      expect(await scheduler.runDue()).toEqual(names);
+      expect(logger.error).not.toHaveBeenCalled();
+      for (const job of jobs) expect(job.run).toHaveBeenCalledTimes(1);
+      expect(work.waitingCount).toBe(0);
+      expect(lockPool.idleCount).toBe(lockPool.totalCount);
+    } finally {
+      await scheduler.stop();
+      await Promise.all([work.end(), lockPool.end()]);
+    }
+  });
 });

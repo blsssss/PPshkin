@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { fakeLogger } from '../../test/max-api.ts';
+import { fakeLogger, fakeMessenger } from '../../test/max-api.ts';
 import { BAUMANA, seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
 import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
 import type { MenuItem, OfferExplanation, Venue } from '../domain/models.ts';
@@ -69,8 +69,6 @@ let recommendations: { recommend: ReturnType<typeof vi.fn<RecommendationsService
 let sendToUser: ReturnType<typeof vi.fn<Messenger['sendToUser']>>;
 let messenger: Messenger | null;
 let logger: ReturnType<typeof fakeLogger>;
-
-const notStubbed = (name: string) => () => Promise.reject(new Error(`${name} is not stubbed`));
 
 function job() {
   return proactiveOffersJob({ db: pool, insights, recommendations, messenger: () => messenger, logger });
@@ -164,14 +162,7 @@ beforeEach(async () => {
     }),
   };
   sendToUser = vi.fn<Messenger['sendToUser']>(() => Promise.resolve({ messageId: 'mid.1' }));
-  messenger = {
-    sendToUser,
-    editMessage: notStubbed('editMessage'),
-    answerCallback: notStubbed('answerCallback'),
-    uploadImage: notStubbed('uploadImage'),
-    sendTyping: notStubbed('sendTyping'),
-    downloadFile: notStubbed('downloadFile'),
-  };
+  messenger = fakeMessenger({ sendToUser });
   logger = fakeLogger();
   await seedGuest(GUEST);
 });

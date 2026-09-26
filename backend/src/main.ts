@@ -14,6 +14,7 @@ import { silentNotifier } from './notifications/silent-notifier.ts';
 import { createRecognition } from './recognition/index.ts';
 import { createBackgroundTasks } from './shared/background.ts';
 import { systemClock } from './shared/clock.ts';
+import { stopService } from './shutdown.ts';
 
 const config = loadConfig(process.env);
 const pool = createPool(config.DATABASE_URL, {
@@ -85,11 +86,18 @@ const botRuntime =
     logger: botLogger,
     miniAppEnabled: config.MINI_APP_ENABLED,
   });
+const jobs = createJobs({ config, db: pool, services, messenger: botMessenger, logger: botLogger });
+const lockPool = createPool(config.DATABASE_URL, {
+  max: jobs.length,
+  onError: (error) => {
+    app.log.warn({ err: error }, 'idle job lock client failed');
+  },
+});
 const scheduler = createScheduler({
-  lock: createAdvisoryLock(pool),
+  lock: createAdvisoryLock(lockPool),
   clock: systemClock,
   logger: botLogger,
-  jobs: createJobs({ config, db: pool, services, messenger: botMessenger, logger: botLogger }),
+  jobs,
 });
 const webhook = botSettings?.webhook;
 const app = await buildApp({
@@ -124,12 +132,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
   if (closing) return;
   closing = true;
   app.log.info({ signal }, 'shutting down');
-  await botRuntime?.stop();
-  background.stop();
-  await app.close();
-  await scheduler.stop();
-  await background.idle(10_000);
-  await pool.end();
+  await stopService({ bot: botRuntime, app, scheduler, background, pools: [lockPool, pool] });
   process.exit(0);
 };
 
