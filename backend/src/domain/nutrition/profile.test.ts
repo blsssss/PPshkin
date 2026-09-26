@@ -6,6 +6,7 @@ import type { SlotHabit } from './profile.ts';
 import { buildBehaviorProfile, PROFILE_WINDOW_DAYS, READY_MIN_DAYS, READY_MIN_MEALS } from './profile.ts';
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 const kcal = (value: number): Partial<Meal> => ({ kcalMin: value, kcalMax: value });
 const tagged = (...tags: Tag[]): Partial<Meal> => ({ tags });
 const daysAgo = (days: number) => new Date(NOW.getTime() - days * DAY_MS);
@@ -141,6 +142,25 @@ describe('buildBehaviorProfile', () => {
       rice: 0.1,
     });
     expect(profile.topTags).toEqual(['coffee', 'sweet', 'meat', 'fish', 'soup']);
+  });
+
+  it('applies the top tag threshold to the rounded affinity', () => {
+    const profile = profileOf([
+      ...Array.from({ length: 4 }, () => buildMeal(NOW)),
+      buildMeal(new Date(NOW.getTime() - HOUR_MS), tagged('soup')),
+    ]);
+    expect(profile.tagAffinity).toEqual({ soup: 0.2 });
+    expect(profile.topTags).toEqual(['soup']);
+  });
+
+  it('orders top tags with equal rounded affinity by tag order', () => {
+    const profile = profileOf([
+      buildMeal(new Date(NOW.getTime() - HOUR_MS), tagged('coffee')),
+      buildMeal(NOW, tagged('tea')),
+      ...Array.from({ length: 3 }, () => buildMeal(NOW)),
+    ]);
+    expect(profile.tagAffinity).toEqual({ coffee: 0.2, tea: 0.2 });
+    expect(profile.topTags).toEqual(['coffee', 'tea']);
   });
 
   it('averages daily calories over days with at least two meals', () => {

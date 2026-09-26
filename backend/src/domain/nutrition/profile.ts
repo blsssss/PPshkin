@@ -1,4 +1,5 @@
 import { localParts } from '../../shared/time.ts';
+import { SWEET_TAGS } from '../intent/dish.ts';
 import type { Meal } from '../models.ts';
 import { MEAL_SLOTS, TAGS } from '../vocabulary.ts';
 import type { MealSlot, Tag } from '../vocabulary.ts';
@@ -46,7 +47,6 @@ const TOP_TAGS_LIMIT = 5;
 const TOP_TAG_MIN_AFFINITY = 0.2;
 const DAILY_AVERAGE_MIN_MEALS = 2;
 const PROTEIN_KCAL_PER_G = 4;
-const SWEET_TAGS: readonly Tag[] = ['sweet', 'dessert'];
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0);
@@ -111,7 +111,7 @@ function tagAffinities(meals: readonly LoggedMeal[]): { tag: Tag; affinity: numb
   }
   return TAGS.flatMap((tag) => {
     const weight = weightByTag.get(tag);
-    return weight === undefined ? [] : [{ tag, affinity: weight / totalWeight }];
+    return weight === undefined ? [] : [{ tag, affinity: round2(weight / totalWeight) }];
   });
 }
 
@@ -155,7 +155,7 @@ export function buildBehaviorProfile(
     readiness: readinessOf(logged.length, daysTracked),
     mealsUntilReady: Math.max(0, READY_MIN_MEALS - logged.length),
     averageDailyKcal: averageDailyKcal(days),
-    tagAffinity: Object.fromEntries(affinities.map(({ tag, affinity }) => [tag, round2(affinity)])),
+    tagAffinity: Object.fromEntries(affinities.map(({ tag, affinity }) => [tag, affinity])),
     topTags: affinities
       .filter(({ affinity }) => affinity >= TOP_TAG_MIN_AFFINITY)
       .sort((left, right) => right.affinity - left.affinity)

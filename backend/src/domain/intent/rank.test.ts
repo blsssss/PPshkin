@@ -17,7 +17,8 @@ import { buildBehaviorProfile } from '../nutrition/profile.ts';
 import type { BehaviorProfile } from '../nutrition/profile.ts';
 import { dayTotals, EMPTY_TOTALS } from '../nutrition/totals.ts';
 import type { DayTotals } from '../nutrition/totals.ts';
-import type { Tag } from '../vocabulary.ts';
+import { MENU_CATEGORIES } from '../vocabulary.ts';
+import type { MealSlot, MenuCategory, Tag } from '../vocabulary.ts';
 import { explainRecommendation } from './explain.ts';
 import { DEFAULT_MAX_DISTANCE_M, INTENT_WEIGHTS, rankCandidates } from './rank.ts';
 import type { Candidate, IntentContext, RankOptions, RankResult, Recommendation } from './types.ts';
@@ -33,8 +34,8 @@ const locatedUser = { location: KAZAN_CENTER };
 const collecting = (overrides: Partial<BehaviorProfile> = {}) =>
   buildProfile({ readiness: 'collecting', mealsCount: 3, daysTracked: 1, mealsUntilReady: 2, ...overrides });
 
-function slotsWithSnackShare(share: number): BehaviorProfile['slots'] {
-  return { ...buildProfile().slots, snack: { share, averageKcal: 300, typicalHour: 16 } };
+function slotsWithShare(slot: MealSlot, share: number): BehaviorProfile['slots'] {
+  return { ...buildProfile().slots, [slot]: { share, averageKcal: 300, typicalHour: 12 } };
 }
 
 function okItems(result: RankResult): Recommendation[] {
@@ -326,13 +327,31 @@ describe('rankCandidates', () => {
         { sweetTooth: { share: 0.9, typicalHour: 16 } },
         0,
       ],
-      ['a regular snack of bakery', { category: 'bakery' }, { slots: slotsWithSnackShare(0.5) }, 1],
-      ['an occasional snack of bakery', { category: 'bakery' }, { slots: slotsWithSnackShare(0.49) }, 0],
-      ['a regular snack of a main course', { category: 'main' }, { slots: slotsWithSnackShare(1) }, 0],
+      ['a regular snack of bakery', { category: 'bakery' }, { slots: slotsWithShare('snack', 0.5) }, 1],
+      ['an occasional snack of bakery', { category: 'bakery' }, { slots: slotsWithShare('snack', 0.49) }, 0],
+      ['a regular snack of a main course', { category: 'main' }, { slots: slotsWithShare('snack', 1) }, 0],
     ])('rates habit for %s', (_label, item, profile, habit) => {
       expect(factorOf(rankOne(withItem(item), buildContext({ profile: collecting(profile) })), 'habit')).toBe(
         habit,
       );
+    });
+
+    it.each<[MealSlot, string, MenuCategory[]]>([
+      ['breakfast', '2026-09-26T06:00:00Z', ['breakfast', 'bakery', 'drink']],
+      ['lunch', '2026-09-26T10:00:00Z', ['main', 'soup', 'salad', 'side']],
+      ['snack', '2026-09-26T13:00:00Z', ['bakery', 'dessert', 'snack', 'drink']],
+      ['dinner', '2026-09-26T16:00:00Z', ['main', 'salad', 'soup', 'side']],
+    ])('rates habit for a regular %s by the categories of the slot', (slot, now, matching) => {
+      const context = buildContext({
+        now: new Date(now),
+        profile: collecting({ slots: slotsWithShare(slot, 0.5) }),
+      });
+      const habitByCategory = (rate: (category: MenuCategory) => number) =>
+        Object.fromEntries(MENU_CATEGORIES.map((category) => [category, rate(category)]));
+      expect(rankCandidates(context, [], { limit: 1 }).slot).toBe(slot);
+      expect(
+        habitByCategory((category) => factorOf(rankOne(withItem({ category }), context), 'habit')),
+      ).toEqual(habitByCategory((category) => (matching.includes(category) ? 1 : 0)));
     });
 
     it('measures the sweet tooth hour around midnight', () => {
@@ -397,6 +416,26 @@ describe('rankCandidates', () => {
         deal: deal === null ? null : buildDeal(deal),
       });
       expect(factorOf(rankOne(candidate), 'deal')).toBe(value);
+    });
+
+    it('treats a dessert category as a dessert for the habit and the headline', () => {
+      const recommendation = rankOne(
+        withItem({ category: 'dessert', tags: [] }),
+        buildContext({ profile: collecting({ sweetTooth: { share: 0.5, typicalHour: 16 } }) }),
+      );
+      expect(factorOf(recommendation, 'habit')).toBe(1);
+      expect(recommendation.explanation.headline).toBe('Можно позволить десерт');
+    });
+
+    it('rates the deal and states the discount from the same prices', () => {
+      const recommendation = rankOne(
+        buildCandidate({
+          item: buildMenuItem({ priceRub: 290 }),
+          deal: buildDeal({ priceRub: 170, endsAt: minutesFromNow(180) }),
+        }),
+      );
+      expect(factorOf(recommendation, 'deal')).toBe(0.58);
+      expect(recommendation.explanation.calculations).toContain('Скидка 41%: 170 ₽ вместо 290 ₽, до 19:00');
     });
 
     it('penalises a dish already offered today', () => {

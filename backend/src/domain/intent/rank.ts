@@ -6,7 +6,8 @@ import type { BehaviorProfile } from '../nutrition/profile.ts';
 import { mealSlotAt, SLOT_BUDGET_SHARES } from '../nutrition/slots.ts';
 import { remainingKcal } from '../nutrition/totals.ts';
 import type { DayTotals } from '../nutrition/totals.ts';
-import type { MealSlot, MenuCategory, Tag } from '../vocabulary.ts';
+import type { MealSlot, MenuCategory } from '../vocabulary.ts';
+import { dealDiscount, isDessert } from './dish.ts';
 import { explainRecommendation } from './explain.ts';
 import type { Candidate, IntentContext, RankOptions, RankResult, Recommendation } from './types.ts';
 
@@ -62,7 +63,6 @@ const DISCOUNT_PART = 0.7;
 const URGENCY_PART = 0.3;
 const URGENT_MINUTES = 120;
 const MINUTE_MS = 60_000;
-const DESSERT_TAGS: readonly Tag[] = ['sweet', 'dessert'];
 
 const SLOT_CATEGORIES: Record<MealSlot, readonly MenuCategory[]> = {
   breakfast: ['breakfast', 'bakery', 'drink'],
@@ -73,10 +73,6 @@ const SLOT_CATEGORIES: Record<MealSlot, readonly MenuCategory[]> = {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
-
-function isDessert(item: MenuItem): boolean {
-  return item.category === 'dessert' || item.tags.some((tag) => DESSERT_TAGS.includes(tag));
-}
 
 function isProteinRich(item: MenuItem): boolean {
   return (
@@ -157,7 +153,7 @@ function macrosScore(item: MenuItem, today: DayTotals): number {
 }
 
 function dealScore(item: MenuItem, deal: Deal, now: Date): number {
-  const discount = item.priceRub > 0 ? Math.max(0, 1 - deal.priceRub / item.priceRub) : 0;
+  const discount = dealDiscount(item, deal);
   const minutesLeft = (deal.endsAt.getTime() - now.getTime()) / MINUTE_MS;
   const urgency = minutesLeft <= URGENT_MINUTES ? 1 - minutesLeft / URGENT_MINUTES : 0;
   return Math.min(1, discount / FULL_DISCOUNT) * DISCOUNT_PART + urgency * URGENCY_PART;

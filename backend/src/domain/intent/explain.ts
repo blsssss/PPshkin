@@ -4,7 +4,8 @@ import type { Deal, FactorScore, IntentFactor, MenuItem, OfferExplanation, Venue
 import type { BehaviorProfile } from '../nutrition/profile.ts';
 import type { DayTotals } from '../nutrition/totals.ts';
 import { TAG_LABELS } from '../vocabulary.ts';
-import type { MealSlot, Tag } from '../vocabulary.ts';
+import type { MealSlot } from '../vocabulary.ts';
+import { dealDiscount, isDessert } from './dish.ts';
 import type { Candidate, IntentContext } from './types.ts';
 
 export interface ExplanationInput {
@@ -17,7 +18,6 @@ export interface ExplanationInput {
   factors: FactorScore[];
 }
 
-const DESSERT_TAGS: readonly Tag[] = ['sweet', 'dessert'];
 const DESSERT_SLOTS: readonly MealSlot[] = ['snack', 'lunch'];
 const SLOT_HEADLINES: Record<Exclude<MealSlot, 'dinner'>, string> = {
   breakfast: 'Хороший вариант на завтрак',
@@ -30,10 +30,6 @@ const FAVOURITE_LABELS_LIMIT = 3;
 const WALKING_LIMIT_M = 1000;
 const WALKING_STEP_M = 50;
 const DISCLAIMER = 'Калорийность приблизительная, это не медицинская рекомендация';
-
-function isDessert(item: MenuItem): boolean {
-  return item.category === 'dessert' || item.tags.some((tag) => DESSERT_TAGS.includes(tag));
-}
 
 function factorValue(factors: readonly FactorScore[], factor: IntentFactor): number {
   return factors.find((score) => score.factor === factor)?.value ?? 0;
@@ -75,7 +71,7 @@ function distanceLine(distanceM: number): string {
 }
 
 function dealLines(item: MenuItem, deal: Deal, venue: Venue): string[] {
-  const discount = item.priceRub > 0 ? Math.max(0, 1 - deal.priceRub / item.priceRub) : 0;
+  const discount = dealDiscount(item, deal);
   const endsAt = formatLocalTime(deal.endsAt, venue.timezone);
   return [
     `Скидка ${Math.round(discount * 100)}%: ${deal.priceRub} ₽ вместо ${item.priceRub} ₽, до ${endsAt}`,
