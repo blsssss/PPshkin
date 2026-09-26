@@ -3,7 +3,7 @@ solution:
   name: ППшкин
   team: Mikkkin
   repository: https://github.com/blsssss/PPshkin
-baseUrl: https://ppshkin.example.com
+baseUrl: https://hackathon.easymythic.dev
 openapi: openapi.yaml
 accounts:
   - role: guest
