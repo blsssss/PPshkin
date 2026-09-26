@@ -7,7 +7,7 @@ import { maxUserJson, signInitData } from '../../test/init-data.ts';
 import { multipart, TINY_PNG } from '../../test/multipart.ts';
 import { testConfig } from '../../test/services.ts';
 import { createServices } from '../container.ts';
-import { disabledRecognition } from '../recognition/index.ts';
+import { createRecognition } from '../recognition/index.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
 import { buildApp } from './app.ts';
 
@@ -24,7 +24,14 @@ beforeAll(async () => {
     pool,
     clock,
     recognition: {
-      ...disabledRecognition(),
+      ...createRecognition({
+        apiKey: undefined,
+        baseUrl: config.CHADGPT_BASE_URL,
+        visionModel: config.CHADGPT_MODEL,
+        fallbackModel: config.CHADGPT_FALLBACK_MODEL,
+        timeoutMs: config.CHADGPT_TIMEOUT_MS,
+        menuTimeoutMs: config.CHADGPT_MENU_TIMEOUT_MS,
+      }),
       dishes: {
         fromPhoto: () =>
           Promise.resolve({
