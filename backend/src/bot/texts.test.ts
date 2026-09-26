@@ -15,6 +15,7 @@ import {
   macros,
   openingStatus,
   RECORD_FORMS,
+  shortDate,
   splitText,
   todayTotal,
   truncate,
@@ -71,6 +72,13 @@ describe('bot texts', () => {
     expect(localDateLabel('2026-01-01')).toBe('1 января');
   });
 
+  it('writes short dates as day and month in the given time zone', () => {
+    const lateEvening = new Date('2026-09-12T21:30:00Z');
+    expect(shortDate(lateEvening, 'Europe/Moscow')).toBe('13.09');
+    expect(shortDate(lateEvening, 'UTC')).toBe('12.09');
+    expect(calendarDate(lateEvening, 'UTC')).toBe('12 сентября');
+  });
+
   it('describes the day progress', () => {
     expect(dayProgress(1250, 2000, 750)).toBe('Сегодня около 1250 из 2000 ккал, осталось около 750 ккал');
     expect(dayProgress(2100, 2000, 0)).toBe('Сегодня около 2100 из 2000 ккал, ориентир на день набран');
@@ -123,6 +131,14 @@ describe('bot texts', () => {
     expect(errorText('demo_account_protected')).toBe('Демо-аккаунт удалить нельзя.');
     expect(errorText('validation_failed')).toBe('Проверьте ввод и попробуйте ещё раз.');
     expect(errorText('eaten_at_out_of_range')).toBe('Проверьте ввод и попробуйте ещё раз.');
+    expect(errorText('too_many_bookings')).toBe(
+      'У вас уже 3 активные брони. Лишнюю можно отменить в /bookings.',
+    );
+    expect(errorText('deal_sold_out')).toBe('Эту позицию уже разобрали. Посмотрим другое: /eat');
+    expect(errorText('deal_not_found')).toBe('Позиция больше недоступна. Посмотрим другое: /eat');
+    expect(errorText('booking_expired')).toBe('Бронь уже не активна.');
+    expect(errorText('offer_not_found')).toBe('Не нашёл: запись уже удалена или устарела.');
+    expect(errorText('offer_already_accepted')).toBe('По этому предложению уже есть бронь, код в /bookings.');
     expect(errorText('toString')).toBeNull();
     expect(errorText('something_else')).toBeNull();
   });

@@ -11,12 +11,14 @@ import { dayTotals, remainingKcal } from '../src/domain/nutrition/totals.ts';
 import { onlyKnownTags, type ConsentKind } from '../src/domain/vocabulary.ts';
 import type { MaxApi } from '../src/integrations/max/api.ts';
 import { createMaxMessenger } from '../src/integrations/max/messenger.ts';
+import type { Sleep } from '../src/integrations/max/sleep.ts';
 import type { MaxButton, MaxNewMessageBody } from '../src/integrations/max/types.ts';
 import type { IncomingEvent, UpdateHandler } from '../src/ports/messenger.ts';
 import type { DishEstimate } from '../src/ports/recognition.ts';
 import type { ConsentState, ConsentStatus } from '../src/services/consents.ts';
 import type { DiaryDay, DiaryMeal, MealLogResult } from '../src/services/diary.ts';
 import type { Services } from '../src/services/index.ts';
+import { createBackgroundTasks } from '../src/shared/background.ts';
 import { conflict, forbidden, notFound } from '../src/shared/errors.ts';
 import { coarsePoint } from '../src/shared/geo.ts';
 import { localDate } from '../src/shared/time.ts';
@@ -365,6 +367,7 @@ export interface ChatOptions {
   miniAppEnabled?: boolean;
   api?: Partial<MaxApi>;
   pool?: Queryable;
+  sleep?: Sleep;
   createHandler?: (deps: BotDependencies) => UpdateHandler;
 }
 
@@ -372,6 +375,13 @@ export function botChat(options: ChatOptions = {}) {
   const world = options.world ?? guestWorld();
   const states = options.states ?? memoryStates();
   const logger = fakeLogger();
+  const background = createBackgroundTasks(logger);
+  const sleep =
+    options.sleep ??
+    vi.fn<Sleep>((ms) => {
+      world.clock.advance(ms);
+      return Promise.resolve();
+    });
   const screens = new Map<string, Screen>();
   const pressed = new Map<string, string | null>();
   let outbox: Outgoing[] = [];
@@ -422,6 +432,8 @@ export function botChat(options: ChatOptions = {}) {
     logger,
     bot: BOT_IDENTITY,
     miniAppEnabled: options.miniAppEnabled ?? false,
+    background,
+    sleep,
   });
 
   const guest = { id: GUEST_ID, firstName: 'Анна', username: null };
@@ -456,10 +468,17 @@ export function botChat(options: ChatOptions = {}) {
     world,
     states,
     logger,
+    background,
+    sleep,
     api,
     messenger,
     handler,
     deliver: run,
+    takeOutgoing() {
+      const taken = outbox;
+      outbox = [];
+      return taken;
+    },
     screen: (messageId: string) => screens.get(messageId),
     send: (text: string) => message({ text }),
     photo: (count = 1) =>
