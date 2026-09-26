@@ -14,9 +14,12 @@ export interface WebhookGuard {
   check(): Promise<'ok' | 'restored'>;
 }
 
-function coversAll(subscription: MaxSubscription, updateTypes: readonly MaxUpdateType[]): boolean {
+export function missingUpdateTypes(
+  subscription: MaxSubscription,
+  updateTypes: readonly MaxUpdateType[],
+): MaxUpdateType[] {
   const subscribed = new Set(subscription.update_types ?? []);
-  return updateTypes.every((type) => subscribed.has(type));
+  return updateTypes.filter((type) => !subscribed.has(type));
 }
 
 export function createWebhookGuard({
@@ -29,7 +32,7 @@ export function createWebhookGuard({
   return {
     async check() {
       const current = (await api.listSubscriptions()).find((subscription) => subscription.url === url);
-      if (current && coversAll(current, updateTypes)) return 'ok';
+      if (current && missingUpdateTypes(current, updateTypes).length === 0) return 'ok';
       await api.subscribe(url, secret, updateTypes);
       logger.warn({ url }, 'webhook subscription restored');
       return 'restored';

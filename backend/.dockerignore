@@ -10,3 +10,4 @@ vitest.config.ts
 .prettierignore
 Dockerfile
 .dockerignore
+testdata/samples

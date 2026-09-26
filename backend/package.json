@@ -19,7 +19,8 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:coverage": "vitest run --coverage",
-    "openapi": "node src/scripts/export-openapi.ts"
+    "openapi": "node src/scripts/export-openapi.ts",
+    "smoke": "node --env-file-if-exists=../.env src/scripts/smoke.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
