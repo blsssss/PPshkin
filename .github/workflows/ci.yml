@@ -103,12 +103,90 @@ jobs:
       - if: always()
         run: docker compose down --volumes
 
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    env:
+      DOMAIN: localhost
+      ACME_EMAIL: ci@example.com
+      IMAGE_TAG: ci
+      BOT_MODE: "off"
+      POSTGRES_PASSWORD: ci-password
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: backend
+          load: true
+          tags: ghcr.io/blsssss/ppshkin-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          load: true
+          tags: ghcr.io/blsssss/ppshkin-frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+      - run: |
+          secret=$(openssl rand -hex 32)
+          echo "SESSION_SECRET=$secret" > .env
+      - run: docker compose -f compose.prod.yaml config --quiet
+      - run: >-
+          docker run --rm
+          --env DOMAIN --env ACME_EMAIL
+          --volume "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.11.4-alpine
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - run: docker compose -f compose.prod.yaml up --detach --wait --wait-timeout 180
+      - name: https://localhost/health answers 200
+        run: |
+          status=$(curl -sk --retry 10 --retry-delay 1 --retry-all-errors --output /dev/null --write-out '%{http_code}' https://localhost/health)
+          echo "$status"
+          test "$status" = 200
+      - name: https://localhost/api/v1/me answers 401 with problem+json
+        run: |
+          result=$(curl -sk --output /dev/null --write-out '%{http_code} %{content_type}' https://localhost/api/v1/me)
+          echo "$result"
+          grep -Eq '^401 application/problem\+json(;|$)' <<< "$result"
+      - name: https://localhost/ serves the mini app
+        run: |
+          page="$RUNNER_TEMP/index.html"
+          status=$(curl -sk --output "$page" --write-out '%{http_code}' https://localhost/)
+          echo "$status"
+          test "$status" = 200
+          grep -F 'st.max.ru/js/max-web-app.js' "$page"
+      - name: POST https://localhost/max/webhook answers 404
+        run: |
+          status=$(curl -sk -X POST --output /dev/null --write-out '%{http_code}' https://localhost/max/webhook)
+          echo "$status"
+          test "$status" = 404
+      - name: http://localhost/health redirects to HTTPS
+        run: |
+          result=$(curl -s --output /dev/null --write-out '%{http_code} %{redirect_url}' http://localhost/health)
+          echo "$result"
+          test "$result" = '308 https://localhost/health'
+      - name: the backend port is not published
+        run: |
+          code=0
+          curl -s --max-time 3 http://127.0.0.1:3000/health || code=$?
+          echo "curl exit code $code"
+          test "$code" = 7
+      - if: failure()
+        run: docker compose -f compose.prod.yaml logs --no-color
+      - if: always()
+        run: docker compose -f compose.prod.yaml down --volumes
+
   ci:
     name: ci
     if: always()
-    needs: [backend, frontend, docker]
+    needs: [backend, frontend, docker, deploy]
     runs-on: ubuntu-24.04
     steps:
       - run: test "${{ needs.backend.result }}" = success
       - run: test "${{ needs.frontend.result }}" = success
       - run: test "${{ needs.docker.result }}" = success
+      - run: test "${{ needs.deploy.result }}" = success

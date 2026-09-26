@@ -4,7 +4,7 @@ import { expectContract } from '../../test/contract.ts';
 import { bearer, buildTestApp, fakeServices, testConfig } from '../../test/services.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
 import { conflict } from '../shared/errors.ts';
-import { buildApp, quietestLevel, trustProxyOption } from './app.ts';
+import { buildApp, loggerOptions, quietestLevel, trustProxyOption } from './app.ts';
 
 let app: FastifyInstance | undefined;
 
@@ -245,6 +245,33 @@ describe('buildApp', () => {
     const withoutBot = await start();
     const missing = await withoutBot.inject({ method: 'POST', url: '/max/webhook', payload: update });
     expect(missing.statusCode).toBe(404);
+  });
+});
+
+describe('loggerOptions', () => {
+  it('logs requests without query strings and client addresses', async () => {
+    const lines: string[] = [];
+    const stream = { write: (line: string) => lines.push(line) };
+    const config = testConfig({ LOG_LEVEL: 'info' });
+    const options = loggerOptions(config);
+    app = await buildApp({
+      config,
+      services: fakeServices(),
+      logger: typeof options === 'object' ? { ...options, stream } : options,
+    });
+
+    await app.inject({
+      method: 'GET',
+      url: '/api/v1/venues?lat=55.7887&lon=49.1221',
+      remoteAddress: '203.0.113.7',
+    });
+
+    const requests = lines
+      .map((line) => JSON.parse(line) as { msg?: string; req?: Record<string, unknown> })
+      .filter((entry) => entry.msg === 'incoming request');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.req).toEqual({ method: 'GET', url: '/api/v1/venues' });
+    expect(lines.join('\n')).not.toMatch(/55\.7887|49\.1221|203\.0\.113\.7/);
   });
 });
 

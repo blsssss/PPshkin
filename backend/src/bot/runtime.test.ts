@@ -79,7 +79,12 @@ describe('maxBotSettings', () => {
   });
 
   it('builds the webhook address from the public URL', () => {
-    const webhook = { MAX_BOT_TOKEN: TOKEN, BOT_MODE: 'webhook', MAX_WEBHOOK_SECRET: 'hook_secret-1' };
+    const webhook = {
+      MAX_BOT_TOKEN: TOKEN,
+      BOT_MODE: 'webhook',
+      MAX_WEBHOOK_SECRET: 'hook_secret-1',
+      SESSION_SECRET: 'session-secret-for-tests-0123456789',
+    };
     expect(maxBotSettings(testConfig({ ...webhook, PUBLIC_BASE_URL: 'https://ppshkin.example' }))).toEqual(
       WEBHOOK,
     );

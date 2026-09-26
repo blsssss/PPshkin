@@ -1,0 +1,23 @@
+{
+	email {$ACME_EMAIL}
+	log {
+		format filter {
+			request>headers>X-Max-Bot-Api-Secret delete
+		}
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 11MB
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	@backend path /api/* /docs /docs/* /max/webhook /health /ready
+	handle @backend {
+		reverse_proxy backend:3000
+	}
+	handle {
+		reverse_proxy frontend:8080
+	}
+}

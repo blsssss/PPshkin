@@ -7,6 +7,8 @@ import { loadDemoDataset } from './demo/dataset.ts';
 import { buildApp } from './http/app.ts';
 import { createMaxApi } from './integrations/max/api.ts';
 import type { MaxLogger } from './integrations/max/poller.ts';
+import { MAX_UPDATE_TYPES } from './integrations/max/updates.ts';
+import { createWebhookGuard } from './integrations/max/webhook-guard.ts';
 import { createJobs } from './jobs/index.ts';
 import { createAdvisoryLock } from './jobs/lock.ts';
 import { createScheduler } from './jobs/scheduler.ts';
@@ -60,6 +62,8 @@ const botLogger: MaxLogger = {
   },
 };
 const botSettings = maxBotSettings(config);
+const maxApi = botSettings && createMaxApi({ token: botSettings.token, baseUrl: config.MAX_API_BASE_URL });
+const webhook = botSettings?.webhook;
 const botMessenger = () => botRuntime?.messenger() ?? null;
 const notifier = botSettings
   ? createMessengerNotifier({
@@ -79,9 +83,10 @@ const services = createServices({
 });
 const botRuntime =
   botSettings &&
+  maxApi &&
   createBotRuntime({
     settings: botSettings,
-    api: createMaxApi({ token: botSettings.token, baseUrl: config.MAX_API_BASE_URL }),
+    api: maxApi,
     pool,
     services,
     clock: systemClock,
@@ -96,6 +101,16 @@ const jobs = createJobs({
   messenger: botMessenger,
   logger: botLogger,
   demo: services.demo,
+  webhookGuard:
+    webhook && maxApi
+      ? createWebhookGuard({
+          api: maxApi,
+          url: webhook.url,
+          secret: webhook.secret,
+          updateTypes: MAX_UPDATE_TYPES,
+          logger: botLogger,
+        })
+      : undefined,
 });
 const lockPool = createPool(config.DATABASE_URL, {
   max: jobs.length,
@@ -109,7 +124,6 @@ const scheduler = createScheduler({
   logger: botLogger,
   jobs,
 });
-const webhook = botSettings?.webhook;
 const app = await buildApp({
   config,
   services,

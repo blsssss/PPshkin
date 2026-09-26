@@ -193,7 +193,9 @@ describe('loadConfig', () => {
       MAX_BOT_TOKEN: 'max-bot-token-0123456789',
       MAX_WEBHOOK_SECRET: 'hook_secret-1',
       PUBLIC_BASE_URL: 'https://ppshkin.example',
+      SESSION_SECRET: 'session-secret-for-tests-0123456789',
     };
+    const localDemoToken = 'local-demo-guest-token-0123456789';
 
     it('accepts a complete setup', () => {
       expect(loadConfig(webhook).BOT_MODE).toBe('webhook');
@@ -202,10 +204,76 @@ describe('loadConfig', () => {
       );
     });
 
-    it.each(['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL'])('needs %s', (name) => {
-      expect(() => loadConfig({ ...webhook, [name]: '' })).toThrow(
-        new RegExp(`${name}: BOT_MODE=webhook needs ${name}`),
+    it('accepts the production setup from compose.prod.yaml', () => {
+      const config = loadConfig({
+        ...webhook,
+        NODE_ENV: 'production',
+        HOST: '0.0.0.0',
+        PORT: '3000',
+        TRUST_PROXY: '1',
+        DATABASE_URL: 'postgres://ppshkin@db:5432/ppshkin',
+        DEMO_MODE: 'true',
+        DEMO_GUEST_TOKEN: 'fake-demo-guest-token-0123456789abcdef',
+        DEMO_VENUE_TOKEN: 'fake-demo-venue-token-0123456789abcdef',
+        PROACTIVE_OFFERS: 'false',
+      });
+      expect(config).toMatchObject({
+        NODE_ENV: 'production',
+        BOT_MODE: 'webhook',
+        TRUST_PROXY: 1,
+        PUBLIC_BASE_URL: 'https://ppshkin.example',
+        DEMO_MODE: true,
+      });
+    });
+
+    it.each(['MAX_BOT_TOKEN', 'MAX_WEBHOOK_SECRET', 'PUBLIC_BASE_URL', 'SESSION_SECRET'])(
+      'needs %s',
+      (name) => {
+        expect(() => loadConfig({ ...webhook, [name]: '' })).toThrow(
+          new RegExp(`${name}: BOT_MODE=webhook needs ${name}`),
+        );
+      },
+    );
+
+    it.each(['DEMO_GUEST_TOKEN', 'DEMO_VENUE_TOKEN'])('refuses a local demo token in %s', (name) => {
+      expect(() => loadConfig({ ...webhook, DEMO_MODE: 'true', [name]: localDemoToken })).toThrow(
+        new RegExp(`${name}: local demo tokens are not allowed with BOT_MODE=webhook`),
       );
+    });
+
+    it('reports both local demo tokens', () => {
+      try {
+        loadConfig({
+          ...webhook,
+          DEMO_MODE: 'true',
+          DEMO_GUEST_TOKEN: localDemoToken,
+          DEMO_VENUE_TOKEN: 'local-demo-venue-token-0123456789',
+        });
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as ConfigError).issues).toEqual([
+          'DEMO_GUEST_TOKEN: local demo tokens are not allowed with BOT_MODE=webhook',
+          'DEMO_VENUE_TOKEN: local demo tokens are not allowed with BOT_MODE=webhook',
+        ]);
+      }
+    });
+
+    it.each(['polling', 'off'])('keeps local demo tokens with BOT_MODE=%s', (mode) => {
+      const config = loadConfig({
+        ...webhook,
+        BOT_MODE: mode,
+        DEMO_MODE: 'true',
+        DEMO_GUEST_TOKEN: localDemoToken,
+        DEMO_VENUE_TOKEN: 'local-demo-venue-token-0123456789',
+      });
+      expect(config).toMatchObject({ BOT_MODE: mode, DEMO_GUEST_TOKEN: localDemoToken });
+    });
+
+    it('does not need SESSION_SECRET outside webhook mode', () => {
+      expect(
+        loadConfig({ ...webhook, BOT_MODE: 'polling', SESSION_SECRET: '' }).SESSION_SECRET,
+      ).toBeUndefined();
     });
 
     it.each(['http://ppshkin.example', 'https://ppshkin.example:8443', 'https://ppshkin.example:443/app'])(
