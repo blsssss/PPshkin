@@ -4,12 +4,15 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type { Config } from '../config.ts';
+import type { UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
+import type { BackgroundTasks } from '../shared/background.ts';
 import { tooManyRequests } from '../shared/errors.ts';
 import { rateLimitKey, registerAuthentication } from './auth.ts';
 import { registerOpenApi } from './openapi.ts';
 import { registerProblemHandlers } from './problem.ts';
 import { apiRoutes } from './routes/index.ts';
+import { maxWebhookRoutes } from './routes/max-webhook.ts';
 import { systemRoutes } from './routes/system.ts';
 import { registerUploads } from './uploads.ts';
 
@@ -17,6 +20,7 @@ export interface AppOptions {
   config: Config;
   services: Services;
   logger?: FastifyServerOptions['logger'];
+  maxWebhook?: { secret: string; handler: UpdateHandler; background: BackgroundTasks };
 }
 
 const LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const;
@@ -39,7 +43,7 @@ export function trustProxyOption(
   return typeof setting === 'number' ? (_address, hop) => hop < setting : setting;
 }
 
-export async function buildApp({ config, services, logger }: AppOptions) {
+export async function buildApp({ config, services, logger, maxWebhook }: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
     trustProxy: trustProxyOption(config.TRUST_PROXY),
@@ -74,6 +78,7 @@ export async function buildApp({ config, services, logger }: AppOptions) {
     probeLogLevel: quietestLevel(config.LOG_LEVEL, 'warn'),
   });
   await app.register(apiRoutes, { prefix: '/api/v1', services });
+  if (maxWebhook) await app.register(maxWebhookRoutes, maxWebhook);
 
   return app;
 }
