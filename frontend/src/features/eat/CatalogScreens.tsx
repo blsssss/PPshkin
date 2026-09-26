@@ -71,7 +71,9 @@ function RadiusPicker({
 export function DealsScreen() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const highlight = Number(params.get('highlight') ?? Number.NaN);
+  const highlightParam = params.get('highlight');
+  const highlight =
+    highlightParam !== null && /^[1-9]\d*$/.test(highlightParam) ? Number(highlightParam) : Number.NaN;
   const { source, point } = useSearchPoint();
   const locator = useLocator();
   const [radius, setRadius] = useRadius();

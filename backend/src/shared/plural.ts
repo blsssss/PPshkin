@@ -1,3 +1,5 @@
+export const MEAL_FORMS = ['приём', 'приёма', 'приёмов'] as const;
+
 export function plural(count: number, forms: readonly [one: string, few: string, many: string]): string {
   const [one, few, many] = forms;
   const lastDigit = count % 10;

@@ -267,6 +267,32 @@ describe('recommendations', () => {
     expect(await storedOffers()).toEqual([]);
   });
 
+  it('shows and stores nothing when the best match scores below the requested minimum', async () => {
+    await seedWorld();
+    await seedHistory();
+    const [best] = (await service.recommend(GUEST, request({ limit: 1 }))).items;
+    const minScore = best!.score;
+    await resetDatabase(pool);
+    await seedUser(pool, GUEST);
+    await seedWorld();
+    await seedHistory();
+
+    expect(await service.recommend(GUEST, request({ minScore: minScore + 0.0001 }))).toEqual({
+      status: 'nothing_fits',
+      slot: 'snack',
+      remainingKcal: 1550,
+      slotBudgetKcal: 200,
+      items: [],
+    });
+    expect(await storedOffers()).toEqual([]);
+
+    const shown = await service.recommend(GUEST, request({ minScore }));
+    expect(shown.status).toBe('ok');
+    expect(shown.items[0]?.score).toBe(minScore);
+    expect(shown.items.length).toBeGreaterThan(1);
+    expect((await storedOffers()).map((row) => row.id)).toEqual(shown.items.map((offer) => offer.offerId));
+  });
+
   it('searches within 5 km of the requested point', async () => {
     const world = await seedWorld();
     await seedHistory();

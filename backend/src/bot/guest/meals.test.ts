@@ -708,7 +708,7 @@ describe('/today', () => {
         'Ориентир на день: 2000 ккал',
       ].join('\n'),
     );
-    expect(today?.buttons).toEqual([]);
+    expect(today?.buttons).toEqual([[{ type: 'callback', text: 'Что поесть?', payload: 'cmd:eat' }]]);
   });
 
   it('lists meals with local times, totals and macros', async () => {
@@ -730,6 +730,7 @@ describe('/today', () => {
       ].join('\n'),
     );
     expect(today?.buttons).toEqual([
+      [{ type: 'callback', text: 'Что поесть?', payload: 'cmd:eat' }],
       [{ type: 'callback', text: 'Удалить последнюю запись', payload: 'ml:del:2:t' }],
       [{ type: 'open_app', text: 'Открыть дневник' }],
     ]);
@@ -746,7 +747,7 @@ describe('/today', () => {
     expect(today?.text).toContain('и ещё 3 записи');
     expect(today?.text).toContain('Итого около 2300 ккал из 2000, ориентир на день набран');
     expect(today?.text).not.toContain('Б 0 г');
-    expect(payloads(today)).toEqual(['ml:del:23:t']);
+    expect(payloads(today)).toEqual(['cmd:eat', 'ml:del:23:t']);
   });
 
   it('deletes the latest meal and refreshes the day in place', async () => {
@@ -760,7 +761,7 @@ describe('/today', () => {
     const [answer] = answers(refreshed);
     expect(answer?.message?.text).toContain('**Сырники**, около 400 ккал');
     expect(answer?.message?.text).not.toContain('Борщ');
-    expect(payloads(answer?.message)).toEqual(['ml:del:1:t']);
+    expect(payloads(answer?.message)).toEqual(['cmd:eat', 'ml:del:1:t']);
   });
 
   it('is reachable from the menu buttons', async () => {

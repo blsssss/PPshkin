@@ -172,3 +172,32 @@ describe('time zones and old meals', () => {
     expect(moved.errors.eatenAt).toBe('Можно указать время за последние 7 дней');
   });
 });
+
+describe('limits from the contract', () => {
+  it('caps kcal at 5000, nutrients at 500 g and tags at 10', () => {
+    const base = { ...emptyForm(null, new Date('2026-09-26T09:00:00.000Z'), 'Europe/Moscow'), title: 'Суп' };
+    const tags = [
+      'sweet',
+      'dessert',
+      'pastry',
+      'chocolate',
+      'fruit',
+      'berries',
+      'dairy',
+      'cheese',
+      'eggs',
+      'meat',
+      'fish',
+    ] as const;
+    const { errors } = validateMeal(
+      { ...base, kcal: '5001', proteinG: '501', tags: [...tags] },
+      new Date('2026-09-26T09:00:00.000Z'),
+      'Europe/Moscow',
+    );
+    expect(errors).toMatchObject({
+      kcal: 'Не больше 5000 ккал',
+      proteinG: 'Не больше 500 г',
+      tags: 'Не больше 10 тегов',
+    });
+  });
+});

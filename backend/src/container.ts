@@ -1,6 +1,7 @@
 import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
+import { silentNotifier } from './notifications/silent-notifier.ts';
 import type { Notifier } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
@@ -28,18 +29,19 @@ export interface ContainerOptions {
   clock: Clock;
   recognition: Recognition;
   background: BackgroundTasks;
+  notifier?: Notifier;
 }
 
-const silentNotifier: Notifier = {
-  bookingCreated: () => Promise.resolve(),
-  bookingCancelled: () => Promise.resolve(),
-  bookingRedeemed: () => Promise.resolve(),
-  bookingExpired: () => Promise.resolve(),
-};
-
-export function createServices({ config, pool, clock, recognition, background }: ContainerOptions): Services {
+export function createServices({
+  config,
+  pool,
+  clock,
+  recognition,
+  background,
+  notifier = silentNotifier,
+}: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
-  const bookings = createBookingsService({ pool, clock, consents, notifier: silentNotifier, background });
+  const bookings = createBookingsService({ pool, clock, consents, notifier, background });
   return {
     health: createHealthService(pool),
     auth: createAuthService(
