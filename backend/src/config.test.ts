@@ -73,6 +73,74 @@ describe('loadConfig', () => {
     );
   });
 
+  it('configures ChadGPT with safe defaults and no key', () => {
+    const config = loadConfig({
+      ...required,
+      CHADGPT_API_KEY: '',
+      CHADGPT_MODEL: '',
+      CHADGPT_TIMEOUT_MS: '',
+    });
+    expect(config).toMatchObject({
+      CHADGPT_BASE_URL: 'https://ask.chadgpt.ru/api/v1',
+      CHADGPT_MODEL: 'gpt-6-luna',
+      CHADGPT_FALLBACK_MODEL: 'gemini-3-flash-preview',
+      CHADGPT_TIMEOUT_MS: 45_000,
+      CHADGPT_MENU_TIMEOUT_MS: 120_000,
+    });
+    expect(config.CHADGPT_API_KEY).toBeUndefined();
+    expect(loadConfig(required).CHADGPT_API_KEY).toBeUndefined();
+  });
+
+  it('reads the ChadGPT settings', () => {
+    const config = loadConfig({
+      ...required,
+      CHADGPT_API_KEY: ' chad-key-0123456789 ',
+      CHADGPT_BASE_URL: 'https://proxy.example/api/v1',
+      CHADGPT_MODEL: 'gpt-5.6-luna',
+      CHADGPT_FALLBACK_MODEL: 'gpt-6-luna',
+      CHADGPT_TIMEOUT_MS: '30000',
+      CHADGPT_MENU_TIMEOUT_MS: '600000',
+    });
+    expect(config).toMatchObject({
+      CHADGPT_API_KEY: 'chad-key-0123456789',
+      CHADGPT_BASE_URL: 'https://proxy.example/api/v1',
+      CHADGPT_MODEL: 'gpt-5.6-luna',
+      CHADGPT_FALLBACK_MODEL: 'gpt-6-luna',
+      CHADGPT_TIMEOUT_MS: 30_000,
+      CHADGPT_MENU_TIMEOUT_MS: 600_000,
+    });
+  });
+
+  it('accepts only models that read images', () => {
+    expect(() => loadConfig({ ...required, CHADGPT_MODEL: 'deepseek-v4-flash' })).toThrow(/CHADGPT_MODEL/);
+    expect(() => loadConfig({ ...required, CHADGPT_FALLBACK_MODEL: 'gpt-5-nano' })).toThrow(
+      /CHADGPT_FALLBACK_MODEL/,
+    );
+  });
+
+  it('sends the key only over HTTPS', () => {
+    expect(() => loadConfig({ ...required, CHADGPT_BASE_URL: 'http://ask.chadgpt.ru/api/v1' })).toThrow(
+      /CHADGPT_BASE_URL/,
+    );
+    expect(() => loadConfig({ ...required, CHADGPT_BASE_URL: 'not a url' })).toThrow(/CHADGPT_BASE_URL/);
+  });
+
+  it.each([
+    ['CHADGPT_TIMEOUT_MS', '1000', true],
+    ['CHADGPT_TIMEOUT_MS', '999', false],
+    ['CHADGPT_TIMEOUT_MS', '300000', true],
+    ['CHADGPT_TIMEOUT_MS', '300001', false],
+    ['CHADGPT_TIMEOUT_MS', '1500.5', false],
+    ['CHADGPT_MENU_TIMEOUT_MS', '1000', true],
+    ['CHADGPT_MENU_TIMEOUT_MS', '999', false],
+    ['CHADGPT_MENU_TIMEOUT_MS', '600000', true],
+    ['CHADGPT_MENU_TIMEOUT_MS', '600001', false],
+  ])('checks the bounds of %s=%s', (name, value, valid) => {
+    const load = () => loadConfig({ ...required, [name]: value });
+    if (valid) expect(load()).toHaveProperty(name, Number(value));
+    else expect(load).toThrow(new RegExp(name));
+  });
+
   it('reports every invalid variable', () => {
     try {
       loadConfig({ PORT: 'abc', NODE_ENV: 'staging' });

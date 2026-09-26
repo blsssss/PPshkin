@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VISION_MODELS } from './integrations/chadgpt/models.ts';
 
 const booleanFlag = z
   .enum(['true', 'false', '1', '0', 'yes', 'no'])
@@ -54,6 +55,24 @@ const baseSchema = z.object({
   DEMO_MODE: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   DEMO_GUEST_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
   DEMO_VENUE_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
+  CHADGPT_API_KEY: z.preprocess(emptyAsUndefined, z.string().trim().min(1).optional()),
+  CHADGPT_BASE_URL: z.preprocess(
+    emptyAsUndefined,
+    z.url({ protocol: /^https$/ }).default('https://ask.chadgpt.ru/api/v1'),
+  ),
+  CHADGPT_MODEL: z.preprocess(emptyAsUndefined, z.enum(VISION_MODELS).default('gpt-6-luna')),
+  CHADGPT_FALLBACK_MODEL: z.preprocess(
+    emptyAsUndefined,
+    z.enum(VISION_MODELS).default('gemini-3-flash-preview'),
+  ),
+  CHADGPT_TIMEOUT_MS: z.preprocess(
+    emptyAsUndefined,
+    z.coerce.number().int().min(1000).max(300_000).default(45_000),
+  ),
+  CHADGPT_MENU_TIMEOUT_MS: z.preprocess(
+    emptyAsUndefined,
+    z.coerce.number().int().min(1000).max(600_000).default(120_000),
+  ),
 });
 
 export const configSchema = baseSchema.superRefine((config, context) => {

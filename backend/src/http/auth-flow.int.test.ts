@@ -6,7 +6,7 @@ import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { maxUserJson, signInitData } from '../../test/init-data.ts';
 import { testConfig } from '../../test/services.ts';
 import { createServices } from '../container.ts';
-import { disabledRecognition } from '../recognition/index.ts';
+import { createRecognition } from '../recognition/index.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
 import { buildApp } from './app.ts';
 
@@ -22,7 +22,14 @@ beforeAll(async () => {
     config,
     pool,
     clock,
-    recognition: disabledRecognition(),
+    recognition: createRecognition({
+      apiKey: undefined,
+      baseUrl: config.CHADGPT_BASE_URL,
+      visionModel: config.CHADGPT_MODEL,
+      fallbackModel: config.CHADGPT_FALLBACK_MODEL,
+      timeoutMs: config.CHADGPT_TIMEOUT_MS,
+      menuTimeoutMs: config.CHADGPT_MENU_TIMEOUT_MS,
+    }),
     background: createBackgroundTasks({ error: () => undefined }),
   });
   app = await buildApp({ config, services });
