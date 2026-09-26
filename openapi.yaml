@@ -551,6 +551,443 @@ components:
         - startParam
         - user
       additionalProperties: false
+    Deal:
+      type: object
+      properties:
+        id:
+          type: integer
+        menuItemId:
+          type: integer
+        itemName:
+          type: string
+        priceRub:
+          type: integer
+          description: Цена по акции в рублях
+        originalPriceRub:
+          type: integer
+          description: Текущая цена позиции в меню
+        discountPercent:
+          type: integer
+          description: Скидка в процентах от цены в меню
+        quantityTotal:
+          type: integer
+        quantityLeft:
+          type: integer
+        startsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        endsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        status:
+          type: string
+          enum:
+            - scheduled
+            - active
+            - sold_out
+            - ended
+            - cancelled
+          description: active - продаётся; scheduled - ещё не началась; sold_out - порции
+            закончились; ended - время вышло; cancelled - снята заведением
+      required:
+        - id
+        - menuItemId
+        - itemName
+        - priceRub
+        - originalPriceRub
+        - discountPercent
+        - quantityTotal
+        - quantityLeft
+        - startsAt
+        - endsAt
+        - status
+      additionalProperties: false
+      description: "Горящее предложение: позиция меню со скидкой, ограниченным
+        количеством и сроком"
+    MenuItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        category:
+          type: string
+          enum:
+            - breakfast
+            - main
+            - soup
+            - salad
+            - side
+            - bakery
+            - dessert
+            - snack
+            - drink
+        priceRub:
+          type: integer
+          description: Цена в рублях
+        weightG:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Выход порции в граммах
+        kcal:
+          type: integer
+          description: Калорийность порции
+        proteinG:
+          anyOf:
+            - type: number
+              description: Граммы на порцию
+            - type: "null"
+        fatG:
+          anyOf:
+            - type: number
+              description: Граммы на порцию
+            - type: "null"
+        carbsG:
+          anyOf:
+            - type: number
+              description: Граммы на порцию
+            - type: "null"
+        nutritionSource:
+          type: string
+          enum:
+            - venue
+            - estimate
+          description: venue - калорийность указало заведение, estimate - оценка при
+            распознавании меню
+        tags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+        isAvailable:
+          type: boolean
+          description: false - позиция скрыта от гостей, но остаётся в меню заведения
+      required:
+        - id
+        - name
+        - description
+        - category
+        - priceRub
+        - weightG
+        - kcal
+        - proteinG
+        - fatG
+        - carbsG
+        - nutritionSource
+        - tags
+        - isAvailable
+      additionalProperties: false
+      description: Позиция меню заведения
+    ParsedMenuItem:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        category:
+          type: string
+          enum:
+            - breakfast
+            - main
+            - soup
+            - salad
+            - side
+            - bakery
+            - dessert
+            - snack
+            - drink
+        priceRub:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: "Цена из меню; null, если её нет в меню: владелец указывает цену
+            перед применением"
+        weightG:
+          anyOf:
+            - type: integer
+            - type: "null"
+        kcal:
+          type: integer
+          description: Оценка калорийности порции
+        proteinG:
+          type: number
+          description: Граммы на порцию
+        fatG:
+          type: number
+          description: Граммы на порцию
+        carbsG:
+          type: number
+          description: Граммы на порцию
+        tags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+      required:
+        - name
+        - description
+        - category
+        - priceRub
+        - weightG
+        - kcal
+        - proteinG
+        - fatG
+        - carbsG
+        - tags
+      additionalProperties: false
+      description: Позиция, распознанная в меню. Калорийность и БЖУ оценочные,
+        владелец может их исправить
+    MenuImport:
+      type: object
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+          enum:
+            - photo
+            - text
+        status:
+          type: string
+          enum:
+            - processing
+            - ready
+            - failed
+            - applied
+          description: processing - распознаётся, опрашивайте раз в 2 секунды; ready -
+            проверьте позиции и примените; failed - покажите error; applied -
+            позиции уже в меню
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParsedMenuItem"
+        error:
+          description: Причина неудачи для показа владельцу как есть
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        completedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+      required:
+        - id
+        - source
+        - status
+        - items
+        - error
+        - createdAt
+        - completedAt
+      additionalProperties: false
+      description: Импорт меню по фото или тексту
+    Venue:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+        category:
+          type: string
+          enum:
+            - coffee
+            - bakery
+            - cafe
+            - canteen
+            - restaurant
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        opensAt:
+          type: string
+          description: Время открытия ЧЧ:ММ в часовом поясе заведения
+        closesAt:
+          type: string
+          description: Время закрытия ЧЧ:ММ; раньше opensAt - закрытие после полуночи,
+            равно opensAt - круглосуточно
+        timezone:
+          type: string
+          description: Часовой пояс IANA
+        isDemo:
+          type: boolean
+          description: "Тестовое заведение: покажите пометку «Заведение и меню тестовые»"
+      required:
+        - id
+        - name
+        - address
+        - category
+        - location
+        - opensAt
+        - closesAt
+        - timezone
+        - isDemo
+      additionalProperties: false
+      description: Заведение
+    VenueCard:
+      type: object
+      properties:
+        venue:
+          $ref: "#/components/schemas/Venue"
+        distanceM:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Расстояние от точки поиска в метрах; null, если точка неизвестна
+        openNow:
+          type: boolean
+          description: Открыто ли заведение сейчас по часам работы
+        activeDeals:
+          type: integer
+          description: Сколько горящих предложений доступно гостю
+      required:
+        - venue
+        - distanceM
+        - openNow
+        - activeDeals
+      additionalProperties: false
+      description: Заведение в списке рядом
+    VenueDetails:
+      type: object
+      properties:
+        venue:
+          $ref: "#/components/schemas/Venue"
+        openNow:
+          type: boolean
+          description: Открыто ли заведение сейчас по часам работы
+        menu:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+          description: Доступные гостю позиции по категориям и названию
+        deals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Deal"
+          description: Горящие предложения, которые можно забронировать сейчас
+      required:
+        - venue
+        - openNow
+        - menu
+        - deals
+      additionalProperties: false
+      description: Карточка заведения для гостя
+    DealCard:
+      type: object
+      properties:
+        deal:
+          $ref: "#/components/schemas/Deal"
+        item:
+          $ref: "#/components/schemas/MenuItem"
+        venue:
+          $ref: "#/components/schemas/Venue"
+        distanceM:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Расстояние от точки поиска в метрах; null, если точка неизвестна
+      required:
+        - deal
+        - item
+        - venue
+        - distanceM
+      additionalProperties: false
+      description: Горящее предложение в ленте рядом
     Meal:
       type: object
       properties:
@@ -2071,6 +2508,1746 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/venue:
+    post:
+      operationId: createVenue
+      summary: Подключить заведение
+      tags:
+        - venue
+      description: "Создаёт заведение, владельцем становится текущий пользователь. У
+        пользователя может быть только одно заведение. Без opensAt и closesAt
+        часы работы 08:00-22:00, без timezone часовой пояс Europe/Moscow. Коды
+        ошибок: venue_exists (409, заведение уже подключено, откройте его через
+        GET /api/v1/venue), invalid_timezone (422, выберите часовой пояс из базы
+        IANA), validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                  description: Название для гостей
+                address:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  description: Адрес для гостей
+                category:
+                  type: string
+                  enum:
+                    - coffee
+                    - bakery
+                    - cafe
+                    - canteen
+                    - restaurant
+                location:
+                  $ref: "#/components/schemas/GeoPointInput"
+                opensAt:
+                  description: Время открытия ЧЧ:ММ, по умолчанию 08:00
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                closesAt:
+                  description: Время закрытия ЧЧ:ММ, по умолчанию 22:00; раньше opensAt - закрытие
+                    после полуночи, равно opensAt - круглосуточно
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                timezone:
+                  description: Часовой пояс IANA, по умолчанию Europe/Moscow
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+              required:
+                - name
+                - address
+                - category
+                - location
+      security: *a3
+      responses:
+        "201":
+          description: Заведение создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      operationId: getVenue
+      summary: Заведение текущего пользователя
+      tags:
+        - venue
+      description: "Коды ошибок: venue_not_found (404, заведения ещё нет, предложите
+        создать его через POST /api/v1/venue)."
+      security: *a3
+      responses:
+        "200":
+          description: Заведение
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      operationId: updateVenue
+      summary: Изменить заведение
+      tags:
+        - venue
+      description: "Меняет только переданные поля, нужно хотя бы одно. Коды ошибок:
+        venue_not_found (404, заведения ещё нет, предложите создать его через
+        POST /api/v1/venue), invalid_timezone (422, выберите часовой пояс из
+        базы IANA), validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                  description: Название для гостей
+                address:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  description: Адрес для гостей
+                category:
+                  type: string
+                  enum:
+                    - coffee
+                    - bakery
+                    - cafe
+                    - canteen
+                    - restaurant
+                location:
+                  $ref: "#/components/schemas/GeoPointInput"
+                opensAt:
+                  description: Время открытия ЧЧ:ММ, по умолчанию 08:00
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                closesAt:
+                  description: Время закрытия ЧЧ:ММ, по умолчанию 22:00; раньше opensAt - закрытие
+                    после полуночи, равно opensAt - круглосуточно
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                timezone:
+                  description: Часовой пояс IANA, по умолчанию Europe/Moscow
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+              minProperties: 1
+      security: *a3
+      responses:
+        "200":
+          description: Заведение изменено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu:
+    get:
+      operationId: listVenueMenu
+      summary: Меню заведения
+      tags:
+        - venue
+      description: "Все позиции, кроме удалённых, включая скрытые от гостей, по
+        категориям и названию. Коды ошибок: venue_not_found (404, заведения ещё
+        нет, предложите создать его через POST /api/v1/venue)."
+      security: *a3
+      responses:
+        "200":
+          description: Позиции меню
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MenuItem"
+                required:
+                  - items
+                additionalProperties: false
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/items:
+    post:
+      operationId: createMenuItem
+      summary: Добавить позицию в меню
+      tags:
+        - venue
+      description: "Калорийность и БЖУ считаются указанными заведением
+        (nutritionSource = venue). Коды ошибок: venue_not_found (404, заведения
+        ещё нет, предложите создать его через POST /api/v1/venue),
+        validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                description:
+                  anyOf:
+                    - type: string
+                      maxLength: 500
+                    - type: "null"
+                category:
+                  type: string
+                  enum:
+                    - breakfast
+                    - main
+                    - soup
+                    - salad
+                    - side
+                    - bakery
+                    - dessert
+                    - snack
+                    - drink
+                priceRub:
+                  type: integer
+                  minimum: 1
+                  maximum: 100000
+                  description: Цена в рублях
+                weightG:
+                  description: Выход порции в граммах
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 5000
+                    - type: "null"
+                kcal:
+                  type: integer
+                  minimum: 0
+                  maximum: 5000
+                  description: Калорийность порции
+                proteinG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                fatG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                carbsG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                tags:
+                  description: Не больше 12, повторы убираются
+                  maxItems: 12
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - sweet
+                      - dessert
+                      - pastry
+                      - chocolate
+                      - fruit
+                      - berries
+                      - dairy
+                      - cheese
+                      - eggs
+                      - meat
+                      - poultry
+                      - fish
+                      - seafood
+                      - vegetarian
+                      - vegetables
+                      - greens
+                      - salad
+                      - soup
+                      - grain
+                      - pasta
+                      - rice
+                      - potato
+                      - bread
+                      - fried
+                      - grilled
+                      - spicy
+                      - fast_food
+                      - coffee
+                      - tea
+                      - drink
+                      - juice
+                      - high_protein
+                      - light
+                      - hearty
+                      - breakfast
+                isAvailable:
+                  description: По умолчанию true
+                  type: boolean
+              required:
+                - name
+                - category
+                - priceRub
+                - kcal
+      security: *a3
+      responses:
+        "201":
+          description: Позиция добавлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/items/{id}:
+    patch:
+      operationId: updateMenuItem
+      summary: Изменить позицию меню
+      tags:
+        - venue
+      description: "Меняет только переданные поля, нужно хотя бы одно. Если передана
+        калорийность или БЖУ, nutritionSource становится venue. Коды ошибок:
+        menu_item_not_found (404, позиция удалена или принадлежит другому
+        заведению, обновите меню), deal_price_not_lower (422, на позицию есть
+        горящее предложение: оставьте цену выше цены предложения или снимите
+        его), venue_not_found (404, заведения ещё нет, предложите создать его
+        через POST /api/v1/venue), validation_failed (400, исправьте поля из
+        errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                description:
+                  anyOf:
+                    - type: string
+                      maxLength: 500
+                    - type: "null"
+                category:
+                  type: string
+                  enum:
+                    - breakfast
+                    - main
+                    - soup
+                    - salad
+                    - side
+                    - bakery
+                    - dessert
+                    - snack
+                    - drink
+                priceRub:
+                  type: integer
+                  minimum: 1
+                  maximum: 100000
+                  description: Цена в рублях
+                weightG:
+                  description: Выход порции в граммах
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 5000
+                    - type: "null"
+                kcal:
+                  type: integer
+                  minimum: 0
+                  maximum: 5000
+                  description: Калорийность порции
+                proteinG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                fatG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                carbsG:
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 1000
+                    - type: "null"
+                  description: Граммы на порцию, округляются до 0,1
+                tags:
+                  description: Не больше 12, повторы убираются
+                  maxItems: 12
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - sweet
+                      - dessert
+                      - pastry
+                      - chocolate
+                      - fruit
+                      - berries
+                      - dairy
+                      - cheese
+                      - eggs
+                      - meat
+                      - poultry
+                      - fish
+                      - seafood
+                      - vegetarian
+                      - vegetables
+                      - greens
+                      - salad
+                      - soup
+                      - grain
+                      - pasta
+                      - rice
+                      - potato
+                      - bread
+                      - fried
+                      - grilled
+                      - spicy
+                      - fast_food
+                      - coffee
+                      - tea
+                      - drink
+                      - juice
+                      - high_protein
+                      - light
+                      - hearty
+                      - breakfast
+                isAvailable:
+                  description: По умолчанию true
+                  type: boolean
+              minProperties: 1
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Позиция изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: archiveMenuItem
+      summary: Убрать позицию из меню
+      tags:
+        - venue
+      description: "Позиция архивируется: пропадает из меню, каталога и рекомендаций,
+        её горящее предложение снимается. Уже оформленные брони действуют. Коды
+        ошибок: menu_item_not_found (404, позиция уже удалена или принадлежит
+        другому заведению), venue_not_found (404, заведения ещё нет, предложите
+        создать его через POST /api/v1/venue)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "204":
+          description: Позиция убрана
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/imports/photo:
+    post:
+      operationId: importMenuFromPhoto
+      summary: Распознать меню по фото
+      tags:
+        - venue
+      description: "Фото меню в multipart/form-data, поле image: JPEG, PNG или WebP до
+        10 МБ. Распознавание фото обычно занимает 15-30 секунд, фото не
+        сохраняется. Ответ 202 со статусом processing, распознавание идёт в
+        фоне: опрашивайте GET /api/v1/venue/menu/imports/{id} раз в 2 секунды.
+        Коды ошибок: import_in_progress (409, предыдущий импорт ещё
+        распознаётся, дождитесь его), import_limit_reached (409, не больше 20
+        импортов за сутки, попробуйте завтра или добавьте позиции вручную),
+        image_required, image_empty, invalid_multipart (400, приложите одно фото
+        в поле image), image_too_large, upload_too_many_parts (413, пришлите
+        одно фото до 10 МБ), multipart_required, unsupported_image_type (415,
+        пришлите JPEG, PNG или WebP), venue_not_found (404, заведения ещё нет,
+        предложите создать его через POST /api/v1/venue)."
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Фото JPEG, PNG или WebP до 10 МБ
+      security: *a3
+      responses:
+        "202":
+          description: Импорт запущен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuImport"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/imports/text:
+    post:
+      operationId: importMenuFromText
+      summary: Разобрать меню из текста
+      tags:
+        - venue
+      description: "Текст меню, каждая позиция с новой строки и с ценой. Разбор
+        занимает несколько секунд. Ответ 202 со статусом processing,
+        распознавание идёт в фоне: опрашивайте GET
+        /api/v1/venue/menu/imports/{id} раз в 2 секунды. Коды ошибок:
+        import_in_progress (409, предыдущий импорт ещё распознаётся, дождитесь
+        его), import_limit_reached (409, не больше 20 импортов за сутки,
+        попробуйте завтра или добавьте позиции вручную), venue_not_found (404,
+        заведения ещё нет, предложите создать его через POST /api/v1/venue),
+        validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+                  description: "Текст меню: каждая позиция с новой строки, с ценой"
+              required:
+                - text
+      security: *a3
+      responses:
+        "202":
+          description: Импорт запущен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuImport"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/imports/{id}:
+    get:
+      operationId: getMenuImport
+      summary: Результат импорта меню
+      tags:
+        - venue
+      description: "processing: продолжайте опрос; ready: покажите позиции владельцу
+        для проверки и примените их; failed: покажите текст error. Импорт,
+        который распознаётся дольше 30 минут, отдаётся как failed. Коды ошибок:
+        import_not_found (404, импорт принадлежит другому заведению или не
+        существует), venue_not_found (404, заведения ещё нет, предложите создать
+        его через POST /api/v1/venue)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Импорт меню
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuImport"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/imports/{id}/apply:
+    post:
+      operationId: applyMenuImport
+      summary: Добавить распознанные позиции в меню
+      tags:
+        - venue
+      description: "Добавляет проверенные владельцем позиции одной транзакцией,
+        калорийность помечается как оценка (nutritionSource = estimate). Цена
+        обязательна у каждой позиции. Импорт применяется один раз. Коды ошибок:
+        import_not_ready (409, импорт ещё распознаётся или завершился ошибкой),
+        import_already_applied (409, позиции уже в меню, обновите меню),
+        import_not_found (404, импорт принадлежит другому заведению или не
+        существует), venue_not_found (404, заведения ещё нет, предложите создать
+        его через POST /api/v1/venue), validation_failed (400, исправьте поля из
+        errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  minItems: 1
+                  maxItems: 80
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
+                      description:
+                        anyOf:
+                          - type: string
+                            maxLength: 500
+                          - type: "null"
+                      category:
+                        type: string
+                        enum:
+                          - breakfast
+                          - main
+                          - soup
+                          - salad
+                          - side
+                          - bakery
+                          - dessert
+                          - snack
+                          - drink
+                      priceRub:
+                        type: integer
+                        minimum: 1
+                        maximum: 100000
+                        description: Цена в рублях
+                      weightG:
+                        description: Выход порции в граммах
+                        anyOf:
+                          - type: integer
+                            minimum: 1
+                            maximum: 5000
+                          - type: "null"
+                      kcal:
+                        type: integer
+                        minimum: 0
+                        maximum: 5000
+                        description: Калорийность порции
+                      proteinG:
+                        anyOf:
+                          - type: number
+                            minimum: 0
+                            maximum: 1000
+                          - type: "null"
+                        description: Граммы на порцию, округляются до 0,1
+                      fatG:
+                        anyOf:
+                          - type: number
+                            minimum: 0
+                            maximum: 1000
+                          - type: "null"
+                        description: Граммы на порцию, округляются до 0,1
+                      carbsG:
+                        anyOf:
+                          - type: number
+                            minimum: 0
+                            maximum: 1000
+                          - type: "null"
+                        description: Граммы на порцию, округляются до 0,1
+                      tags:
+                        description: Не больше 12, повторы убираются
+                        maxItems: 12
+                        type: array
+                        items:
+                          type: string
+                          enum:
+                            - sweet
+                            - dessert
+                            - pastry
+                            - chocolate
+                            - fruit
+                            - berries
+                            - dairy
+                            - cheese
+                            - eggs
+                            - meat
+                            - poultry
+                            - fish
+                            - seafood
+                            - vegetarian
+                            - vegetables
+                            - greens
+                            - salad
+                            - soup
+                            - grain
+                            - pasta
+                            - rice
+                            - potato
+                            - bread
+                            - fried
+                            - grilled
+                            - spicy
+                            - fast_food
+                            - coffee
+                            - tea
+                            - drink
+                            - juice
+                            - high_protein
+                            - light
+                            - hearty
+                            - breakfast
+                    required:
+                      - name
+                      - category
+                      - priceRub
+                      - kcal
+                  description: Проверенные владельцем позиции импорта; цена обязательна
+              required:
+                - items
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "201":
+          description: Позиции добавлены в меню
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MenuItem"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/deals:
+    get:
+      operationId: listVenueDeals
+      summary: Горящие предложения заведения
+      tags:
+        - venue
+      description: "status=active: идущие и запланированные, сначала те, что
+        заканчиваются раньше. status=finished: распроданные, закончившиеся и
+        снятые за последние 7 дней, сначала последние. Коды ошибок:
+        venue_not_found (404, заведения ещё нет, предложите создать его через
+        POST /api/v1/venue), validation_failed (400, исправьте поля из errors)."
+      parameters:
+        - schema:
+            default: active
+            type: string
+            enum:
+              - active
+              - finished
+          in: query
+          name: status
+          required: false
+          description: active - идущие и запланированные; finished - закончившиеся за
+            последние 7 дней
+      security: *a3
+      responses:
+        "200":
+          description: Горящие предложения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Deal"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      operationId: createDeal
+      summary: Выставить горящее предложение
+      tags:
+        - venue
+      description: "Позиция продаётся со скидкой с текущего момента до endsAt, не
+        дольше 24 часов. Если владелец выбирает скидку в процентах, цену считает
+        клиент: round(цена позиции * (1 - процент / 100)). Коды ошибок:
+        menu_item_not_found (404, позиция удалена или принадлежит другому
+        заведению), menu_item_unavailable (422, позиция скрыта от гостей,
+        сначала включите её), deal_price_not_lower (422, цена предложения должна
+        быть ниже цены в меню), deal_window_invalid (422, выберите окончание в
+        ближайшие 24 часа), deal_exists (409, на позицию уже есть горящее
+        предложение, измените или снимите его), venue_not_found (404, заведения
+        ещё нет, предложите создать его через POST /api/v1/venue),
+        validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                menuItemId:
+                  type: integer
+                  exclusiveMinimum: 0
+                priceRub:
+                  type: integer
+                  minimum: 1
+                  maximum: 100000
+                  description: Цена по акции в рублях, строго ниже цены позиции в меню
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  description: Сколько порций продаётся по акции
+                endsAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                  description: "Окончание акции, ISO 8601: позже текущего момента и не позже чем
+                    через 24 часа"
+              required:
+                - menuItemId
+                - priceRub
+                - quantity
+                - endsAt
+      security: *a3
+      responses:
+        "201":
+          description: Предложение выставлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/deals/{id}:
+    patch:
+      operationId: updateDeal
+      summary: Изменить горящее предложение
+      tags:
+        - venue
+      description: "Меняет остаток порций или время окончания, нужно хотя бы одно
+        поле. Коды ошибок: deal_not_found (404, предложение принадлежит другому
+        заведению или не существует), deal_finished (409, предложение снято или
+        его время вышло, выставьте новое), deal_exists (409, вернуть порции
+        распроданному предложению нельзя: на позицию уже выставлено новое),
+        deal_quantity_invalid (422, остаток не может быть больше quantityTotal),
+        deal_window_invalid (422, выберите окончание в ближайшие 24 часа),
+        venue_not_found (404, заведения ещё нет, предложите создать его через
+        POST /api/v1/venue), validation_failed (400, исправьте поля из errors)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantityLeft:
+                  type: integer
+                  minimum: 0
+                  description: Сколько порций осталось, от 0 до quantityTotal
+                endsAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                  description: "Окончание акции, ISO 8601: позже текущего момента и не позже чем
+                    через 24 часа"
+              minProperties: 1
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Предложение изменено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: cancelDeal
+      summary: Снять горящее предложение
+      tags:
+        - venue
+      description: "Снимает предложение с продажи, повторный вызов тоже отвечает 204.
+        Уже оформленные брони действуют. Коды ошибок: deal_not_found (404,
+        предложение принадлежит другому заведению или не существует),
+        venue_not_found (404, заведения ещё нет, предложите создать его через
+        POST /api/v1/venue)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "204":
+          description: Предложение снято
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venues:
+    get:
+      operationId: listNearbyVenues
+      summary: Заведения рядом
+      tags:
+        - catalog
+      description: "Точка поиска: lat и lon из запроса, иначе сохранённое
+        приблизительное местоположение пользователя. Если точки нет, радиус не
+        применяется и distanceM равен null. С точкой заведения идут по
+        расстоянию, без точки сначала открытые, затем по названию. Не больше 50.
+        Коды ошибок: validation_failed (400, передайте lat и lon вместе, radius
+        от 100 до 10000)."
+      parameters:
+        - schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          in: query
+          name: lat
+          required: false
+          description: Широта точки поиска, вместе с lon
+        - schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          in: query
+          name: lon
+          required: false
+          description: Долгота точки поиска, вместе с lat
+        - schema:
+            default: 3000
+            type: integer
+            minimum: 100
+            maximum: 10000
+          in: query
+          name: radius
+          required: false
+          description: Радиус поиска в метрах, применяется при известной точке
+      security: *a3
+      responses:
+        "200":
+          description: Заведения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VenueCard"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venues/{id}:
+    get:
+      operationId: getVenueDetails
+      summary: Карточка заведения
+      tags:
+        - catalog
+      description: "Меню из доступных позиций и горящие предложения, которые можно
+        забронировать сейчас. Коды ошибок: venue_not_found (404, заведение не
+        найдено, вернитесь к списку)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a3
+      responses:
+        "200":
+          description: Заведение, меню и предложения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueDetails"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/deals:
+    get:
+      operationId: listNearbyDeals
+      summary: Горящие предложения рядом
+      tags:
+        - catalog
+      description: "Предложения заведений, которые открыты сейчас: сначала
+        заканчивающиеся раньше, затем ближайшие. Не больше 50. Точка поиска: lat
+        и lon из запроса, иначе сохранённое приблизительное местоположение
+        пользователя. Если точки нет, радиус не применяется и distanceM равен
+        null. Коды ошибок: validation_failed (400, передайте lat и lon вместе,
+        radius от 100 до 10000)."
+      parameters:
+        - schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          in: query
+          name: lat
+          required: false
+          description: Широта точки поиска, вместе с lon
+        - schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          in: query
+          name: lon
+          required: false
+          description: Долгота точки поиска, вместе с lat
+        - schema:
+            default: 3000
+            type: integer
+            minimum: 100
+            maximum: 10000
+          in: query
+          name: radius
+          required: false
+          description: Радиус поиска в метрах, применяется при известной точке
+      security: *a3
+      responses:
+        "200":
+          description: Горящие предложения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DealCard"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 servers:
   - url: /
     description: Текущий хост
@@ -2085,3 +4262,7 @@ tags:
     description: Согласия на обработку данных и персональные предложения
   - name: diary
     description: Дневник питания
+  - name: venue
+    description: Кабинет заведения
+  - name: catalog
+    description: Заведения и горящие предложения рядом
