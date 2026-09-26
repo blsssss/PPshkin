@@ -132,6 +132,7 @@ describe('recommendations flow against the database', () => {
       slot: 'snack',
       remainingKcal: 2000,
       slotBudgetKcal: 200,
+      demoCenterUsed: false,
       items: [],
     });
     for (const meal of [

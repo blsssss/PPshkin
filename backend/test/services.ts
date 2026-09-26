@@ -93,6 +93,13 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       expireDue: notStubbed('bookings.expireDue'),
     },
     analytics: { get: notStubbed('analytics.get') },
+    demo: {
+      enabled: false,
+      seed: notStubbed('demo.seed'),
+      refresh: notStubbed('demo.refresh'),
+      claimVenue: notStubbed('demo.claimVenue'),
+      fillDiary: notStubbed('demo.fillDiary'),
+    },
     ...overrides,
   };
 }

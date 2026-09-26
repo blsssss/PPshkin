@@ -41,6 +41,7 @@ import {
   RATE_LIMITED,
   RECOGNITION_FAILED,
   RECORD_FORMS,
+  SAMPLE_MEAL,
   TEXT_RECOGNITION_OFF,
   TITLE_IN_BUTTON_LIMIT,
   TITLE_IN_LIST_LIMIT,
@@ -68,6 +69,11 @@ const DIGIT = /\d/;
 
 function mealLine(meal: Pick<DiaryMeal, 'title' | 'kcalMin' | 'kcalMax'>): string {
   return `${bold(truncate(meal.title, TITLE_IN_LIST_LIMIT))}, ${kcalRange(meal.kcalMin, meal.kcalMax)}`;
+}
+
+function todayLine(meal: DiaryMeal, timeZone: string): string {
+  const line = `${formatLocalTime(meal.eatenAt, timeZone)} ${mealLine(meal)}`;
+  return meal.source === 'demo' ? `${line} ${SAMPLE_MEAL}` : line;
 }
 
 function combinedMacros(meals: readonly Macros[]): Macros {
@@ -175,7 +181,7 @@ function todayMessage(day: DiaryDay, miniAppEnabled: boolean): OutgoingMessage {
   );
   if (latest === null) return { text: `${title}\n${todayEmpty(day.targetKcal)}`, buttons: appRow };
   const lines = limitedLines(
-    day.meals.map((meal) => `${formatLocalTime(meal.eatenAt, day.timezone)} ${mealLine(meal)}`),
+    day.meals.map((meal) => todayLine(meal, day.timezone)),
     TODAY_LIMIT,
     RECORD_FORMS,
   );

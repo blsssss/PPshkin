@@ -128,4 +128,21 @@ describe('schema integrity', () => {
     );
     expect(row).toEqual({ items: 0, deals: 0 });
   });
+
+  it('links only demo venues to the demo venue they copy and unlinks them when it is deleted', async () => {
+    await pool.query('update venues set is_demo = true where id in ($1, $2)', [first, second]);
+    await pool.query('update venues set demo_source_id = $1 where id = $2', [first, second]);
+    await expect(
+      pool.query('update venues set is_demo = false where id = $1', [second]),
+    ).rejects.toMatchObject({
+      code: '23514',
+    });
+    await pool.query('delete from venues where id = $1', [first]);
+    const row = await one<{ demo_source_id: number | null }>(
+      pool,
+      'select demo_source_id from venues where id = $1',
+      [second],
+    );
+    expect(row.demo_source_id).toBeNull();
+  });
 });

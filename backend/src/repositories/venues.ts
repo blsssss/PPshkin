@@ -147,17 +147,70 @@ export async function findByIds(db: Queryable, ids: readonly number[]): Promise<
   return rows.map(mapVenue);
 }
 
-export async function listAll(db: Queryable): Promise<Venue[]> {
-  const { rows } = await db.query<VenueRow>(`select ${VENUE_COLUMNS} from venues order by id`);
+export function visibleVenueCondition(alias: string, viewerParam: string): string {
+  return `case
+      when ${alias}.demo_source_id is not null then coalesce(${alias}.owner_id = ${viewerParam}, false)
+      when ${alias}.is_demo then not exists (
+        select 1 from venues demo_copy
+         where demo_copy.demo_source_id = ${alias}.id and demo_copy.owner_id = ${viewerParam}
+      )
+      else true
+    end`;
+}
+
+export async function findVisible(db: Queryable, id: number, viewerId: number): Promise<Venue | null> {
+  const row = await maybeOne<VenueRow>(
+    db,
+    `select ${VENUE_COLUMNS} from venues v where v.id = $1 and ${visibleVenueCondition('v', '$2')}`,
+    [id, viewerId],
+  );
+  return row ? mapVenue(row) : null;
+}
+
+export async function listVisible(db: Queryable, viewerId: number): Promise<Venue[]> {
+  const { rows } = await db.query<VenueRow>(
+    `select ${VENUE_COLUMNS} from venues v where ${visibleVenueCondition('v', '$1')} order by v.id`,
+    [viewerId],
+  );
   return rows.map(mapVenue);
 }
 
-export async function listWithin(db: Queryable, box: GeoBox): Promise<Venue[]> {
+export async function listVisibleWithin(db: Queryable, box: GeoBox, viewerId: number): Promise<Venue[]> {
   const { rows } = await db.query<VenueRow>(
-    `select ${VENUE_COLUMNS} from venues
-      where lat between $1 and $2 and lon between $3 and $4
-      order by id`,
-    [box.minLat, box.maxLat, box.minLon, box.maxLon],
+    `select ${VENUE_COLUMNS} from venues v
+      where v.lat between $1 and $2 and v.lon between $3 and $4 and ${visibleVenueCondition('v', '$5')}
+      order by v.id`,
+    [box.minLat, box.maxLat, box.minLon, box.maxLon, viewerId],
   );
   return rows.map(mapVenue);
+}
+
+export async function findSeededDemo(db: Queryable, id: number): Promise<Venue | null> {
+  const row = await maybeOne<VenueRow>(
+    db,
+    `select ${VENUE_COLUMNS} from venues
+      where id = $1 and is_demo and demo_source_id is null and (owner_id is null or owner_id < 0)`,
+    [id],
+  );
+  return row ? mapVenue(row) : null;
+}
+
+export async function insertDemoCopy(
+  db: Queryable,
+  sourceId: number,
+  ownerId: number,
+  now: Date,
+): Promise<Venue | null> {
+  const row = await maybeOne<VenueRow>(
+    db,
+    `insert into venues (owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
+                         demo_source_id, created_at, updated_at)
+     select $2, name, address, category, lat, lon, opens_at, closes_at, timezone, true, id, $3, $3
+       from venues
+      where id = $1
+     on conflict (owner_id) where owner_id is not null do nothing
+     returning ${VENUE_COLUMNS}`,
+    [sourceId, ownerId, now],
+  );
+  return row ? mapVenue(row) : null;
 }

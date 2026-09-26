@@ -334,6 +334,7 @@ export const ACCOUNT_KEPT = 'Хорошо, ничего не удаляю.';
 export const OFFER_ENDED = 'Это предложение уже закончилось.';
 export const NO_DEALS = 'Сейчас горящих предложений нет.';
 export const DEMO_VENUE = '*Заведение и меню тестовые*';
+export const SAMPLE_MEAL = '(пример)';
 export const DEALS_TITLE = bold('Горящие предложения');
 
 export function venueSummary(category: string, address: string): string {

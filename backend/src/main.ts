@@ -3,6 +3,7 @@ import { loadConfig } from './config.ts';
 import { createServices } from './container.ts';
 import { loadMigrations, migrate } from './db/migrate.ts';
 import { createPool } from './db/pool.ts';
+import { loadDemoDataset } from './demo/dataset.ts';
 import { buildApp } from './http/app.ts';
 import { createMaxApi } from './integrations/max/api.ts';
 import type { MaxLogger } from './integrations/max/poller.ts';
@@ -44,6 +45,7 @@ const services = createServices({
   clock: systemClock,
   recognition,
   background,
+  demoDataset: config.DEMO_MODE ? await loadDemoDataset() : null,
 });
 const botLogger: MaxLogger = {
   debug: (object, message) => {
@@ -94,6 +96,9 @@ if (!config.CHADGPT_API_KEY) {
 if (config.MIGRATE_ON_START) {
   const applied = await migrate(pool, await loadMigrations());
   app.log.info({ applied }, 'database migrations checked');
+}
+if (services.demo.enabled) {
+  app.log.info({ demo: await services.demo.seed() }, 'demo data seeded');
 }
 
 let closing = false;

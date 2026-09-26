@@ -109,7 +109,7 @@ export function dayRange(date: string, timeZone: string): { from: Date; to: Date
   return { from: localMidnight(date, timeZone), to: localMidnight(addDays(date, 1), timeZone) };
 }
 
-function minutesOfDay(clock: string): number | null {
+export function minutesOfDay(clock: string): number | null {
   const match = CLOCK.exec(clock);
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
@@ -124,7 +124,7 @@ export function isOpenAt(opensAt: string, closesAt: string, instant: Date, timeZ
   return open < close ? now >= open && now < close : now >= open || now < close;
 }
 
-function atLocalTime(date: string, minutes: number, timeZone: string): Date {
+export function atLocalTime(date: string, minutes: number, timeZone: string): Date {
   const wall = utcMidnight(date) + minutes * MINUTE_MS;
   const before = wall - offsetMs(wall - DAY_MS, timeZone);
   const after = wall - offsetMs(wall + DAY_MS, timeZone);

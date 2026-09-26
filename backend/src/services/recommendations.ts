@@ -1,4 +1,5 @@
 import type { Pool } from '../db/pool.ts';
+import { resolveDemoPoint } from '../demo/location.ts';
 import { DEFAULT_MAX_DISTANCE_M, rankCandidates } from '../domain/intent/rank.ts';
 import type { IntentContext, Recommendation } from '../domain/intent/types.ts';
 import type { GeoPoint, MenuItem, Offer, OfferExplanation, Venue } from '../domain/models.ts';
@@ -41,6 +42,7 @@ export interface RecommendationsResult {
   slot: MealSlot;
   remainingKcal: number;
   slotBudgetKcal: number;
+  demoCenterUsed: boolean;
   items: RecommendedOffer[];
 }
 
@@ -53,6 +55,7 @@ interface RecommendationsDependencies {
   pool: Pool;
   clock: Clock;
   consents: Pick<ConsentsService, 'requirePersonalData'>;
+  demoMode: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -111,6 +114,7 @@ export function createRecommendationsService({
   pool,
   clock,
   consents,
+  demoMode,
 }: RecommendationsDependencies): RecommendationsService {
   return {
     async recommend(userId, request) {
@@ -120,7 +124,10 @@ export function createRecommendationsService({
       const { limit, channel } = request;
       const now = clock.now();
       const { user, profile, dayStart, today } = await loadEatingState(pool, userId, now);
-      const location = request.location ?? user.location;
+      const { point: location, demoCenterUsed } = resolveDemoPoint(
+        request.location ?? user.location,
+        demoMode,
+      );
       const context: IntentContext = {
         now,
         user: {
@@ -136,12 +143,12 @@ export function createRecommendationsService({
       };
       if (profile.readiness === 'empty') {
         const { slot, remainingKcal, slotBudgetKcal } = rankCandidates(context, [], { limit });
-        return { status: 'profile_empty', slot, remainingKcal, slotBudgetKcal, items: [] };
+        return { status: 'profile_empty', slot, remainingKcal, slotBudgetKcal, demoCenterUsed, items: [] };
       }
       const [offeredToday, declined, candidates] = await Promise.all([
         offers.listItemsShownSince(pool, user.id, dayStart),
         offers.listItemsDeclinedSince(pool, user.id, hiddenSince(now)),
-        loadCandidates(pool, location ? boundingBox(location, DEFAULT_MAX_DISTANCE_M) : null, now),
+        loadCandidates(pool, user.id, location ? boundingBox(location, DEFAULT_MAX_DISTANCE_M) : null, now),
       ]);
       const ranked = rankCandidates(
         { ...context, offeredTodayItemIds: new Set(offeredToday), declinedItemIds: new Set(declined) },
@@ -159,6 +166,7 @@ export function createRecommendationsService({
         slot: ranked.slot,
         remainingKcal: ranked.remainingKcal,
         slotBudgetKcal: ranked.slotBudgetKcal,
+        demoCenterUsed,
         items: ranked.items.map((recommendation, index) =>
           toRecommendedOffer(recommendation, saved[index], now),
         ),

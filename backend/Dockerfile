@@ -18,6 +18,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY testdata/*.json ./testdata/
 COPY certs ./certs
 COPY package.json ./
 USER node

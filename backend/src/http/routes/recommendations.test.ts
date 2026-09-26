@@ -56,6 +56,7 @@ const found: RecommendationsResult = {
   slot: 'snack',
   remainingKcal: 1100,
   slotBudgetKcal: 200,
+  demoCenterUsed: false,
   items: [offer],
 };
 
@@ -101,6 +102,7 @@ describe('recommendation routes', () => {
       slot: 'snack',
       remainingKcal: 1100,
       slotBudgetKcal: 200,
+      demoCenterUsed: false,
       items: [
         {
           offerId: 501,
@@ -184,7 +186,14 @@ describe('recommendation routes', () => {
     ['budget_exhausted', 'dinner', 40, 40],
     ['nothing_fits', 'lunch', 1300, 700],
   ] as const)('reports %s without items', async (status, slot, remainingKcal, slotBudgetKcal) => {
-    const result: RecommendationsResult = { status, slot, remainingKcal, slotBudgetKcal, items: [] };
+    const result: RecommendationsResult = {
+      status,
+      slot,
+      remainingKcal,
+      slotBudgetKcal,
+      demoCenterUsed: false,
+      items: [],
+    };
     app = await buildTestApp({
       services: { recommendations: recommendationsStub({ recommend: () => Promise.resolve(result) }) },
     });
@@ -309,5 +318,24 @@ describe('declining an offer', () => {
     expect(response.statusCode).toBe(status);
     expectContract(response, 'POST', DECLINE);
     expect(response.json()).toMatchObject({ code });
+  });
+
+  it('tells when the demo mode replaced a far away point with the centre of Kazan', async () => {
+    const demoOffer: RecommendedOffer = { ...offer, venue: { ...sampleVenue, isDemo: true } };
+    app = await buildTestApp({
+      services: {
+        recommendations: recommendationsStub({
+          recommend: () => Promise.resolve({ ...found, demoCenterUsed: true, items: [demoOffer] }),
+        }),
+      },
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: `${RECOMMENDATIONS}?lat=55.7558&lon=37.6173`,
+      headers: guest,
+    });
+    expect(response.statusCode).toBe(200);
+    expectContract(response, 'GET', RECOMMENDATIONS);
+    expect(response.json()).toMatchObject({ demoCenterUsed: true, items: [{ venue: { isDemo: true } }] });
   });
 });

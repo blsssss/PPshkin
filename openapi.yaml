@@ -1148,6 +1148,32 @@ components:
         resolvedAt - когда погашена, отменена или истекла. item - текущая
         позиция меню, она может быть уже убрана из меню. Данных гостя в брони
         нет
+    DemoDiaryResult:
+      type: object
+      properties:
+        mealsAdded:
+          type: integer
+          description: Сколько приёмов пищи добавлено
+        fromDate:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          examples:
+            - 2026-09-25
+          description: Первый день примера YYYY-MM-DD в часовом поясе пользователя
+        toDate:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          examples:
+            - 2026-09-25
+          description: Последний день примера YYYY-MM-DD, вчера в часовом поясе пользователя
+      required:
+        - mealsAdded
+        - fromDate
+        - toDate
+      additionalProperties: false
+      description: Пример дневника добавлен
     Meal:
       type: object
       properties:
@@ -1862,6 +1888,11 @@ components:
         slotBudgetKcal:
           type: integer
           description: Разумная калорийность для этого приёма пищи
+        demoCenterUsed:
+          type: boolean
+          description: "Демо-режим: точка поиска дальше 50 км от Казани, поэтому
+            расстояния и радиус считаются от центра Казани (ул. Баумана).
+            Покажите это гостю. Вне демо-режима всегда false"
         items:
           type: array
           items:
@@ -1873,6 +1904,7 @@ components:
         - slot
         - remainingKcal
         - slotBudgetKcal
+        - demoCenterUsed
         - items
       additionalProperties: false
       description: Подбор блюд рядом под остаток калорий и вкусы гостя
@@ -4675,10 +4707,11 @@ paths:
       description: "Точка поиска: lat и lon из запроса, иначе сохранённое
         приблизительное местоположение пользователя. Если точки нет, радиус не
         применяется и distanceM равен null. Пустые параметры считаются
-        непереданными. С точкой заведения идут по расстоянию, без точки сначала
-        открытые, затем по названию. Не больше 50. Коды ошибок:
-        validation_failed (400, передайте lat и lon вместе, radius от 100 до
-        10000)."
+        непереданными. В демо-режиме точка дальше 50 км от Казани заменяется
+        центром Казани, тогда demoCenterUsed равен true. С точкой заведения идут
+        по расстоянию, без точки сначала открытые, затем по названию. Не больше
+        50. Коды ошибок: validation_failed (400, передайте lat и lon вместе,
+        radius от 100 до 10000)."
       parameters:
         - schema:
             type: number
@@ -4718,8 +4751,15 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/VenueCard"
+                  demoCenterUsed:
+                    type: boolean
+                    description: "Демо-режим: точка поиска дальше 50 км от Казани, поэтому
+                      расстояния и радиус считаются от центра Казани (ул.
+                      Баумана). Покажите это гостю. Вне демо-режима всегда
+                      false"
                 required:
                   - items
+                  - demoCenterUsed
                 additionalProperties: false
         "400":
           description: Bad Request
@@ -4755,8 +4795,8 @@ paths:
         - catalog
       description: "Меню из доступных позиций и горящие предложения, которые можно
         забронировать сейчас. Коды ошибок: venue_not_found (404, заведение не
-        найдено, вернитесь к списку), validation_failed (400, id должен быть
-        положительным целым числом)."
+        найдено или это чужая копия демо-заведения, вернитесь к списку),
+        validation_failed (400, id должен быть положительным целым числом)."
       parameters:
         - schema:
             type: integer
@@ -4814,9 +4854,10 @@ paths:
         заканчивающиеся раньше, затем ближайшие. Не больше 50. Точка поиска: lat
         и lon из запроса, иначе сохранённое приблизительное местоположение
         пользователя. Если точки нет, радиус не применяется и distanceM равен
-        null. Пустые параметры считаются непереданными. Коды ошибок:
-        validation_failed (400, передайте lat и lon вместе, radius от 100 до
-        10000)."
+        null. Пустые параметры считаются непереданными. В демо-режиме точка
+        дальше 50 км от Казани заменяется центром Казани, тогда demoCenterUsed
+        равен true. Коды ошибок: validation_failed (400, передайте lat и lon
+        вместе, radius от 100 до 10000)."
       parameters:
         - schema:
             type: number
@@ -4856,8 +4897,15 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/DealCard"
+                  demoCenterUsed:
+                    type: boolean
+                    description: "Демо-режим: точка поиска дальше 50 км от Казани, поэтому
+                      расстояния и радиус считаются от центра Казани (ул.
+                      Баумана). Покажите это гостю. Вне демо-режима всегда
+                      false"
                 required:
                   - items
+                  - demoCenterUsed
                 additionalProperties: false
         "400":
           description: Bad Request
@@ -4898,18 +4946,20 @@ paths:
         показанные предложения, поэтому не больше 30 запросов в минуту. Точка:
         lat и lon из запроса, иначе сохранённое приблизительное местоположение.
         С точкой берутся заведения в радиусе 5 км, без точки все заведения, а
-        distanceM равен null. Пустые параметры считаются непереданными. Что
-        делать по status: ok - покажите items с объяснением (headline, facts,
-        calculations, assumptions), offerId нужен для отказа; profile_empty - за
-        14 дней нет ни одной записи, предложите записать первый приём пищи;
-        budget_exhausted - ориентир на сегодня набран, сообщите об этом и ничего
-        не предлагайте; nothing_fits - подходящих открытых позиций рядом нет,
-        предложите каталог горящих предложений GET /api/v1/deals. Коды ошибок:
-        validation_failed (400): передайте lat и lon вместе, limit от 1 до 10.
-        consent_required (403): нет согласия на обработку данных, покажите его
-        текст из GET /api/v1/consents и отправьте PUT
-        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
-        войдите заново."
+        distanceM равен null. Пустые параметры считаются непереданными. В
+        демо-режиме точка дальше 50 км от Казани заменяется центром Казани,
+        тогда demoCenterUsed равен true: сообщите гостю, что показаны тестовые
+        заведения в центре Казани. Что делать по status: ok - покажите items с
+        объяснением (headline, facts, calculations, assumptions), offerId нужен
+        для отказа; profile_empty - за 14 дней нет ни одной записи, предложите
+        записать первый приём пищи; budget_exhausted - ориентир на сегодня
+        набран, сообщите об этом и ничего не предлагайте; nothing_fits -
+        подходящих открытых позиций рядом нет, предложите каталог горящих
+        предложений GET /api/v1/deals. Коды ошибок: validation_failed (400):
+        передайте lat и lon вместе, limit от 1 до 10. consent_required (403):
+        нет согласия на обработку данных, покажите его текст из GET
+        /api/v1/consents и отправьте PUT /api/v1/consents/personal_data.
+        user_not_found (404): аккаунт удалён, войдите заново."
       parameters:
         - schema:
             type: number
@@ -5769,6 +5819,168 @@ paths:
           headers: *a2
         "404":
           description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/demo:
+    post:
+      operationId: claimDemoVenue
+      summary: Взять демо-заведение
+      tags:
+        - venue
+      description: "Только в демо-режиме. Создаёт личную копию тестового заведения:
+        название, адрес, часы работы, доступное меню и горящие предложения на
+        оставшуюся часть сегодняшнего дня. Владельцем становится текущий
+        пользователь. Копию видит только он, в каталоге и подборе она заменяет
+        исходное заведение. Дальше копией управляют как своим заведением через
+        /api/v1/venue, в следующие дни она не обновляется. Без sourceVenueId
+        копируется кофейня «Зерно», тело тогда пустой объект {}. Коды ошибок:
+        validation_failed (400): sourceVenueId должен быть положительным целым
+        числом. demo_account (403): общие демо-учётки не могут взять копию,
+        войдите через MAX. demo_mode_disabled (404): демо-режим на сервере
+        выключен, скройте эту кнопку. venue_not_found (404): sourceVenueId не
+        тестовое заведение из демо-набора, не передавайте его. venue_exists
+        (409): у пользователя уже есть заведение, откройте его через GET
+        /api/v1/venue."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceVenueId:
+                  default: 900001
+                  description: Засеянное демо-заведение, копию которого получит пользователь; по
+                    умолчанию кофейня «Зерно»
+                  type: integer
+                  exclusiveMinimum: 0
+      security: *a3
+      responses:
+        "201":
+          description: Копия демо-заведения создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/diary/demo:
+    post:
+      operationId: fillDemoDiary
+      summary: Заполнить дневник примером
+      tags:
+        - diary
+      description: "Только в демо-режиме. Добавляет пример дневника за 5 прошлых дней:
+        26 приёмов пищи с source demo по местному времени пользователя. После
+        этого профиль пищевого поведения готов и подбор учитывает привычки,
+        например десерт около 16:00. Ориентир, цель и нелюбимые теги не
+        меняются. Приёмы примера удаляются как обычные записи через DELETE
+        /api/v1/diary/meals/{id} или вместе с аккаунтом. Коды ошибок:
+        demo_account (403): у общей демо-учётки дневник уже заполнен.
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. demo_mode_disabled (404): демо-режим на
+        сервере выключен, скройте эту кнопку. user_not_found (404): аккаунт
+        удалён, войдите заново. demo_diary_exists (409): пример уже добавлен,
+        откройте дневник."
+      security: *a3
+      responses:
+        "201":
+          description: Пример дневника добавлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoDiaryResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
           content:
             application/problem+json:
               schema:

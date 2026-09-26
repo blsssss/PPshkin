@@ -9,7 +9,7 @@ import {
 import { blankAsMissing, PointQueryFields, pointTogether } from './common.ts';
 import { DealSchema, toDeal } from './deals.ts';
 import { MenuItemSchema, toMenuItem } from './menu.ts';
-import { toVenue, VenueSchema } from './venues.ts';
+import { DemoCenterUsed, toVenue, VenueSchema } from './venues.ts';
 
 const DEFAULT_RECOMMENDATIONS = 5;
 
@@ -70,6 +70,7 @@ export const RecommendationsSchema = z
     slot: z.enum(MEAL_SLOTS).describe('Приём пищи сейчас по местному времени пользователя'),
     remainingKcal: z.number().int().describe('Сколько осталось до ориентира на сегодня, не меньше 0'),
     slotBudgetKcal: z.number().int().describe('Разумная калорийность для этого приёма пищи'),
+    demoCenterUsed: DemoCenterUsed,
     items: z
       .array(RecommendationItemSchema)
       .describe('Предложения от лучшего к худшему, разные заведения идут первыми; пусто, если status не ok'),
@@ -100,6 +101,7 @@ export function toRecommendations(result: RecommendationsResult): z.infer<typeof
     slot: result.slot,
     remainingKcal: result.remainingKcal,
     slotBudgetKcal: result.slotBudgetKcal,
+    demoCenterUsed: result.demoCenterUsed,
     items: result.items.map(toRecommendationItem),
   };
 }
