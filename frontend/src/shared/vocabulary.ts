@@ -4,6 +4,9 @@ export type Tag = Schemas['UserProfile']['dislikedTags'][number];
 export type MenuCategory = Schemas['MenuItem']['category'];
 export type VenueCategory = Schemas['Venue']['category'];
 export type MealSlot = Schemas['Meal']['slot'];
+export type Goal = NonNullable<Schemas['UserProfile']['goal']>;
+export type Activity = Schemas['BodyParametersInput']['activity'];
+export type Sex = Schemas['BodyParametersInput']['sex'];
 
 export const TAG_LABELS: Record<Tag, string> = {
   sweet: 'сладкое',
@@ -68,4 +71,24 @@ export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
   lunch: 'обед',
   snack: 'перекус',
   dinner: 'ужин',
+};
+
+export const GOAL_LABELS: Record<Goal, string> = {
+  lose: 'Снизить вес',
+  maintain: 'Поддерживать вес',
+  gain: 'Набрать вес',
+};
+
+export const GOALS = Object.keys(GOAL_LABELS) as Goal[];
+
+export const SEX_LABELS: Record<Sex, string> = {
+  female: 'Женский',
+  male: 'Мужской',
+};
+
+export const ACTIVITY_LABELS: Record<Activity, string> = {
+  sedentary: 'Сидячий образ жизни',
+  light: 'Лёгкая активность, 1-3 тренировки в неделю',
+  moderate: 'Средняя, 3-5 тренировок',
+  active: 'Высокая, 6-7 тренировок',
 };

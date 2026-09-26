@@ -6,6 +6,8 @@ import { ApiError, NETWORK_ERROR } from '../api/errors.ts';
 import type { SessionState } from '../api/session.ts';
 import { TEST_USER } from '../../test/http.ts';
 import { fakeWebApp } from '../../test/webapp.ts';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { testQueryClient } from '../../test/app.tsx';
 import { ToastProvider } from '../shared/ui/Toast.tsx';
 
 const fake = vi.hoisted(() => {
@@ -54,9 +56,11 @@ const { appRoutes } = await import('./routes.tsx');
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
   render(
-    <ToastProvider>
-      <RouterProvider router={router} />
-    </ToastProvider>,
+    <QueryClientProvider client={testQueryClient()}>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    </QueryClientProvider>,
   );
   return router;
 }
@@ -127,8 +131,8 @@ describe('navigation', () => {
   });
 
   it('hides the tab bar during onboarding and on the full screen QR', async () => {
-    renderAt('/onboarding/consent');
-    await screen.findByRole('heading', { name: 'Знакомство' });
+    renderAt('/onboarding/done');
+    await screen.findByRole('heading', { name: 'Готово' });
     expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull();
   });
 
@@ -180,7 +184,11 @@ describe('render errors', () => {
       [{ path: '/', element: <Broken />, errorElement: appRoutes[0]?.errorElement }],
       { initialEntries: ['/'] },
     );
-    render(<RouterProvider router={router} />);
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
     expect(await screen.findByText('Что-то пошло не так')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'На главную' }));
     expect(router.state.location.pathname).toBe('/diary');
@@ -200,9 +208,11 @@ describe('startParam', () => {
     const router = createMemoryRouter(appRoutes, { initialEntries: ['/'] });
     render(
       <StrictMode>
-        <ToastProvider>
-          <RouterProvider router={router} />
-        </ToastProvider>
+        <QueryClientProvider client={testQueryClient()}>
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
+        </QueryClientProvider>
       </StrictMode>,
     );
     await screen.findByRole('heading', { name: 'Заведение' });

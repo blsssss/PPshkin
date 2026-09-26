@@ -22,6 +22,9 @@ const MESSAGES: Record<string, string> = {
   multipart_required: 'Нужен файл JPEG, PNG или WebP',
   auth_unavailable: 'Сервис временно недоступен',
   internal_error: 'Что-то пошло не так',
+  consent_required: 'Сначала дайте согласие на обработку данных',
+  consent_version_outdated: 'Текст согласия обновился, прочитайте и подтвердите его снова',
+  invalid_timezone: 'Этот часовой пояс не поддерживается, выберите из списка',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
