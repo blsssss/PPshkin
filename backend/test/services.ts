@@ -82,6 +82,17 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
         throw new Error('insights.estimateTarget is not stubbed');
       },
     },
+    bookings: {
+      create: notStubbed('bookings.create'),
+      list: notStubbed('bookings.list'),
+      get: notStubbed('bookings.get'),
+      qr: notStubbed('bookings.qr'),
+      cancel: notStubbed('bookings.cancel'),
+      listForVenue: notStubbed('bookings.listForVenue'),
+      redeem: notStubbed('bookings.redeem'),
+      expireDue: notStubbed('bookings.expireDue'),
+    },
+    analytics: { get: notStubbed('analytics.get') },
     ...overrides,
   };
 }

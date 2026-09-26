@@ -102,6 +102,25 @@ export async function decline(db: Queryable, { id, userId, reason, at }: OfferDe
   return rowCount === 1;
 }
 
+export interface OfferAcceptance {
+  id: number;
+  userId: number;
+  menuItemId: number;
+  at: Date;
+}
+
+export async function accept(
+  db: Queryable,
+  { id, userId, menuItemId, at }: OfferAcceptance,
+): Promise<boolean> {
+  const { rowCount } = await db.query(
+    `update offers set status = 'accepted', decline_reason = null, responded_at = $4
+      where id = $1 and user_id = $2 and menu_item_id = $3`,
+    [id, userId, menuItemId, at],
+  );
+  return rowCount === 1;
+}
+
 export async function findStatus(db: Queryable, userId: number, id: number): Promise<OfferStatus | null> {
   const row = await maybeOne<{ status: OfferStatus }>(
     db,
