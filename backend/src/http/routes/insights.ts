@@ -27,10 +27,13 @@ export const insightsRoutes: FastifyPluginCallbackZod<{ insights: InsightsServic
         description: [
           'Строится по дневнику за последние 14 дней в часовом поясе пользователя: готовность профиля, любимые теги, привычки по приёмам пищи, тяга к сладкому и доля белка.',
           'today - сводка текущих суток. Пока readiness равен empty, предложите записать первый приём пищи, при collecting покажите mealsUntilReady.',
-          describeErrors(ERROR_NOTES.userNotFound),
+          describeErrors(ERROR_NOTES.consentRequired, ERROR_NOTES.userNotFound),
         ].join(' '),
         security: bearerSecurity,
-        response: { 200: success('Профиль и сводка дня', InsightsSchema), ...errorResponses(401, 404) },
+        response: {
+          200: success('Профиль и сводка дня', InsightsSchema),
+          ...errorResponses(401, 403, 404),
+        },
       },
     },
     async (request) => toInsights(await insights.get(userId(request))),

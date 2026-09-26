@@ -4660,7 +4660,10 @@ paths:
         не предлагайте; nothing_fits - подходящих открытых позиций рядом нет,
         предложите каталог горящих предложений GET /api/v1/deals. Коды ошибок:
         validation_failed (400): передайте lat и lon вместе, limit от 1 до 10.
-        user_not_found (404): аккаунт удалён, войдите заново."
+        consent_required (403): нет согласия на обработку данных, покажите его
+        текст из GET /api/v1/consents и отправьте PUT
+        /api/v1/consents/personal_data. user_not_found (404): аккаунт удалён,
+        войдите заново."
       parameters:
         - schema:
             type: number
@@ -4708,6 +4711,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4826,8 +4835,10 @@ paths:
         пользователя: готовность профиля, любимые теги, привычки по приёмам
         пищи, тяга к сладкому и доля белка. today - сводка текущих суток. Пока
         readiness равен empty, предложите записать первый приём пищи, при
-        collecting покажите mealsUntilReady. Коды ошибок: user_not_found (404):
-        аккаунт удалён, войдите заново."
+        collecting покажите mealsUntilReady. Коды ошибок: consent_required
+        (403): нет согласия на обработку данных, покажите его текст из GET
+        /api/v1/consents и отправьте PUT /api/v1/consents/personal_data.
+        user_not_found (404): аккаунт удалён, войдите заново."
       security: *a3
       responses:
         "200":
@@ -4843,6 +4854,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a2
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:

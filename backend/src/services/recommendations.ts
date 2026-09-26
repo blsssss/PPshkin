@@ -11,6 +11,7 @@ import { pointProblems } from '../shared/geo.ts';
 import { boundingBox } from './catalog.ts';
 import { dealStatus, type DealView } from './deals.ts';
 import { loadEatingState } from './insights.ts';
+import type { ConsentsService } from './consents.ts';
 
 export const RECOMMENDATION_STATUSES = ['ok', 'budget_exhausted', 'nothing_fits', 'profile_empty'] as const;
 export type RecommendationStatus = (typeof RECOMMENDATION_STATUSES)[number];
@@ -51,6 +52,7 @@ export interface RecommendationsService {
 interface RecommendationsDependencies {
   pool: Pool;
   clock: Clock;
+  consents: Pick<ConsentsService, 'requirePersonalData'>;
 }
 
 const DAY_MS = 86_400_000;
@@ -108,11 +110,13 @@ function toRecommendedOffer(
 export function createRecommendationsService({
   pool,
   clock,
+  consents,
 }: RecommendationsDependencies): RecommendationsService {
   return {
     async recommend(userId, request) {
       const problems = requestProblems(request);
       if (problems.length > 0) throw badRequest('validation_failed', 'Request validation failed', problems);
+      await consents.requirePersonalData(userId);
       const { limit, channel } = request;
       const now = clock.now();
       const { user, profile, dayStart, today } = await loadEatingState(pool, userId, now);

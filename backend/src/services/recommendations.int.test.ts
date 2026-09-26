@@ -7,6 +7,7 @@ import type { Tag } from '../domain/vocabulary.ts';
 import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
+import { forbidden } from '../shared/errors.ts';
 import { distanceMeters } from '../shared/geo.ts';
 import {
   createRecommendationsService,
@@ -23,7 +24,11 @@ const AIRPORT: GeoPoint = { lat: 55.6064, lon: 49.2786 };
 
 const pool = testPool();
 const clock = fixedClock(NOW);
-const service = createRecommendationsService({ pool, clock });
+const service = createRecommendationsService({
+  pool,
+  clock,
+  consents: { requirePersonalData: () => Promise.resolve() },
+});
 
 interface World {
   zerno: Venue;
@@ -158,6 +163,23 @@ describe('recommendations', () => {
     expect(await service.recommend(GUEST, request())).toEqual(empty);
     await logMeal(later(-15 * DAY), 'Старый ужин', 600);
     expect(await service.recommend(GUEST, request())).toEqual(empty);
+    expect(await storedOffers()).toEqual([]);
+  });
+
+  it('refuses to recommend without consent to personal data processing and stores nothing', async () => {
+    await seedWorld();
+    const guarded = createRecommendationsService({
+      pool,
+      clock,
+      consents: {
+        requirePersonalData: () =>
+          Promise.reject(forbidden('consent_required', 'Consent to personal data processing is required')),
+      },
+    });
+    await expect(guarded.recommend(GUEST, request())).rejects.toMatchObject({
+      status: 403,
+      code: 'consent_required',
+    });
     expect(await storedOffers()).toEqual([]);
   });
 

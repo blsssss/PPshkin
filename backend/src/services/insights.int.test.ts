@@ -5,11 +5,16 @@ import { seedUser } from '../../test/venues.ts';
 import type { Tag } from '../domain/vocabulary.ts';
 import * as meals from '../repositories/meals.ts';
 import * as users from '../repositories/users.ts';
+import { forbidden } from '../shared/errors.ts';
 import { createInsightsService } from './insights.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-26T13:00:00Z');
-const insights = createInsightsService({ pool, clock });
+const insights = createInsightsService({
+  pool,
+  clock,
+  consents: { requirePersonalData: () => Promise.resolve() },
+});
 const GUEST = 101;
 
 async function logMeal(
@@ -100,6 +105,18 @@ describe('insights', () => {
       totals: { meals: 2, kcalMin: 600, kcalMax: 800, kcal: 700, proteinG: 22, fatG: 0, carbsG: 0 },
       remainingKcal: 1100,
     });
+  });
+
+  it('refuses to build insights without consent to personal data processing', async () => {
+    const guarded = createInsightsService({
+      pool,
+      clock,
+      consents: {
+        requirePersonalData: () =>
+          Promise.reject(forbidden('consent_required', 'Consent to personal data processing is required')),
+      },
+    });
+    await expect(guarded.get(GUEST)).rejects.toMatchObject({ status: 403, code: 'consent_required' });
   });
 
   it('reports a deleted account', async () => {

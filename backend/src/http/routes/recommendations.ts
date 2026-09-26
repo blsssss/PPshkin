@@ -34,6 +34,7 @@ export const recommendationsRoutes: FastifyPluginCallbackZod<{ recommendations: 
           'nothing_fits - подходящих открытых позиций рядом нет, предложите каталог горящих предложений GET /api/v1/deals.',
           describeErrors(
             'validation_failed (400): передайте lat и lon вместе, limit от 1 до 10.',
+            ERROR_NOTES.consentRequired,
             ERROR_NOTES.userNotFound,
           ),
         ].join(' '),
@@ -41,7 +42,7 @@ export const recommendationsRoutes: FastifyPluginCallbackZod<{ recommendations: 
         querystring: RecommendationsQuery,
         response: {
           200: success('Подобранные блюда', RecommendationsSchema),
-          ...errorResponses(400, 401, 404),
+          ...errorResponses(400, 401, 403, 404),
         },
       },
     },

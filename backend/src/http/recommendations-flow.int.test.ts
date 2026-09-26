@@ -116,6 +116,15 @@ describe('recommendations flow against the database', () => {
     });
     expect(deal.statusCode).toBe(201);
 
+    const denied = await send('GET', NEARBY, '/api/v1/recommendations', guest);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toMatchObject({ code: 'consent_required' });
+
+    const consent = await send('PUT', '/api/v1/consents/personal_data', '/api/v1/consents/{kind}', guest, {
+      version: '2026-09-25',
+    });
+    expect(consent.statusCode).toBe(200);
+
     const empty = await send('GET', NEARBY, '/api/v1/recommendations', guest);
     expect(empty.statusCode).toBe(200);
     expect(empty.json()).toEqual({
@@ -125,11 +134,6 @@ describe('recommendations flow against the database', () => {
       slotBudgetKcal: 200,
       items: [],
     });
-
-    const consent = await send('PUT', '/api/v1/consents/personal_data', '/api/v1/consents/{kind}', guest, {
-      version: '2026-09-25',
-    });
-    expect(consent.statusCode).toBe(200);
     for (const meal of [
       { title: 'Эклер', kcal: 300, tags: ['dessert', 'sweet'], eatenAt: '2026-09-25T13:00:00Z' },
       { title: 'Омлет', kcal: 400, tags: ['eggs', 'breakfast'], eatenAt: '2026-09-26T06:00:00Z' },

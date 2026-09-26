@@ -53,7 +53,7 @@ export function createServices({ config, pool, clock, recognition, background }:
     menuImports: createMenuImportsService({ pool, clock, menus: recognition.menus, background }),
     deals: createDealsService({ pool, clock }),
     catalog: createCatalogService({ pool, clock }),
-    recommendations: createRecommendationsService({ pool, clock }),
-    insights: createInsightsService({ pool, clock }),
+    recommendations: createRecommendationsService({ pool, clock, consents }),
+    insights: createInsightsService({ pool, clock, consents }),
   };
 }

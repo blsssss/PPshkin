@@ -18,6 +18,7 @@ import * as users from '../repositories/users.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, notFound } from '../shared/errors.ts';
 import { dayRange, localDate } from '../shared/time.ts';
+import type { ConsentsService } from './consents.ts';
 
 export interface EatingState {
   user: User;
@@ -48,6 +49,7 @@ export interface InsightsService {
 interface InsightsDependencies {
   pool: Pool;
   clock: Clock;
+  consents: Pick<ConsentsService, 'requirePersonalData'>;
 }
 
 const DAY_MS = 86_400_000;
@@ -69,9 +71,10 @@ export async function loadEatingState(pool: Pool, userId: number, now: Date): Pr
   };
 }
 
-export function createInsightsService({ pool, clock }: InsightsDependencies): InsightsService {
+export function createInsightsService({ pool, clock, consents }: InsightsDependencies): InsightsService {
   return {
     async get(userId) {
+      await consents.requirePersonalData(userId);
       const now = clock.now();
       const { user, profile, date, today } = await loadEatingState(pool, userId, now);
       return {
