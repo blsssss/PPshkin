@@ -144,7 +144,8 @@ export async function findByIds(db: Queryable, ids: readonly number[]): Promise<
 
 export function visibleVenueCondition(alias: string, viewerParam: string): string {
   return `case
-      when ${alias}.demo_source_id is not null then coalesce(${alias}.owner_id = ${viewerParam}, false)
+      when ${alias}.demo_source_id is not null or (${alias}.is_demo and ${alias}.owner_id > 0)
+        then coalesce(${alias}.owner_id = ${viewerParam}, false)
       when ${alias}.is_demo then not exists (
         select 1 from venues demo_copy
          where demo_copy.demo_source_id = ${alias}.id and demo_copy.owner_id = ${viewerParam}

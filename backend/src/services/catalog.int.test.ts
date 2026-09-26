@@ -281,7 +281,7 @@ describe('deal card', () => {
 describe('demo mode', () => {
   it('measures from the centre of Kazan when the point is more than 50 km away', async () => {
     await seedDemoVenue(pool, 900001, { name: 'Зерно', location: BAUMANA });
-    await liveDeal(await seedMenuItem(pool, 900001));
+    const deal = await liveDeal(await seedMenuItem(pool, 900001));
 
     const venues = await demoCatalog.venues(GUEST, near(MOSCOW));
     expect(venues.demoCenterUsed).toBe(true);
@@ -294,6 +294,7 @@ describe('demo mode', () => {
 
     await seedUser(pool, 102, MOSCOW);
     expect((await demoCatalog.venues(102, near(null))).demoCenterUsed).toBe(true);
+    expect((await demoCatalog.deal(102, deal.id)).distanceM).toBe(0);
     expect(await demoCatalog.venues(GUEST, near(KREMLIN))).toMatchObject({ demoCenterUsed: false });
     expect(await demoCatalog.venues(GUEST, near(null))).toMatchObject({ demoCenterUsed: false });
   });

@@ -113,6 +113,15 @@ describe('demo venue visibility', () => {
     expect(await venues.findVisible(pool, copy.id, 8)).toBeNull();
   });
 
+  it('keeps a copy private after its seeded venue is removed', async () => {
+    await seedDemoVenue(pool, seeded);
+    const copy = await seedDemoCopy(pool, seeded, 7);
+    await pool.query('delete from venues where id = $1', [seeded]);
+    expect(await visibleIds(8)).toEqual([]);
+    expect(await venues.findVisible(pool, copy.id, 8)).toBeNull();
+    expect(await venues.findVisible(pool, copy.id, 7)).toMatchObject({ id: copy.id });
+  });
+
   it('copies a seeded demo venue once per owner', async () => {
     const source = await seedDemoVenue(pool, seeded, { opensAt: '07:30', closesAt: '21:00' }, -1002);
     const now = new Date('2026-09-26T09:00:00Z');
