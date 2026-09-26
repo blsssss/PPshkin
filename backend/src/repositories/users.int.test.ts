@@ -67,4 +67,56 @@ describe('users repository', () => {
   it('returns null for an unknown user', async () => {
     expect(await users.findById(pool, 404)).toBeNull();
   });
+
+  it('updates only the profile fields that are passed', async () => {
+    const created = await users.upsert(pool, { id: 12, firstName: 'Нина', username: null });
+    const first = await users.updateProfile(pool, 12, { kcalTarget: 1700, goal: 'lose' });
+    expect(first).toMatchObject({
+      kcalTarget: 1700,
+      goal: 'lose',
+      timezone: 'Europe/Moscow',
+      dislikedTags: [],
+    });
+    expect(first?.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+
+    const second = await users.updateProfile(pool, 12, {
+      goal: null,
+      dislikedTags: ['fish', 'spicy'],
+      timezone: 'Asia/Yekaterinburg',
+    });
+    expect(second).toMatchObject({
+      kcalTarget: 1700,
+      goal: null,
+      dislikedTags: ['fish', 'spicy'],
+      timezone: 'Asia/Yekaterinburg',
+    });
+  });
+
+  it('returns null when updating a missing user', async () => {
+    expect(await users.updateProfile(pool, 404, { kcalTarget: 1800 })).toBeNull();
+    expect(await users.setLocation(pool, 404, { lat: 1, lon: 1 }, new Date())).toBeNull();
+  });
+
+  it('stores the location rounded to about a kilometre with the given time', async () => {
+    await users.upsert(pool, { id: 13, firstName: null, username: null });
+    const at = new Date('2026-09-25T10:00:00Z');
+    const user = await users.setLocation(pool, 13, { lat: 55.796389, lon: 49.108891 }, at);
+    expect(user?.location).toEqual({ lat: 55.8, lon: 49.11 });
+    expect(user?.locationUpdatedAt).toEqual(at);
+  });
+
+  it('clears the location and keeps doing so on repeat', async () => {
+    await users.upsert(pool, { id: 14, firstName: null, username: null });
+    await users.setLocation(pool, 14, { lat: 55.79, lon: 49.12 }, new Date('2026-09-25T10:00:00Z'));
+    await users.clearLocation(pool, 14);
+    await users.clearLocation(pool, 14);
+    expect(await users.findById(pool, 14)).toMatchObject({ location: null, locationUpdatedAt: null });
+  });
+
+  it('removes a user', async () => {
+    await users.upsert(pool, { id: 15, firstName: null, username: null });
+    await users.remove(pool, 15);
+    expect(await users.findById(pool, 15)).toBeNull();
+    await expect(users.remove(pool, 15)).resolves.toBeUndefined();
+  });
 });

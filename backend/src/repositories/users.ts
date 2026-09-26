@@ -1,6 +1,7 @@
 import { maybeOne, one, type Queryable } from '../db/pool.ts';
-import type { User } from '../domain/models.ts';
-import { onlyKnownTags, type Goal } from '../domain/vocabulary.ts';
+import type { GeoPoint, User } from '../domain/models.ts';
+import { onlyKnownTags, type Goal, type Tag } from '../domain/vocabulary.ts';
+import { coarsePoint } from '../shared/geo.ts';
 
 interface UserRow {
   id: number;
@@ -68,4 +69,64 @@ export async function upsert(db: Queryable, identity: UserIdentity): Promise<Use
 export async function findById(db: Queryable, id: number): Promise<User | null> {
   const row = await maybeOne<UserRow>(db, `select ${USER_COLUMNS} from users where id = $1`, [id]);
   return row ? mapUser(row) : null;
+}
+
+export interface ProfileChanges {
+  kcalTarget?: number;
+  goal?: Goal | null;
+  dislikedTags?: Tag[];
+  timezone?: string;
+}
+
+const PROFILE_COLUMNS = {
+  kcalTarget: 'kcal_target',
+  goal: 'goal',
+  dislikedTags: 'disliked_tags',
+  timezone: 'timezone',
+} as const satisfies Record<keyof ProfileChanges, string>;
+
+export async function updateProfile(db: Queryable, id: number, patch: ProfileChanges): Promise<User | null> {
+  const fields = (Object.keys(PROFILE_COLUMNS) as (keyof ProfileChanges)[]).filter(
+    (field) => patch[field] !== undefined,
+  );
+  const assignments = fields.map((field, index) => `${PROFILE_COLUMNS[field]} = $${index + 2}`);
+  const row = await maybeOne<UserRow>(
+    db,
+    `update users set ${[...assignments, 'updated_at = now()'].join(', ')}
+      where id = $1
+     returning ${USER_COLUMNS}`,
+    [id, ...fields.map((field) => patch[field])],
+  );
+  return row ? mapUser(row) : null;
+}
+
+export async function setLocation(
+  db: Queryable,
+  id: number,
+  point: GeoPoint,
+  at: Date,
+): Promise<User | null> {
+  const { lat, lon } = coarsePoint(point);
+  const row = await maybeOne<UserRow>(
+    db,
+    `update users
+        set location_lat = $2, location_lon = $3, location_updated_at = $4, updated_at = now()
+      where id = $1
+     returning ${USER_COLUMNS}`,
+    [id, lat, lon, at],
+  );
+  return row ? mapUser(row) : null;
+}
+
+export async function clearLocation(db: Queryable, id: number): Promise<void> {
+  await db.query(
+    `update users
+        set location_lat = null, location_lon = null, location_updated_at = null, updated_at = now()
+      where id = $1 and location_lat is not null`,
+    [id],
+  );
+}
+
+export async function remove(db: Queryable, id: number): Promise<void> {
+  await db.query('delete from users where id = $1', [id]);
 }
