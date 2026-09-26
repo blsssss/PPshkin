@@ -164,6 +164,7 @@ function SettingsForm({ profile, children }: { profile: UserProfile; children: R
       <Section title="Цель">
         <ChoiceList
           legend="Цель"
+          legendHidden
           options={GOAL_OPTIONS}
           value={form.goal ?? 'none'}
           onChange={(value) => {
