@@ -25,6 +25,7 @@ import {
   formFromCandidate,
   formFromMeal,
   mapFieldErrors,
+  MAX_MEAL_TAGS,
   toCreateInput,
   toPatchInput,
   validateMeal,
@@ -248,6 +249,7 @@ function MealForm({
             <Chip
               key={tag}
               pressed={form.tags.includes(tag)}
+              disabled={!form.tags.includes(tag) && form.tags.length >= MAX_MEAL_TAGS}
               onClick={() => {
                 update({
                   tags: form.tags.includes(tag)
@@ -261,6 +263,7 @@ function MealForm({
           ))}
         </ChipRow>
       )}
+      {errors.tags !== undefined && <p className={styles.fieldError}>{errors.tags}</p>}
       {notice !== null && <Notice tone="error">{notice}</Notice>}
       <ActionBar>
         <Button

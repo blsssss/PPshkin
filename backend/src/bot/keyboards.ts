@@ -73,12 +73,16 @@ export function onboardingLocationButtons(): Button[][] {
   return [[locationRequest(BUTTONS.sendLocation)], [callback(BUTTONS.skip, payload('ob', 'loc', 'skip'))]];
 }
 
+export function eatButton(): Button {
+  return command(BUTTONS.eat, 'eat');
+}
+
 export function menuButtons(): Button[][] {
-  return [[command(BUTTONS.today, 'today'), command(BUTTONS.profile, 'profile')]];
+  return [[eatButton(), command(BUTTONS.today, 'today'), command(BUTTONS.profile, 'profile')]];
 }
 
 export function helpButtons(): Button[][] {
-  return [[command(BUTTONS.help, 'help')]];
+  return [[eatButton(), command(BUTTONS.help, 'help')]];
 }
 
 export function placeButtons(options: {

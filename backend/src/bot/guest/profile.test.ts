@@ -10,6 +10,7 @@ import {
   type BotChat,
 } from '../../../test/bot.ts';
 import { forbidden } from '../../shared/errors.ts';
+import { EMPTY_CHAT_STATE } from '../state.ts';
 
 function consentedChat(options: Parameters<typeof botChat>[0] = {}): BotChat {
   const chat = botChat(options);
@@ -216,7 +217,7 @@ describe('/delete', () => {
     expect(answers(deleted)[0]?.message?.text).toBe('Данные удалены. Чтобы начать заново, отправьте /start.');
     expect(chat.world.services.account.deleteAccount).toHaveBeenCalledWith(GUEST_ID);
     expect(chat.world.meals).toHaveLength(0);
-    expect(chat.states.peek(GUEST_ID)).toEqual({ flow: null, pendingStart: null });
+    expect(chat.states.peek(GUEST_ID)).toEqual(EMPTY_CHAT_STATE);
 
     const again = await chat.press('ac:del_ok', question?.messageId);
     expect(answers(again)[0]?.notification).toBe('Эта кнопка уже нажата');
