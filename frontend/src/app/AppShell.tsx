@@ -28,9 +28,9 @@ function useTimeZoneSync(profile: UserProfile | undefined): void {
 
   useEffect(() => {
     if (!granted || synced.current || current === undefined) return;
+    synced.current = true;
     const device = deviceTimeZone();
     if (device === null || device === current) return;
-    synced.current = true;
     update.mutate({ timezone: device }, { onError: () => undefined });
   }, [granted, current, update]);
 }

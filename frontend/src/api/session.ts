@@ -6,7 +6,8 @@ export type SessionState =
   | { status: 'ready'; user: UserProfile; startParam: string | null }
   | { status: 'outside' }
   | { status: 'expired' }
-  | { status: 'failed'; error: ApiError };
+  | { status: 'failed'; error: ApiError }
+  | { status: 'deleted' };
 
 export interface SessionDeps {
   initData(): string | null;
@@ -24,6 +25,7 @@ export interface SessionStore {
   setUser(user: UserProfile): void;
   pendingStartParam(): string | null;
   markStartHandled(): boolean;
+  markDeleted(): void;
 }
 
 function asApiError(error: unknown): ApiError {
@@ -111,6 +113,12 @@ export function createSessionStore(deps: SessionDeps): SessionStore {
       if (state.status === 'ready') setState({ ...state, user });
     },
     pendingStartParam: () => (startHandled ? null : startParam),
+    markDeleted() {
+      token = null;
+      startParam = null;
+      startHandled = true;
+      setState({ status: 'deleted' });
+    },
     markStartHandled() {
       if (startHandled) return false;
       startHandled = true;

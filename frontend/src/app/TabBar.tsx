@@ -26,7 +26,7 @@ function isTabActive(tab: Pick<Tab, 'sections'>, pathname: string): boolean {
 export function TabBar() {
   const { pathname } = useLocation();
   return (
-    <nav className={styles.bar} aria-label="Разделы">
+    <nav className={styles.bar} aria-label="Разделы" data-tabbar="">
       <div className={styles.inner}>
         {TABS.map((tab) => {
           const active = isTabActive(tab, pathname);

@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NETWORK_ERROR } from '../api/errors.ts';
+import { emitApiError } from '../api/events.ts';
 import type { SessionState } from '../api/session.ts';
 import { TEST_USER } from '../../test/http.ts';
 import { fakeWebApp } from '../../test/webapp.ts';
@@ -28,6 +29,7 @@ const fake = vi.hoisted(() => {
       },
       start: vi.fn(() => Promise.resolve()),
       pendingStartParam: () => startParam,
+      markDeleted: vi.fn(),
       markStartHandled() {
         if (startParam === null) return false;
         startParam = null;
@@ -50,6 +52,14 @@ vi.mock('../api/index.ts', async () => {
 });
 
 const { App } = await import('./App.tsx');
+
+function renderApp() {
+  return render(
+    <QueryClientProvider client={testQueryClient()}>
+      <App />
+    </QueryClientProvider>,
+  );
+}
 const { Root } = await import('./Root.tsx');
 const { appRoutes } = await import('./routes.tsx');
 
@@ -73,13 +83,13 @@ beforeEach(() => {
 describe('session screens', () => {
   it('shows a loading screen while signing in', () => {
     fake.set({ status: 'loading' });
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Входим через MAX')).toBeTruthy();
   });
 
   it('asks to open the app in MAX outside the messenger', () => {
     fake.set({ status: 'outside' });
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Откройте ППшкин в MAX')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Открыть бота в MAX' }).getAttribute('href')).toMatch(
       /^https:\/\/max\.ru\//,
@@ -88,28 +98,44 @@ describe('session screens', () => {
 
   it('offers to close an expired session only when MAX can close the app', () => {
     fake.set({ status: 'expired' });
-    const { unmount } = render(<App />);
+    const { unmount } = renderApp();
     expect(screen.getByText('Сессия устарела')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Закрыть' })).toBeNull();
     unmount();
 
     const webApp = fakeWebApp();
-    render(<App />);
+    renderApp();
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }));
     expect(webApp.close).toHaveBeenCalled();
   });
 
   it('retries sign in without reloading the page', () => {
     fake.set({ status: 'failed', error: new ApiError({ status: 0, code: NETWORK_ERROR }) });
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Нет соединения с сервером')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
     expect(fake.session.start).toHaveBeenCalledTimes(1);
   });
 
+  it('forgets the account when the API says it is gone', () => {
+    renderApp();
+    act(() => {
+      emitApiError(new ApiError({ status: 404, code: 'user_not_found' }));
+    });
+    expect(fake.session.markDeleted).toHaveBeenCalled();
+  });
+
+  it('offers a fresh start after the account is deleted', () => {
+    fake.set({ status: 'deleted' });
+    renderApp();
+    expect(screen.getByText('Аккаунт удалён, данные стёрты')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Начать заново' }));
+    expect(fake.session.start).toHaveBeenCalled();
+  });
+
   it('explains a bad signature', () => {
     fake.set({ status: 'failed', error: new ApiError({ status: 401, code: 'init_data_bad_signature' }) });
-    render(<App />);
+    renderApp();
     expect(screen.getByText('Не удалось войти через MAX')).toBeTruthy();
   });
 });
@@ -125,7 +151,7 @@ describe('navigation', () => {
   });
 
   it('never leaves a dead end in a stub', async () => {
-    const router = renderAt('/profile');
+    const router = renderAt('/bookings');
     fireEvent.click(await screen.findByRole('button', { name: 'На главную' }));
     expect(router.state.location.pathname).toBe('/diary');
   });
