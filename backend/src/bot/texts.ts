@@ -1,3 +1,4 @@
+import { MAX_ACTIVE_BOOKINGS } from '../domain/bookings.ts';
 import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
 import type { Macros } from '../domain/models.ts';
 import type { Goal } from '../domain/vocabulary.ts';
@@ -14,6 +15,7 @@ type PluralForms = readonly [one: string, few: string, many: string];
 export const RECORD_FORMS: PluralForms = ['запись', 'записи', 'записей'];
 const DISH_FORMS: PluralForms = ['блюдо', 'блюда', 'блюд'];
 export const OFFER_FORMS: PluralForms = ['предложение', 'предложения', 'предложений'];
+const ACTIVE_BOOKING_FORMS: PluralForms = ['активная бронь', 'активные брони', 'активных броней'];
 
 export const GOAL_LABELS: Record<Goal, string> = {
   lose: 'снизить вес',
@@ -34,6 +36,8 @@ export const BUTTONS = {
   sendLocation: 'Отправить местоположение',
   updateLocation: 'Обновить местоположение',
   help: 'Помощь',
+  eat: 'Что поесть?',
+  bookings: 'Мои брони',
   today: 'Сегодня',
   profile: 'Профиль',
   correct: 'Верно',
@@ -70,8 +74,26 @@ export const NOTICES = {
 
 export const SOMETHING_WENT_WRONG = 'Что-то пошло не так. Попробуйте ещё раз или отправьте /help';
 
+const POSITION_GONE = 'Позиция больше недоступна. Посмотрим другое: /eat';
+const RECORD_GONE = 'Не нашёл: запись уже удалена или устарела.';
+const BOOKING_INACTIVE = 'Бронь уже не активна.';
+
 const ERROR_TEXTS: Readonly<Record<string, string>> = {
-  meal_not_found: 'Не нашёл: запись уже удалена или устарела.',
+  too_many_bookings: `У вас уже ${MAX_ACTIVE_BOOKINGS} ${plural(MAX_ACTIVE_BOOKINGS, ACTIVE_BOOKING_FORMS)}. Лишнюю можно отменить в /bookings.`,
+  booking_exists: 'Это предложение уже забронировано вами, код в /bookings.',
+  deal_sold_out: 'Эту позицию уже разобрали. Посмотрим другое: /eat',
+  deal_not_active: 'Предложение уже закончилось. Посмотрим другое: /eat',
+  venue_closed: 'Заведение сейчас закрыто, бронь не получится. Посмотрим другое: /eat',
+  menu_item_unavailable: POSITION_GONE,
+  menu_item_not_found: POSITION_GONE,
+  deal_not_found: POSITION_GONE,
+  venue_not_found: POSITION_GONE,
+  booking_not_found: RECORD_GONE,
+  offer_not_found: RECORD_GONE,
+  booking_not_active: BOOKING_INACTIVE,
+  booking_expired: BOOKING_INACTIVE,
+  offer_already_accepted: 'По этому предложению уже есть бронь, код в /bookings.',
+  meal_not_found: RECORD_GONE,
   demo_account_protected: 'Демо-аккаунт удалить нельзя.',
   validation_failed: 'Проверьте ввод и попробуйте ещё раз.',
   eaten_at_out_of_range: 'Проверьте ввод и попробуйте ещё раз.',
@@ -130,7 +152,7 @@ const OFFERS_DOCUMENT = documentText('personalized_offers');
 export const OFFERS_QUESTION = `${OFFERS_DOCUMENT}\n\nПрисылать? Это необязательно, дневник работает и без этого.`;
 export const OFFERS_ACCEPTED = `${OFFERS_DOCUMENT}\n\nСогласие получено. Отключить можно в /profile.`;
 export const OFFERS_DECLINED = 'Хорошо, без персональных предложений. Включить можно в /profile.';
-export const OFFERS_OFF = 'Готово, сам больше ничего не пришлю. Включить снова можно в /profile.';
+export const OFFERS_OFF = 'Готово, сам больше ничего не пришлю. Подбор по запросу работает: /eat';
 
 export const GOAL_QUESTION = 'Какая у вас цель?';
 export const GOAL_SKIPPED = 'Хорошо, цель можно указать позже в /profile.';
@@ -160,7 +182,7 @@ export const LOCATION_SAVED = 'Местоположение сохранено, 
 export const LOCATION_UPDATED = 'Местоположение обновлено, храню его с точностью около 1 км.';
 
 export const ONBOARDING_DONE =
-  'Готово! Пришлите фото блюда или напишите, что съели, например: Сырники 350 или съел борщ.';
+  'Готово! Пришлите фото блюда или напишите, что съели, например: Сырники 350 или съел борщ. Спросить, что поесть: /eat.';
 export const WELCOME_BACK = 'С возвращением! Пришлите фото блюда или напишите, что съели.';
 
 export const DISCLAIMER = '*Калорийность приблизительная, это не медицинская рекомендация.*';
@@ -168,7 +190,9 @@ export const DISCLAIMER = '*Калорийность приблизительн�
 export const HELP = [
   bold('Что я умею'),
   'Записываю еду: пришлите фото блюда или напишите, что съели. Например: Сырники 350, Латте 180 ккал или съел борщ.',
+  'Подбираю блюдо рядом, которое впишется в ваш день: /eat',
   'Показываю, сколько съедено за день: /today',
+  'Брони с кодом и QR: /bookings',
   'Ориентир калорий, цель и настройки: /profile',
   'Удаляю аккаунт и все данные: /delete',
   '',
@@ -253,7 +277,7 @@ export function kcalRange(kcalMin: number, kcalMax: number): string {
   return kcalMin === kcalMax ? `около ${kcalMin} ккал` : `${kcalMin}-${kcalMax} ккал`;
 }
 
-function rub(amount: number): string {
+export function rub(amount: number): string {
   return `${amount} ₽`;
 }
 
@@ -264,15 +288,29 @@ export function distance(meters: number): string {
   return rounded < 1000 ? `${rounded} м` : `${kilometers.format(meters / 1000)} км`;
 }
 
+const DATE_STYLES = {
+  calendar: { day: 'numeric', month: 'long' },
+  short: { day: '2-digit', month: '2-digit' },
+} as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
-export function calendarDate(instant: Date, timeZone: string): string {
-  let formatter = dateFormatters.get(timeZone);
+function formatDate(instant: Date, timeZone: string, style: keyof typeof DATE_STYLES): string {
+  const key = `${style} ${timeZone}`;
+  let formatter = dateFormatters.get(key);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone });
-    dateFormatters.set(timeZone, formatter);
+    formatter = new Intl.DateTimeFormat('ru-RU', { ...DATE_STYLES[style], timeZone });
+    dateFormatters.set(key, formatter);
   }
   return formatter.format(instant);
+}
+
+export function calendarDate(instant: Date, timeZone: string): string {
+  return formatDate(instant, timeZone, 'calendar');
+}
+
+export function shortDate(instant: Date, timeZone: string): string {
+  return formatDate(instant, timeZone, 'short');
 }
 
 export function localDateLabel(date: string): string {

@@ -3,6 +3,9 @@ import { answers, botChat, GUEST_ID, labels, payloads, sent, texts } from '../..
 import { CONSENT_DOCUMENTS } from '../../domain/consents.ts';
 import { sampleVenue } from '../../../test/venues.ts';
 
+const ONBOARDING_DONE =
+  'Готово! Пришлите фото блюда или напишите, что съели, например: Сырники 350 или съел борщ. Спросить, что поесть: /eat.';
+
 describe('onboarding', () => {
   it('walks a new guest from /start to the first meal hint', async () => {
     const chat = botChat();
@@ -77,9 +80,10 @@ describe('onboarding', () => {
     const shared = await chat.location({ lat: 55.78871, lon: 49.12214 });
     expect(texts(shared)).toEqual([
       'Местоположение сохранено, храню его с точностью около 1 км.',
-      'Готово! Пришлите фото блюда или напишите, что съели, например: Сырники 350 или съел борщ.',
+      ONBOARDING_DONE,
     ]);
-    expect(payloads(sent(shared)[1])).toEqual(['cmd:help']);
+    expect(labels(sent(shared)[1])).toEqual(['Что поесть?', 'Помощь']);
+    expect(payloads(sent(shared)[1])).toEqual(['cmd:eat', 'cmd:help']);
     expect(chat.world.user.location).toEqual({ lat: 55.79, lon: 49.12 });
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
   });
@@ -103,9 +107,7 @@ describe('onboarding', () => {
     expect(answers(done)[0]?.message?.text).toBe(
       'Хорошо, без местоположения. Отправить его можно позже в /profile.',
     );
-    expect(texts(sent(done))).toEqual([
-      'Готово! Пришлите фото блюда или напишите, что съели, например: Сырники 350 или съел борщ.',
-    ]);
+    expect(texts(sent(done))).toEqual([ONBOARDING_DONE]);
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
   });
 
@@ -156,7 +158,8 @@ describe('onboarding', () => {
     expect(again.map((message) => message.text)).toEqual([
       'С возвращением! Пришлите фото блюда или напишите, что съели.',
     ]);
-    expect(payloads(again[0])).toEqual(['cmd:today', 'cmd:profile']);
+    expect(labels(again[0])).toEqual(['Что поесть?', 'Сегодня', 'Профиль']);
+    expect(payloads(again[0])).toEqual(['cmd:eat', 'cmd:today', 'cmd:profile']);
   });
 
   it('keeps a start link that came before the consent and opens it right after', async () => {
@@ -245,7 +248,7 @@ describe('onboarding', () => {
 
     const off = await chat.press('cs:ad:off', 'mid.offer');
     expect(answers(off)[0]?.message?.text).toBe(
-      'Готово, сам больше ничего не пришлю. Включить снова можно в /profile.',
+      'Готово, сам больше ничего не пришлю. Подбор по запросу работает: /eat',
     );
     expect(chat.world.consents.has('personalized_offers')).toBe(false);
   });
@@ -271,8 +274,10 @@ describe('onboarding', () => {
     const chat = botChat();
     const [help] = sent(await chat.send('/help'));
     expect(help?.text).toContain('**Что я умею**');
-    expect(help?.text).toContain('/today');
+    for (const command of ['/eat', '/today', '/bookings', '/profile', '/delete']) {
+      expect(help?.text).toContain(command);
+    }
     expect(help?.text).toContain('*Калорийность приблизительная, это не медицинская рекомендация.*');
-    expect(payloads(help)).toEqual(['cmd:today', 'cmd:profile']);
+    expect(payloads(help)).toEqual(['cmd:eat', 'cmd:today', 'cmd:profile']);
   });
 });

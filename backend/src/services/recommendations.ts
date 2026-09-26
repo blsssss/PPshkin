@@ -22,6 +22,7 @@ export interface RecommendationRequest {
   location: GeoPoint | null;
   limit: number;
   channel: OfferChannel;
+  minScore?: number;
 }
 
 export interface RecommendedOffer {
@@ -75,6 +76,10 @@ function hiddenSince(now: Date): Record<DeclineReason, Date> {
     not_today: daysAgo(HIDDEN_AFTER_DECLINE_DAYS.not_today),
     dislike: daysAgo(HIDDEN_AFTER_DECLINE_DAYS.dislike),
   };
+}
+
+function isBelow(minScore: number | undefined, [best]: readonly Recommendation[]): boolean {
+  return minScore !== undefined && best !== undefined && best.score < minScore;
 }
 
 function toNewOffer({ candidate, score, explanation }: Recommendation): offers.NewOffer {
@@ -148,6 +153,10 @@ export function createRecommendationsService({
         candidates,
         { limit },
       );
+      const { slot, remainingKcal, slotBudgetKcal } = ranked;
+      if (isBelow(request.minScore, ranked.items)) {
+        return { status: 'nothing_fits', slot, remainingKcal, slotBudgetKcal, items: [] };
+      }
       const saved = await offers.insertShown(pool, {
         userId: user.id,
         channel,
@@ -156,9 +165,9 @@ export function createRecommendationsService({
       });
       return {
         status: ranked.status,
-        slot: ranked.slot,
-        remainingKcal: ranked.remainingKcal,
-        slotBudgetKcal: ranked.slotBudgetKcal,
+        slot,
+        remainingKcal,
+        slotBudgetKcal,
         items: ranked.items.map((recommendation, index) =>
           toRecommendedOffer(recommendation, saved[index], now),
         ),
