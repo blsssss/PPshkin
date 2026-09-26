@@ -93,7 +93,14 @@ async function seedGuest(id: number, locatedAt = new Date(clock.now().getTime() 
 async function recommend(userId: number, channel: 'push'): Promise<RecommendationsResult> {
   const { status, score, venue, eclair } = world;
   if (status !== 'ok') {
-    return { status, slot: 'snack', remainingKcal: 1100, slotBudgetKcal: 300, items: [] };
+    return {
+      status,
+      slot: 'snack',
+      remainingKcal: 1100,
+      slotBudgetKcal: 300,
+      demoCenterUsed: false,
+      items: [],
+    };
   }
   const [offer] = await offers.insertShown(pool, {
     userId,
@@ -107,6 +114,7 @@ async function recommend(userId: number, channel: 'push'): Promise<Recommendatio
     slot: 'snack',
     remainingKcal: 1100,
     slotBudgetKcal: 300,
+    demoCenterUsed: false,
     items: [
       {
         offerId: offer.id,
@@ -287,6 +295,18 @@ describe('proactive_offers job', () => {
       expect(await storedOffers()).toEqual([]);
     });
 
+    it('when the guest is far away and the demo center was used', async () => {
+      recommendations.recommend.mockImplementation(async (userId, request) => ({
+        ...(await recommend(userId, 'push')),
+        demoCenterUsed: request.channel === 'push',
+      }));
+
+      await job().run(clock.now());
+
+      expect(sendToUser).not.toHaveBeenCalled();
+      expect(await storedOffers()).toEqual([]);
+    });
+
     it('while the bot is not running yet', async () => {
       messenger = null;
 
@@ -438,7 +458,12 @@ describe('proactive_offers job with the real services', () => {
     await proactiveOffersJob({
       db: pool,
       insights: createInsightsService({ pool, clock, consents: consentsService }),
-      recommendations: createRecommendationsService({ pool, clock, consents: consentsService }),
+      recommendations: createRecommendationsService({
+        pool,
+        clock,
+        consents: consentsService,
+        demoMode: false,
+      }),
       messenger: () => messenger,
       logger,
     }).run(clock.now());

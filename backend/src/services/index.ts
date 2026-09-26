@@ -5,6 +5,7 @@ import type { BookingsService } from './bookings.ts';
 import type { CatalogService } from './catalog.ts';
 import type { ConsentsService } from './consents.ts';
 import type { DealsService } from './deals.ts';
+import type { DemoService } from './demo.ts';
 import type { DiaryService } from './diary.ts';
 import type { HealthService } from './health.ts';
 import type { InsightsService } from './insights.ts';
@@ -30,4 +31,5 @@ export interface Services {
   insights: InsightsService;
   bookings: BookingsService;
   analytics: AnalyticsService;
+  demo: DemoService;
 }

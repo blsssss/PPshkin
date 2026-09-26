@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  atLocalTime,
   dayRange,
+  daysSinceEpoch,
   formatLocalTime,
   isLocalDate,
   isOpenAt,
   isValidTimeZone,
   localDate,
   localParts,
+  minutesOfDay,
   nextClosingAt,
 } from './time.ts';
 
@@ -67,6 +70,13 @@ describe('local time helpers', () => {
   it('adds days across month and year boundaries', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
     expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  it('numbers calendar dates from 1970-01-01', () => {
+    expect(daysSinceEpoch('1970-01-01')).toBe(0);
+    expect(daysSinceEpoch('2026-09-19')).toBe(20715);
+    expect(daysSinceEpoch(addDays('2026-12-31', 1)) - daysSinceEpoch('2026-12-31')).toBe(1);
+    expect(daysSinceEpoch('2026-03-29') - daysSinceEpoch('2026-03-28')).toBe(1);
   });
 });
 
@@ -148,5 +158,23 @@ describe('nextClosingAt', () => {
     expect(() => nextClosingAt('08:00', 'late', at('2026-09-25T10:00:00Z'), 'Europe/Moscow')).toThrow(
       RangeError,
     );
+  });
+});
+
+describe('wall clock times', () => {
+  it('reads HH:MM and HH:MM:SS as minutes of the day', () => {
+    expect(minutesOfDay('00:00')).toBe(0);
+    expect(minutesOfDay('16:05')).toBe(965);
+    expect(minutesOfDay('23:59:30')).toBe(1439);
+    expect(minutesOfDay('24:00')).toBeNull();
+    expect(minutesOfDay('7:30')).toBeNull();
+  });
+
+  it('turns a local date and time into an instant', () => {
+    expect(atLocalTime('2026-09-25', 16 * 60 + 5, 'Europe/Moscow')).toEqual(new Date('2026-09-25T13:05:00Z'));
+    expect(atLocalTime('2026-09-25', 8 * 60 + 30, 'Asia/Yekaterinburg')).toEqual(
+      new Date('2026-09-25T03:30:00Z'),
+    );
+    expect(atLocalTime('2026-03-29', 12 * 60, 'Europe/Berlin')).toEqual(new Date('2026-03-29T10:00:00Z'));
   });
 });

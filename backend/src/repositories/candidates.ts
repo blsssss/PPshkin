@@ -16,10 +16,13 @@ function soonestEndingByItem(live: readonly Deal[]): Map<number, Deal> {
 
 export async function loadCandidates(
   db: Queryable,
+  viewerId: number,
   area: venues.GeoBox | null,
   now: Date,
 ): Promise<Candidate[]> {
-  const found = area ? await venues.listWithin(db, area) : await venues.listAll(db);
+  const found = area
+    ? await venues.listVisibleWithin(db, area, viewerId)
+    : await venues.listVisible(db, viewerId);
   const venueIds = found.map((venue) => venue.id);
   const items = await menuItems.listAvailableInVenues(db, venueIds);
   const dealByItem = soonestEndingByItem(await deals.listVisible(db, venueIds, now));

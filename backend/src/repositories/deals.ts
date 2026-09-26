@@ -47,6 +47,11 @@ export interface NewDeal {
   endsAt: Date;
 }
 
+export interface ScheduledDeal extends NewDeal {
+  startsAt: Date;
+  quantityLeft: number;
+}
+
 export interface DealChanges {
   quantityLeft: number;
   endsAt: Date;
@@ -60,6 +65,27 @@ export async function insert(db: Queryable, deal: NewDeal, now: Date): Promise<D
      values ($1, $2, $3, $4, $4, $5, $6, $5)
      returning ${DEAL_COLUMNS}`,
     [deal.venueId, deal.menuItemId, deal.priceRub, deal.quantity, now, deal.endsAt],
+  );
+  return mapDeal(row);
+}
+
+export async function insertScheduled(db: Queryable, deal: ScheduledDeal, createdAt: Date): Promise<Deal> {
+  const row = await one<DealRow>(
+    db,
+    `insert into deals as d (venue_id, menu_item_id, price_rub, quantity_total, quantity_left, starts_at, ends_at,
+                             created_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
+     returning ${DEAL_COLUMNS}`,
+    [
+      deal.venueId,
+      deal.menuItemId,
+      deal.priceRub,
+      deal.quantity,
+      deal.quantityLeft,
+      deal.startsAt,
+      deal.endsAt,
+      createdAt,
+    ],
   );
   return mapDeal(row);
 }
@@ -182,4 +208,19 @@ export async function countVisibleByVenue(
     [venueIds, now],
   );
   return new Map(rows.map((row) => [row.venue_id, row.deals]));
+}
+
+export async function listStartingBetween(
+  db: Queryable,
+  venueId: number,
+  from: Date,
+  to: Date,
+): Promise<Deal[]> {
+  const { rows } = await db.query<DealRow>(
+    `select ${DEAL_COLUMNS} from deals d
+      where d.venue_id = $1 and d.starts_at >= $2 and d.starts_at < $3
+      order by d.starts_at, d.id`,
+    [venueId, from, to],
+  );
+  return rows.map(mapDeal);
 }

@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { BAUMANA, KREMLIN, seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
+import {
+  BAUMANA,
+  KREMLIN,
+  seedDeal,
+  seedDemoCopy,
+  seedDemoVenue,
+  seedMenuItem,
+  seedVenue,
+} from '../../test/venues.ts';
 import type { Candidate } from '../domain/intent/types.ts';
 import type { Venue } from '../domain/models.ts';
 import { loadCandidates } from './candidates.ts';
@@ -9,6 +17,7 @@ import * as menuItems from './menu-items.ts';
 
 const pool = testPool();
 const now = new Date('2026-09-26T13:00:00Z');
+const GUEST = 101;
 const HOUR = 3_600_000;
 const inHours = (hours: number) => new Date(now.getTime() + hours * HOUR);
 
@@ -48,7 +57,7 @@ describe('candidate loader', () => {
     await menuItems.archive(pool, archived.id, now);
     await seedMenuItem(pool, kremlin.id, { name: 'Борщ', category: 'soup' });
 
-    const candidates = await loadCandidates(pool, null, now);
+    const candidates = await loadCandidates(pool, GUEST, null, now);
     expect(summary(candidates)).toEqual([
       ['Эклер', 'Зерно', endsFirst.id],
       ['Круассан', 'Зерно', null],
@@ -60,8 +69,23 @@ describe('candidate loader', () => {
   it('keeps only venues inside the area', async () => {
     await seedMenuItem(pool, zerno.id, { name: 'Эклер' });
     await seedMenuItem(pool, kremlin.id, { name: 'Борщ', category: 'soup' });
-    expect(summary(await loadCandidates(pool, AROUND_BAUMANA, now))).toEqual([['Эклер', 'Зерно', null]]);
+    expect(summary(await loadCandidates(pool, GUEST, AROUND_BAUMANA, now))).toEqual([
+      ['Эклер', 'Зерно', null],
+    ]);
     const nowhere = { minLat: 43.1, maxLat: 43.2, minLon: 131.8, maxLon: 131.9 };
-    expect(await loadCandidates(pool, nowhere, now)).toEqual([]);
+    expect(await loadCandidates(pool, GUEST, nowhere, now)).toEqual([]);
+  });
+
+  it('offers the copy of a demo venue only to its owner, instead of the seeded venue', async () => {
+    const seeded = await seedDemoVenue(pool, 900001, { name: 'Демо', location: BAUMANA });
+    await seedMenuItem(pool, seeded.id, { name: 'Демо эклер' });
+    const copy = await seedDemoCopy(pool, seeded.id, 7);
+    await seedMenuItem(pool, copy.id, { name: 'Эклер копии' });
+    const venueNames = async (viewer: number, area: typeof AROUND_BAUMANA | null) =>
+      (await loadCandidates(pool, viewer, area, now)).map(({ item }) => item.name);
+    expect(await venueNames(7, null)).toEqual(['Эклер копии']);
+    expect(await venueNames(7, AROUND_BAUMANA)).toEqual(['Эклер копии']);
+    expect(await venueNames(GUEST, null)).toEqual(['Демо эклер']);
+    expect(await venueNames(GUEST, AROUND_BAUMANA)).toEqual(['Демо эклер']);
   });
 });

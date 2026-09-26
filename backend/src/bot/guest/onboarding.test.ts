@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { answers, botChat, GUEST_ID, labels, payloads, sent, texts } from '../../../test/bot.ts';
+import { answers, botChat, GUEST_ID, guestWorld, labels, payloads, sent, texts } from '../../../test/bot.ts';
+import { fakeDemo } from '../../../test/demo.ts';
 import { CONSENT_DOCUMENTS } from '../../domain/consents.ts';
 import { sampleVenue } from '../../../test/venues.ts';
 
@@ -109,6 +110,20 @@ describe('onboarding', () => {
     );
     expect(texts(sent(done))).toEqual([ONBOARDING_DONE]);
     expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+  });
+
+  it('offers a diary sample at the end in demo mode', async () => {
+    const chat = botChat({ world: guestWorld({ services: { demo: fakeDemo() } }) });
+    await chat.start();
+    await chat.press('cs:pd:ok');
+    await chat.press('cs:ad:yes:ob');
+    await chat.press('ob:goal:skip');
+    await chat.press('ob:kcal:2000');
+
+    const [done] = sent(await chat.press('ob:loc:skip'));
+
+    expect(done?.text).toBe(ONBOARDING_DONE);
+    expect(payloads(done)).toEqual(['cmd:eat', 'cmd:help', 'of:demo']);
   });
 
   it('shows the full consent text and accepts it from there', async () => {

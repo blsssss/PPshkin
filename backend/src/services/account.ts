@@ -26,6 +26,7 @@ export function createAccountService({ pool, clock }: AccountDependencies): Acco
         await users.lock(client, userId);
         await bookings.cancelActiveForUser(client, userId, clock.now());
         await account.eraseOfferExplanations(client, userId);
+        await account.removeDemoVenueCopies(client, userId);
         await users.remove(client, userId);
       });
     },

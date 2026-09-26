@@ -736,6 +736,20 @@ describe('/today', () => {
     ]);
   });
 
+  it('marks the meals of the sample diary', async () => {
+    const chat = consentedChat();
+    const sample = chat.world.addMeal('Сырники', 380, 450, new Date('2026-09-26T05:40:00Z'));
+    Object.assign(sample, { source: 'demo' });
+    chat.world.addMeal('Борщ', 300, 300, new Date('2026-09-26T08:10:00Z'));
+
+    const [today] = sent(await chat.send('/today'));
+
+    expect(today?.text.split('\n').slice(1, 3)).toEqual([
+      '08:40 **Сырники**, 380-450 ккал (пример)',
+      '11:10 **Борщ**, около 300 ккал',
+    ]);
+  });
+
   it('shortens a long day and tells when the guideline is reached', async () => {
     const chat = consentedChat();
     for (let index = 0; index < 23; index += 1) chat.world.addMeal(`Перекус ${index + 1}`, 100);

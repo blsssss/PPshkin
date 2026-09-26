@@ -95,6 +95,8 @@ const ERROR_TEXTS: Readonly<Record<string, string>> = {
   offer_already_accepted: 'По этому предложению уже есть бронь, код в /bookings.',
   meal_not_found: RECORD_GONE,
   demo_account_protected: 'Демо-аккаунт удалить нельзя.',
+  demo_diary_exists: 'Пример уже добавлен',
+  demo_mode_disabled: 'Демо-режим на сервере выключен.',
   validation_failed: 'Проверьте ввод и попробуйте ещё раз.',
   eaten_at_out_of_range: 'Проверьте ввод и попробуйте ещё раз.',
 };
@@ -372,6 +374,7 @@ export const ACCOUNT_KEPT = 'Хорошо, ничего не удаляю.';
 export const OFFER_ENDED = 'Это предложение уже закончилось.';
 export const NO_DEALS = 'Сейчас горящих предложений нет.';
 export const DEMO_VENUE = '*Заведение и меню тестовые*';
+export const SAMPLE_MEAL = '(пример)';
 export const DEALS_TITLE = bold('Горящие предложения');
 
 export function venueSummary(category: string, address: string): string {

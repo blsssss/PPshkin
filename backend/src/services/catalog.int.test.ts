@@ -6,6 +6,8 @@ import {
   KAZAN_ARENA,
   KREMLIN,
   seedDeal,
+  seedDemoCopy,
+  seedDemoVenue,
   seedMenuItem,
   seedUser,
   seedVenue,
@@ -18,7 +20,16 @@ import { createCatalogService, type CatalogQuery } from './catalog.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
-const catalog = createCatalogService({ pool, clock });
+const service = createCatalogService({ pool, clock, demoMode: false });
+const demoCatalog = createCatalogService({ pool, clock, demoMode: true });
+const catalog = {
+  venues: async (userId: number, query: CatalogQuery) => (await service.venues(userId, query)).items,
+  venue: service.venue,
+  deals: async (userId: number, query: CatalogQuery) => (await service.deals(userId, query)).items,
+  deal: service.deal,
+};
+
+const MOSCOW: GeoPoint = { lat: 55.7558, lon: 37.6173 };
 
 const GUEST = 101;
 const HOUR = 3_600_000;
@@ -264,5 +275,63 @@ describe('deal card', () => {
     for (const id of [hiddenDeal.id, scheduled.id, 999_999]) {
       await expect(catalog.deal(GUEST, id)).rejects.toMatchObject({ status: 404, code: 'deal_not_found' });
     }
+  });
+});
+
+describe('demo mode', () => {
+  it('measures from the centre of Kazan when the point is more than 50 km away', async () => {
+    await seedDemoVenue(pool, 900001, { name: 'Зерно', location: BAUMANA });
+    const deal = await liveDeal(await seedMenuItem(pool, 900001));
+
+    const venues = await demoCatalog.venues(GUEST, near(MOSCOW));
+    expect(venues.demoCenterUsed).toBe(true);
+    expect(venues.items.map((card) => [card.venue.id, card.distanceM, card.venue.isDemo])).toEqual([
+      [900001, 0, true],
+    ]);
+    const nearbyDeals = await demoCatalog.deals(GUEST, near(MOSCOW));
+    expect(nearbyDeals.demoCenterUsed).toBe(true);
+    expect(nearbyDeals.items).toHaveLength(1);
+
+    await seedUser(pool, 102, MOSCOW);
+    expect((await demoCatalog.venues(102, near(null))).demoCenterUsed).toBe(true);
+    expect((await demoCatalog.deal(102, deal.id)).distanceM).toBe(0);
+    expect(await demoCatalog.venues(GUEST, near(KREMLIN))).toMatchObject({ demoCenterUsed: false });
+    expect(await demoCatalog.venues(GUEST, near(null))).toMatchObject({ demoCenterUsed: false });
+  });
+
+  it('keeps the far point outside demo mode', async () => {
+    await seedDemoVenue(pool, 900001, { location: BAUMANA });
+    expect(await service.venues(GUEST, near(MOSCOW))).toEqual({ items: [], demoCenterUsed: false });
+    expect(await service.deals(GUEST, near(MOSCOW))).toEqual({ items: [], demoCenterUsed: false });
+  });
+
+  it('shows the copy of a demo venue only to its owner, in place of the seeded venue', async () => {
+    const seeded = await seedDemoVenue(pool, 900001, { name: 'Зерно', location: BAUMANA });
+    await liveDeal(await seedMenuItem(pool, seeded.id, { name: 'Эклер' }));
+    const copy = await seedDemoCopy(pool, seeded.id, 7);
+    const copyDeal = await liveDeal(await seedMenuItem(pool, copy.id, { name: 'Эклер' }));
+
+    const ids = (cards: { venue: Venue }[]) => cards.map((card) => card.venue.id);
+    expect(ids(await catalog.venues(7, near(BAUMANA)))).toEqual([copy.id]);
+    expect(ids(await catalog.venues(7, near(null)))).toEqual([copy.id]);
+    expect(ids(await catalog.venues(GUEST, near(BAUMANA)))).toEqual([seeded.id]);
+    expect(ids(await catalog.deals(7, near(BAUMANA)))).toEqual([copy.id]);
+    expect(ids(await catalog.deals(GUEST, near(null)))).toEqual([seeded.id]);
+
+    expect((await catalog.venue(7, copy.id)).venue).toEqual(copy);
+    for (const [viewer, venueId] of [
+      [GUEST, copy.id],
+      [7, seeded.id],
+    ] as const) {
+      await expect(catalog.venue(viewer, venueId)).rejects.toMatchObject({
+        status: 404,
+        code: 'venue_not_found',
+      });
+    }
+    expect((await catalog.deal(7, copyDeal.id)).venue).toEqual(copy);
+    await expect(catalog.deal(GUEST, copyDeal.id)).rejects.toMatchObject({
+      status: 404,
+      code: 'deal_not_found',
+    });
   });
 });

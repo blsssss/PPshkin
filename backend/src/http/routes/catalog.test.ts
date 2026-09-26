@@ -17,6 +17,7 @@ const guest = bearer('guest-token');
 const GUEST_ID = 101;
 
 const venueCard: VenueCardView = { venue: sampleVenue, distanceM: 420, openNow: true, activeDeals: 1 };
+const demoVenue = { ...sampleVenue, id: 900001, isDemo: true };
 const dealCard: DealCardView = {
   deal: { deal: sampleDeal, item: sampleMenuItem, status: 'active' },
   venue: sampleVenue,
@@ -25,10 +26,10 @@ const dealCard: DealCardView = {
 
 function catalogStub(overrides: Partial<CatalogService> = {}): CatalogService {
   return {
-    venues: () => Promise.resolve([venueCard]),
+    venues: () => Promise.resolve({ items: [venueCard], demoCenterUsed: false }),
     venue: () =>
       Promise.resolve({ venue: sampleVenue, openNow: false, menu: [sampleMenuItem], deals: [dealCard.deal] }),
-    deals: () => Promise.resolve([dealCard]),
+    deals: () => Promise.resolve({ items: [dealCard], demoCenterUsed: false }),
     deal: () => Promise.resolve(dealCard),
     ...overrides,
   };
@@ -49,7 +50,9 @@ describe('catalog routes', () => {
   });
 
   it('lists venues near the given point', async () => {
-    const venues = vi.fn<CatalogService['venues']>(() => Promise.resolve([venueCard]));
+    const venues = vi.fn<CatalogService['venues']>(() =>
+      Promise.resolve({ items: [venueCard], demoCenterUsed: false }),
+    );
     app = await buildTestApp({ services: { catalog: catalogStub({ venues }) } });
     const response = await app.inject({
       method: 'GET',
@@ -77,6 +80,7 @@ describe('catalog routes', () => {
           activeDeals: 1,
         },
       ],
+      demoCenterUsed: false,
     });
     expect(venues).toHaveBeenCalledWith(GUEST_ID, { point: { lat: 55.79, lon: 49.12 }, radiusM: 1500 });
 
@@ -105,8 +109,12 @@ describe('catalog routes', () => {
   });
 
   it('treats blank search parameters as missing', async () => {
-    const venues = vi.fn<CatalogService['venues']>(() => Promise.resolve([venueCard]));
-    const deals = vi.fn<CatalogService['deals']>(() => Promise.resolve([dealCard]));
+    const venues = vi.fn<CatalogService['venues']>(() =>
+      Promise.resolve({ items: [venueCard], demoCenterUsed: false }),
+    );
+    const deals = vi.fn<CatalogService['deals']>(() =>
+      Promise.resolve({ items: [dealCard], demoCenterUsed: false }),
+    );
     app = await buildTestApp({ services: { catalog: catalogStub({ venues, deals }) } });
     for (const path of ['/api/v1/venues', '/api/v1/deals'] as const) {
       const response = await app.inject({ method: 'GET', url: `${path}?lat=&lon=&radius=`, headers: guest });
@@ -147,7 +155,9 @@ describe('catalog routes', () => {
   });
 
   it('lists deals nearby', async () => {
-    const deals = vi.fn<CatalogService['deals']>(() => Promise.resolve([dealCard]));
+    const deals = vi.fn<CatalogService['deals']>(() =>
+      Promise.resolve({ items: [dealCard], demoCenterUsed: false }),
+    );
     app = await buildTestApp({ services: { catalog: catalogStub({ deals }) } });
     const response = await app.inject({
       method: 'GET',
@@ -165,7 +175,37 @@ describe('catalog routes', () => {
           distanceM: null,
         },
       ],
+      demoCenterUsed: false,
     });
     expect(deals).toHaveBeenCalledWith(GUEST_ID, { point: { lat: 55.79, lon: 49.12 }, radiusM: 3000 });
+  });
+
+  it('tells when the demo mode measured distances from the centre of Kazan', async () => {
+    const card = { ...venueCard, venue: demoVenue, distanceM: 350 };
+    app = await buildTestApp({
+      services: {
+        catalog: catalogStub({
+          venues: () => Promise.resolve({ items: [card], demoCenterUsed: true }),
+          deals: () =>
+            Promise.resolve({
+              items: [{ ...dealCard, venue: demoVenue, distanceM: 350 }],
+              demoCenterUsed: true,
+            }),
+        }),
+      },
+    });
+    for (const path of ['/api/v1/venues', '/api/v1/deals'] as const) {
+      const response = await app.inject({
+        method: 'GET',
+        url: `${path}?lat=55.7558&lon=37.6173`,
+        headers: guest,
+      });
+      expect(response.statusCode).toBe(200);
+      expectContract(response, 'GET', path);
+      expect(response.json()).toMatchObject({
+        items: [{ venue: { id: 900001, isDemo: true }, distanceM: 350 }],
+        demoCenterUsed: true,
+      });
+    }
   });
 });

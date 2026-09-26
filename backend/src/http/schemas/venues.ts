@@ -16,6 +16,12 @@ const DistanceMeters = z
 
 const OpenNow = z.boolean().describe('Открыто ли заведение сейчас по часам работы');
 
+export const DemoCenterUsed = z
+  .boolean()
+  .describe(
+    'Демо-режим: точка поиска дальше 50 км от Казани, поэтому расстояния и радиус считаются от центра Казани (ул. Баумана). Покажите это гостю. Вне демо-режима всегда false',
+  );
+
 export const VenueSchema = z
   .object({
     id: z.number().int(),
@@ -43,7 +49,10 @@ export const VenueCardSchema = z
   })
   .meta({ id: 'VenueCard', description: 'Заведение в списке рядом' });
 
-export const VenueCardListSchema = z.object({ items: z.array(VenueCardSchema) });
+export const VenueCardListSchema = z.object({
+  items: z.array(VenueCardSchema),
+  demoCenterUsed: DemoCenterUsed,
+});
 
 export const VenueDetailsSchema = z
   .object({
@@ -63,7 +72,10 @@ export const DealCardSchema = z
   })
   .meta({ id: 'DealCard', description: 'Горящее предложение в ленте рядом' });
 
-export const DealCardListSchema = z.object({ items: z.array(DealCardSchema) });
+export const DealCardListSchema = z.object({
+  items: z.array(DealCardSchema),
+  demoCenterUsed: DemoCenterUsed,
+});
 
 export const VenueBody = z.object({
   name: z.string().trim().min(1).max(120).describe('Название для гостей'),

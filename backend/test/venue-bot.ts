@@ -347,8 +347,10 @@ export function venueFake(clock: Clock) {
 
 export type VenueFake = ReturnType<typeof venueFake>;
 
-export function venueChat(options: Omit<ChatOptions, 'world'> & { now?: string } = {}) {
-  const world = guestWorld({ now: options.now ?? VENUE_NOW });
+export function venueChat(
+  options: Omit<ChatOptions, 'world'> & { now?: string; services?: Partial<Services> } = {},
+) {
+  const world = guestWorld({ now: options.now ?? VENUE_NOW, services: options.services });
   world.consent('personal_data');
   const fake = venueFake(world.clock);
   Object.assign(world.services, fake.services);

@@ -3,6 +3,7 @@ import { loadConfig } from './config.ts';
 import { createServices } from './container.ts';
 import { loadMigrations, migrate } from './db/migrate.ts';
 import { createPool } from './db/pool.ts';
+import { loadDemoDataset } from './demo/dataset.ts';
 import { buildApp } from './http/app.ts';
 import { createMaxApi } from './integrations/max/api.ts';
 import type { MaxLogger } from './integrations/max/poller.ts';
@@ -74,6 +75,7 @@ const services = createServices({
   recognition,
   background,
   notifier,
+  demoDataset: config.DEMO_MODE ? await loadDemoDataset() : null,
 });
 const botRuntime =
   botSettings &&
@@ -87,7 +89,14 @@ const botRuntime =
     miniAppEnabled: config.MINI_APP_ENABLED,
     background,
   });
-const jobs = createJobs({ config, db: pool, services, messenger: botMessenger, logger: botLogger });
+const jobs = createJobs({
+  config,
+  db: pool,
+  services,
+  messenger: botMessenger,
+  logger: botLogger,
+  demo: services.demo,
+});
 const lockPool = createPool(config.DATABASE_URL, {
   max: jobs.length,
   onError: (error) => {
@@ -126,6 +135,9 @@ if (!config.PROACTIVE_OFFERS) {
 if (config.MIGRATE_ON_START) {
   const applied = await migrate(pool, await loadMigrations());
   app.log.info({ applied }, 'database migrations checked');
+}
+if (services.demo.enabled) {
+  app.log.info({ demo: await services.demo.seed() }, 'demo data seeded');
 }
 
 let closing = false;

@@ -99,4 +99,33 @@ describe('menu items repository', () => {
     await pool.query(`update menu_items set tags = '{dessert,retired_tag}' where id = $1`, [item.id]);
     expect((await menuItems.findByIds(pool, [item.id]))[0]?.tags).toEqual(['dessert']);
   });
+
+  it('copies the available items of one venue to another with new ids', async () => {
+    const croissant = await seedMenuItem(pool, venue.id, {
+      name: 'Круассан',
+      category: 'bakery',
+      nutritionSource: 'estimate',
+      tags: ['pastry'],
+    });
+    const eclair = await seedMenuItem(pool, venue.id);
+    await seedMenuItem(pool, venue.id, { name: 'Скрытое', isAvailable: false });
+    const archived = await seedMenuItem(pool, venue.id, { name: 'Старое' });
+    await menuItems.archive(pool, archived.id, now);
+    const copiedAt = new Date('2026-09-26T09:00:00Z');
+
+    const copies = await menuItems.copyAvailable(pool, venue.id, other.id, copiedAt);
+
+    expect(copies.map((item) => item.name)).toEqual(['Круассан', 'Эклер']);
+    const [first, second] = copies;
+    expect(first).toEqual({
+      ...croissant,
+      id: expect.any(Number) as number,
+      venueId: other.id,
+      createdAt: copiedAt,
+      updatedAt: copiedAt,
+    });
+    expect(second).toMatchObject({ name: eclair.name, venueId: other.id, kcal: eclair.kcal });
+    expect(copies.every((item) => ![croissant.id, eclair.id].includes(item.id))).toBe(true);
+    expect(await menuItems.listOnMenu(pool, venue.id)).toHaveLength(3);
+  });
 });

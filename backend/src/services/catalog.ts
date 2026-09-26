@@ -1,4 +1,5 @@
 import type { Pool } from '../db/pool.ts';
+import { resolveDemoPoint } from '../demo/location.ts';
 import type { GeoPoint, MenuItem, Venue } from '../domain/models.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
@@ -36,16 +37,27 @@ export interface DealCardView {
   distanceM: number | null;
 }
 
+export interface NearbyResult<Card> {
+  items: Card[];
+  demoCenterUsed: boolean;
+}
+
 export interface CatalogService {
-  venues(userId: number, query: CatalogQuery): Promise<VenueCardView[]>;
+  venues(userId: number, query: CatalogQuery): Promise<NearbyResult<VenueCardView>>;
   venue(userId: number, venueId: number): Promise<VenueDetailsView>;
-  deals(userId: number, query: CatalogQuery): Promise<DealCardView[]>;
+  deals(userId: number, query: CatalogQuery): Promise<NearbyResult<DealCardView>>;
   deal(userId: number, dealId: number): Promise<DealCardView>;
 }
 
 interface CatalogDependencies {
   pool: Pool;
   clock: Clock;
+  demoMode: boolean;
+}
+
+interface Nearby {
+  placed: PlacedVenue[];
+  demoCenterUsed: boolean;
 }
 
 interface PlacedVenue {
@@ -75,6 +87,8 @@ export function boundingBox(center: GeoPoint, radiusM: number): venues.GeoBox {
   return { ...whole, minLon, maxLon };
 }
 
+const dealNotFound = () => notFound('deal_not_found', 'Deal not found or no longer available');
+
 function distanceFrom(point: GeoPoint | null, venue: Venue): number | null {
   return point ? Math.round(distanceMeters(point, venue.location)) : null;
 }
@@ -103,13 +117,9 @@ function bySoonestEnd(left: DealCardView, right: DealCardView): number {
   );
 }
 
-export function createCatalogService({ pool, clock }: CatalogDependencies): CatalogService {
+export function createCatalogService({ pool, clock, demoMode }: CatalogDependencies): CatalogService {
   async function savedPoint(userId: number): Promise<GeoPoint | null> {
     return (await users.findById(pool, userId))?.location ?? null;
-  }
-
-  async function searchPoint(userId: number, query: CatalogQuery): Promise<GeoPoint | null> {
-    return query.point ?? (await savedPoint(userId));
   }
 
   function place(venue: Venue, point: GeoPoint | null, now: Date): PlacedVenue {
@@ -120,33 +130,41 @@ export function createCatalogService({ pool, clock }: CatalogDependencies): Cata
     };
   }
 
-  async function nearby(point: GeoPoint | null, radiusM: number, now: Date): Promise<PlacedVenue[]> {
+  async function nearby(userId: number, query: CatalogQuery, now: Date): Promise<Nearby> {
+    const { point, demoCenterUsed } = resolveDemoPoint(query.point ?? (await savedPoint(userId)), demoMode);
     if (!point) {
-      const everywhere = await venues.listAll(pool);
-      return everywhere.map((venue) => place(venue, null, now)).sort(byOpenThenName);
+      const everywhere = await venues.listVisible(pool, userId);
+      return {
+        placed: everywhere.map((venue) => place(venue, null, now)).sort(byOpenThenName),
+        demoCenterUsed,
+      };
     }
-    const candidates = await venues.listWithin(pool, boundingBox(point, radiusM));
-    return candidates
-      .filter((venue) => distanceMeters(point, venue.location) <= radiusM)
+    const candidates = await venues.listVisibleWithin(pool, boundingBox(point, query.radiusM), userId);
+    const placed = candidates
+      .filter((venue) => distanceMeters(point, venue.location) <= query.radiusM)
       .map((venue) => place(venue, point, now))
       .sort(byDistance);
+    return { placed, demoCenterUsed };
   }
 
   return {
     async venues(userId, query) {
       const now = clock.now();
-      const placed = await nearby(await searchPoint(userId, query), query.radiusM, now);
+      const { placed, demoCenterUsed } = await nearby(userId, query, now);
       const found = placed.slice(0, MAX_RESULTS);
       const counts = await deals.countVisibleByVenue(
         pool,
         found.map(({ venue }) => venue.id),
         now,
       );
-      return found.map((card) => ({ ...card, activeDeals: counts.get(card.venue.id) ?? 0 }));
+      return {
+        items: found.map((card) => ({ ...card, activeDeals: counts.get(card.venue.id) ?? 0 })),
+        demoCenterUsed,
+      };
     },
 
-    async venue(_userId, venueId) {
-      const venue = await venues.findById(pool, venueId);
+    async venue(userId, venueId) {
+      const venue = await venues.findVisible(pool, venueId, userId);
       if (!venue) throw notFound('venue_not_found', 'Venue not found');
       const now = clock.now();
       const [menu, visibleDeals] = await Promise.all([
@@ -163,31 +181,33 @@ export function createCatalogService({ pool, clock }: CatalogDependencies): Cata
 
     async deals(userId, query) {
       const now = clock.now();
-      const placed = await nearby(await searchPoint(userId, query), query.radiusM, now);
+      const { placed, demoCenterUsed } = await nearby(userId, query, now);
       const placedById = new Map(
         placed.filter(({ openNow }) => openNow).map((open) => [open.venue.id, open]),
       );
       const visible = await deals.listVisible(pool, [...placedById.keys()], now);
-      return (await dealViews(pool, visible, now))
+      const items = (await dealViews(pool, visible, now))
         .flatMap((view) => {
           const open = placedById.get(view.deal.venueId);
           return open ? [{ deal: view, venue: open.venue, distanceM: open.distanceM }] : [];
         })
         .sort(bySoonestEnd)
         .slice(0, MAX_RESULTS);
+      return { items, demoCenterUsed };
     },
 
     async deal(userId, dealId) {
       const now = clock.now();
       const found = await deals.findVisible(pool, dealId, now);
-      if (!found) throw notFound('deal_not_found', 'Deal not found or no longer available');
+      if (!found) throw dealNotFound();
       const [[view], venue, point] = await Promise.all([
         dealViews(pool, [found], now),
-        venues.findById(pool, found.venueId),
+        venues.findVisible(pool, found.venueId, userId),
         savedPoint(userId),
       ]);
-      if (!view || !venue) throw new Error(`Deal ${dealId} lost its menu item or venue`);
-      return { deal: view, venue, distanceM: distanceFrom(point, venue) };
+      if (!venue) throw dealNotFound();
+      if (!view) throw new Error(`Deal ${dealId} lost its menu item`);
+      return { deal: view, venue, distanceM: distanceFrom(resolveDemoPoint(point, demoMode).point, venue) };
     },
   };
 }

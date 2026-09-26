@@ -66,7 +66,7 @@ export function proactiveOffersJob({
     if (profile.readiness !== 'ready' || habitualHour(profile) !== hour) return;
     const result = await recommendations.recommend(userId, { location: null, limit: 1, channel: 'push' });
     const [best] = result.items;
-    if (result.status === 'ok' && best !== undefined && best.score >= MIN_SCORE) {
+    if (result.status === 'ok' && !result.demoCenterUsed && best !== undefined && best.score >= MIN_SCORE) {
       const delivery = await deliver(userId, 'proactiveOffer', () => proactiveOfferMessage(best));
       if (delivery === 'sent') {
         logger.info({ userId, offerId: best.offerId }, 'proactive offer sent');

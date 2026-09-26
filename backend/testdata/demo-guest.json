@@ -1,0 +1,297 @@
+{
+  "profile": {
+    "kcalTarget": 1800,
+    "goal": "maintain",
+    "timezone": "Europe/Moscow",
+    "dislikedTags": ["fish"],
+    "location": { "lat": 55.7887, "lon": 49.1221 }
+  },
+  "diary": [
+    {
+      "daysAgo": 5,
+      "time": "08:30",
+      "title": "Овсянка с ягодами",
+      "kcalMin": 300,
+      "kcalMax": 360,
+      "proteinG": 10.2,
+      "fatG": 8.6,
+      "carbsG": 52.4,
+      "tags": ["grain", "berries", "breakfast"]
+    },
+    {
+      "daysAgo": 5,
+      "time": "08:35",
+      "title": "Капучино",
+      "kcalMin": 110,
+      "kcalMax": 140,
+      "proteinG": 6.5,
+      "fatG": 6.8,
+      "carbsG": 10.4,
+      "tags": ["coffee", "dairy", "drink"]
+    },
+    {
+      "daysAgo": 5,
+      "time": "13:10",
+      "title": "Суп с лапшой",
+      "kcalMin": 220,
+      "kcalMax": 280,
+      "proteinG": 12,
+      "fatG": 7.5,
+      "carbsG": 32,
+      "tags": ["soup"]
+    },
+    {
+      "daysAgo": 5,
+      "time": "13:20",
+      "title": "Гречка с курицей",
+      "kcalMin": 430,
+      "kcalMax": 500,
+      "proteinG": 33,
+      "fatG": 12.6,
+      "carbsG": 51,
+      "tags": ["grain", "poultry", "high_protein"]
+    },
+    {
+      "daysAgo": 5,
+      "time": "16:05",
+      "title": "Чизкейк",
+      "kcalMin": 380,
+      "kcalMax": 430,
+      "proteinG": 7.8,
+      "fatG": 27.5,
+      "carbsG": 30,
+      "tags": ["dessert", "sweet", "dairy"]
+    },
+    {
+      "daysAgo": 5,
+      "time": "19:40",
+      "title": "Куриная грудка с овощами",
+      "kcalMin": 380,
+      "kcalMax": 450,
+      "proteinG": 42,
+      "fatG": 16,
+      "carbsG": 22,
+      "tags": ["poultry", "vegetables", "high_protein", "grilled"]
+    },
+    {
+      "daysAgo": 4,
+      "time": "08:20",
+      "title": "Сырники со сметаной",
+      "kcalMin": 380,
+      "kcalMax": 450,
+      "proteinG": 22,
+      "fatG": 20,
+      "carbsG": 36,
+      "tags": ["dairy", "breakfast"]
+    },
+    {
+      "daysAgo": 4,
+      "time": "13:30",
+      "title": "Борщ",
+      "kcalMin": 230,
+      "kcalMax": 300,
+      "proteinG": 8,
+      "fatG": 11,
+      "carbsG": 30,
+      "tags": ["soup", "vegetables"]
+    },
+    {
+      "daysAgo": 4,
+      "time": "13:40",
+      "title": "Котлета с пюре",
+      "kcalMin": 520,
+      "kcalMax": 600,
+      "proteinG": 23,
+      "fatG": 30.4,
+      "carbsG": 48,
+      "tags": ["meat", "potato", "hearty"]
+    },
+    {
+      "daysAgo": 4,
+      "time": "16:10",
+      "title": "Эклер",
+      "kcalMin": 250,
+      "kcalMax": 300,
+      "proteinG": 4.6,
+      "fatG": 16.2,
+      "carbsG": 26.4,
+      "tags": ["dessert", "sweet", "pastry"]
+    },
+    {
+      "daysAgo": 4,
+      "time": "20:00",
+      "title": "Греческий салат",
+      "kcalMin": 250,
+      "kcalMax": 310,
+      "proteinG": 7.2,
+      "fatG": 23.6,
+      "carbsG": 10,
+      "tags": ["salad", "vegetables", "cheese", "light"]
+    },
+    {
+      "daysAgo": 3,
+      "time": "08:40",
+      "title": "Омлет с овощами",
+      "kcalMin": 300,
+      "kcalMax": 360,
+      "proteinG": 19.5,
+      "fatG": 23,
+      "carbsG": 7.5,
+      "tags": ["eggs", "vegetables", "breakfast", "high_protein"]
+    },
+    {
+      "daysAgo": 3,
+      "time": "08:45",
+      "title": "Капучино",
+      "kcalMin": 110,
+      "kcalMax": 140,
+      "proteinG": 6.5,
+      "fatG": 6.8,
+      "carbsG": 10.4,
+      "tags": ["coffee", "dairy", "drink"]
+    },
+    {
+      "daysAgo": 3,
+      "time": "12:50",
+      "title": "Цезарь с курицей",
+      "kcalMin": 380,
+      "kcalMax": 450,
+      "proteinG": 27,
+      "fatG": 28.5,
+      "carbsG": 18,
+      "tags": ["salad", "poultry"]
+    },
+    {
+      "daysAgo": 3,
+      "time": "15:55",
+      "title": "Круассан с миндалём",
+      "kcalMin": 400,
+      "kcalMax": 460,
+      "proteinG": 9,
+      "fatG": 26.6,
+      "carbsG": 38.9,
+      "tags": ["pastry", "sweet"]
+    },
+    {
+      "daysAgo": 3,
+      "time": "19:30",
+      "title": "Паста с овощами",
+      "kcalMin": 520,
+      "kcalMax": 600,
+      "proteinG": 16.5,
+      "fatG": 18,
+      "carbsG": 83,
+      "tags": ["pasta", "vegetables", "vegetarian"]
+    },
+    {
+      "daysAgo": 2,
+      "time": "08:30",
+      "title": "Овсянка с ягодами",
+      "kcalMin": 300,
+      "kcalMax": 360,
+      "proteinG": 10.2,
+      "fatG": 8.6,
+      "carbsG": 52.4,
+      "tags": ["grain", "berries", "breakfast"]
+    },
+    {
+      "daysAgo": 2,
+      "time": "13:20",
+      "title": "Плов",
+      "kcalMin": 600,
+      "kcalMax": 700,
+      "proteinG": 21,
+      "fatG": 29,
+      "carbsG": 76,
+      "tags": ["rice", "meat", "hearty"]
+    },
+    {
+      "daysAgo": 2,
+      "time": "16:00",
+      "title": "Яблоко",
+      "kcalMin": 60,
+      "kcalMax": 80,
+      "proteinG": 0.5,
+      "fatG": 0.4,
+      "carbsG": 16.5,
+      "tags": ["fruit", "light"]
+    },
+    {
+      "daysAgo": 2,
+      "time": "19:50",
+      "title": "Крем-суп из тыквы",
+      "kcalMin": 220,
+      "kcalMax": 280,
+      "proteinG": 4.5,
+      "fatG": 15,
+      "carbsG": 24,
+      "tags": ["soup", "vegetables", "vegetarian"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "08:25",
+      "title": "Сырники со сметаной",
+      "kcalMin": 380,
+      "kcalMax": 450,
+      "proteinG": 22,
+      "fatG": 20,
+      "carbsG": 36,
+      "tags": ["dairy", "breakfast"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "08:30",
+      "title": "Капучино",
+      "kcalMin": 110,
+      "kcalMax": 140,
+      "proteinG": 6.5,
+      "fatG": 6.8,
+      "carbsG": 10.4,
+      "tags": ["coffee", "dairy", "drink"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "13:05",
+      "title": "Суп с лапшой",
+      "kcalMin": 220,
+      "kcalMax": 280,
+      "proteinG": 12,
+      "fatG": 7.5,
+      "carbsG": 32,
+      "tags": ["soup"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "13:15",
+      "title": "Салат из свежих овощей",
+      "kcalMin": 120,
+      "kcalMax": 160,
+      "proteinG": 2.2,
+      "fatG": 10.8,
+      "carbsG": 8.4,
+      "tags": ["salad", "vegetables", "light"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "16:20",
+      "title": "Медовик",
+      "kcalMin": 380,
+      "kcalMax": 440,
+      "proteinG": 5.8,
+      "fatG": 21.6,
+      "carbsG": 48,
+      "tags": ["dessert", "sweet", "pastry"]
+    },
+    {
+      "daysAgo": 1,
+      "time": "19:45",
+      "title": "Гречка с курицей",
+      "kcalMin": 430,
+      "kcalMax": 500,
+      "proteinG": 33,
+      "fatG": 12.6,
+      "carbsG": 51,
+      "tags": ["grain", "poultry", "high_protein"]
+    }
+  ]
+}

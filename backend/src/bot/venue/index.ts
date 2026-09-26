@@ -20,6 +20,7 @@ export function createVenueModule(kit: BotKit, waiting: ImportWaiting): BotModul
       vn: byAction({
         home: workspace.home,
         new: workspace.create,
+        demo: workspace.claimDemo,
         menu: withDefault(menu.show, { upload: menu.upload, cancel: menu.cancelUpload }),
         imp: byAction({ apply: menu.apply }),
         deals: deals.list,

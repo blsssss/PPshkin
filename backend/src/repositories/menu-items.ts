@@ -176,3 +176,23 @@ export async function findByIds(db: Queryable, ids: readonly number[]): Promise<
   );
   return rows.map(mapMenuItem);
 }
+
+export async function copyAvailable(
+  db: Queryable,
+  fromVenueId: number,
+  toVenueId: number,
+  now: Date,
+): Promise<MenuItem[]> {
+  const { rows } = await db.query<MenuItemRow>(
+    `insert into menu_items (venue_id, name, description, category, price_rub, weight_g, kcal, protein_g, fat_g,
+                             carbs_g, nutrition_source, tags, is_available, created_at, updated_at)
+     select $2, name, description, category, price_rub, weight_g, kcal, protein_g, fat_g, carbs_g,
+            nutrition_source, tags, true, $3, $3
+       from menu_items
+      where venue_id = $1 and archived_at is null and is_available
+      order by id
+     returning ${MENU_ITEM_COLUMNS}`,
+    [fromVenueId, toVenueId, now],
+  );
+  return rows.map(mapMenuItem).sort((left, right) => left.id - right.id);
+}

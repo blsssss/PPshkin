@@ -1,7 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { BAUMANA, KREMLIN, seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
+import {
+  BAUMANA,
+  KREMLIN,
+  seedDeal,
+  seedDemoCopy,
+  seedDemoVenue,
+  seedMenuItem,
+  seedUser,
+  seedVenue,
+} from '../../test/venues.ts';
 import type { Deal, GeoPoint, MenuItem, Venue } from '../domain/models.ts';
 import type { Tag } from '../domain/vocabulary.ts';
 import * as deals from '../repositories/deals.ts';
@@ -28,7 +37,15 @@ const service = createRecommendationsService({
   pool,
   clock,
   consents: { requirePersonalData: () => Promise.resolve() },
+  demoMode: false,
 });
+const demoService = createRecommendationsService({
+  pool,
+  clock,
+  consents: { requirePersonalData: () => Promise.resolve() },
+  demoMode: true,
+});
+const MOSCOW: GeoPoint = { lat: 55.7558, lon: 37.6173 };
 
 interface World {
   zerno: Venue;
@@ -53,9 +70,9 @@ const request = (overrides: Partial<RecommendationRequest> = {}): Recommendation
 
 const names = (result: RecommendationsResult) => result.items.map((offer) => offer.item.name);
 
-async function logMeal(eatenAt: Date, title: string, kcal: number, tags: Tag[] = []) {
+async function logMeal(eatenAt: Date, title: string, kcal: number, tags: Tag[] = [], userId = GUEST) {
   await meals.insert(pool, {
-    userId: GUEST,
+    userId,
     title,
     kcalMin: kcal,
     kcalMax: kcal,
@@ -158,6 +175,7 @@ describe('recommendations', () => {
       slot: 'snack',
       remainingKcal: 2000,
       slotBudgetKcal: 200,
+      demoCenterUsed: false,
       items: [],
     };
     expect(await service.recommend(GUEST, request())).toEqual(empty);
@@ -175,6 +193,7 @@ describe('recommendations', () => {
         requirePersonalData: () =>
           Promise.reject(forbidden('consent_required', 'Consent to personal data processing is required')),
       },
+      demoMode: false,
     });
     await expect(guarded.recommend(GUEST, request())).rejects.toMatchObject({
       status: 403,
@@ -248,6 +267,7 @@ describe('recommendations', () => {
       slot: 'snack',
       remainingKcal: 50,
       slotBudgetKcal: 50,
+      demoCenterUsed: false,
       items: [],
     });
     expect(await storedOffers()).toEqual([]);
@@ -262,6 +282,7 @@ describe('recommendations', () => {
       slot: 'dinner',
       remainingKcal: 1550,
       slotBudgetKcal: 600,
+      demoCenterUsed: false,
       items: [],
     });
     expect(await storedOffers()).toEqual([]);
@@ -282,6 +303,7 @@ describe('recommendations', () => {
       slot: 'snack',
       remainingKcal: 1550,
       slotBudgetKcal: 200,
+      demoCenterUsed: false,
       items: [],
     });
     expect(await storedOffers()).toEqual([]);
@@ -496,5 +518,46 @@ describe('declining an offer', () => {
       decline_reason: null,
       responded_at: new Date(NOW),
     });
+  });
+});
+
+describe('demo mode', () => {
+  it('ranks venues of Kazan from its centre for a guest far away and says so', async () => {
+    const world = await seedWorld();
+    await seedHistory();
+    const result = await demoService.recommend(GUEST, request({ location: MOSCOW }));
+    expect(result.status).toBe('ok');
+    expect(result.demoCenterUsed).toBe(true);
+    const cheesecake = result.items.find((offer) => offer.item.id === world.cheesecake.id);
+    expect(cheesecake?.distanceM).toBe(Math.round(distanceMeters(BAUMANA, world.zerno.location)));
+    expect(names(result)).not.toContain('Круассан');
+
+    const far = await service.recommend(GUEST, request({ location: MOSCOW }));
+    expect(far).toMatchObject({ status: 'nothing_fits', demoCenterUsed: false });
+  });
+
+  it('reports the replaced point even before the profile has any meals', async () => {
+    await seedUser(pool, GUEST, MOSCOW);
+    expect(await demoService.recommend(GUEST, request({ location: null }))).toMatchObject({
+      status: 'profile_empty',
+      demoCenterUsed: true,
+    });
+  });
+
+  it('offers the copy of a demo venue to its owner and the seeded venue to everyone else', async () => {
+    const seeded = await seedDemoVenue(pool, 900001, { name: 'Демо', location: BAUMANA });
+    await seedMenuItem(pool, seeded.id, { name: 'Эклер', tags: ['dessert', 'sweet'] });
+    const copy = await seedDemoCopy(pool, seeded.id, OTHER);
+    await seedMenuItem(pool, copy.id, { name: 'Эклер', tags: ['dessert', 'sweet'] });
+    await seedHistory();
+    for (const [userId, venue] of [
+      [OTHER, copy],
+      [GUEST, seeded],
+    ] as const) {
+      await logMeal(later(-3 * HOUR), 'Сырники', 450, ['breakfast'], userId);
+      const result = await demoService.recommend(userId, request());
+      expect(result.items.map((offer) => offer.venue.id)).toEqual([venue.id]);
+      expect(result.items[0]?.explanation.assumptions).toContain('Заведение и меню тестовые');
+    }
   });
 });

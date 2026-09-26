@@ -152,3 +152,20 @@ export async function listSince(db: Queryable, userId: number, since: Date): Pro
   );
   return rows.map(mapMeal);
 }
+
+export async function hasSource(db: Queryable, userId: number, source: MealSource): Promise<boolean> {
+  const row = await maybeOne<{ found: boolean }>(
+    db,
+    'select exists (select 1 from meals where user_id = $1 and source = $2) as found',
+    [userId, source],
+  );
+  return row?.found ?? false;
+}
+
+export async function removeBySource(db: Queryable, userId: number, source: MealSource): Promise<number> {
+  const { rowCount } = await db.query('delete from meals where user_id = $1 and source = $2', [
+    userId,
+    source,
+  ]);
+  return rowCount ?? 0;
+}

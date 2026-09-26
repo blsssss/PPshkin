@@ -118,7 +118,7 @@ export function recommendationsResult(
   items: RecommendedOffer[] = [],
   remainingKcal = 1100,
 ): RecommendationsResult {
-  return { status, slot: 'snack', remainingKcal, slotBudgetKcal: 300, items };
+  return { status, slot: 'snack', remainingKcal, slotBudgetKcal: 300, demoCenterUsed: false, items };
 }
 
 export const eclairCard: OfferCard = {

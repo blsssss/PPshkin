@@ -40,6 +40,7 @@ import {
   WELCOME_BACK,
 } from '../texts.ts';
 import { parseKcalTarget } from './meal-text.ts';
+import { demoDiaryButtons } from './offer-keyboards.ts';
 import { isGoal, parseKcalChoice, profileMessage, renderProfile } from './profile.ts';
 
 function isOrigin(value: string | undefined): value is Origin {
@@ -63,7 +64,8 @@ export function createOnboardingModule(kit: BotKit): BotModule {
   }
 
   async function finish(ctx: BotContext): Promise<void> {
-    await ctx.reply({ text: ONBOARDING_DONE, buttons: helpButtons() });
+    const sample = services.demo.enabled ? demoDiaryButtons() : [];
+    await ctx.reply({ text: ONBOARDING_DONE, buttons: [...helpButtons(), ...sample] });
   }
 
   async function start(ctx: BotContext, args: string): Promise<void> {

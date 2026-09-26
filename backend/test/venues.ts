@@ -70,29 +70,63 @@ export async function seedUser(db: Queryable, id: number, location: GeoPoint | n
   }
 }
 
+const DEFAULT_VENUE: venues.VenueFields = {
+  name: 'Кофейня «Зерно»',
+  address: 'ул. Баумана, 36',
+  category: 'coffee',
+  location: BAUMANA,
+  opensAt: '08:00',
+  closesAt: '22:00',
+  timezone: 'Europe/Moscow',
+};
+
 export async function seedVenue(
   db: Queryable,
   ownerId: number,
   fields: Partial<venues.VenueFields> = {},
 ): Promise<Venue> {
   await seedUser(db, ownerId);
-  const venue = await venues.insert(
-    db,
-    ownerId,
-    {
-      name: 'Кофейня «Зерно»',
-      address: 'ул. Баумана, 36',
-      category: 'coffee',
-      location: BAUMANA,
-      opensAt: '08:00',
-      closesAt: '22:00',
-      timezone: 'Europe/Moscow',
-      ...fields,
-    },
-    SEEDED_AT,
-  );
+  const venue = await venues.insert(db, ownerId, { ...DEFAULT_VENUE, ...fields }, SEEDED_AT);
   if (!venue) throw new Error(`User ${ownerId} already owns a venue`);
   return venue;
+}
+
+export async function seedDemoVenue(
+  db: Queryable,
+  id: number,
+  fields: Partial<venues.VenueFields> = {},
+  ownerId: number | null = null,
+): Promise<Venue> {
+  if (ownerId !== null) await seedUser(db, ownerId);
+  const venue = { ...DEFAULT_VENUE, ...fields };
+  await db.query(
+    `insert into venues (id, owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
+                         created_at, updated_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $11)`,
+    [
+      id,
+      ownerId,
+      venue.name,
+      venue.address,
+      venue.category,
+      venue.location.lat,
+      venue.location.lon,
+      venue.opensAt,
+      venue.closesAt,
+      venue.timezone,
+      SEEDED_AT,
+    ],
+  );
+  const [seeded] = await venues.findByIds(db, [id]);
+  if (!seeded) throw new Error(`Demo venue ${id} was not stored`);
+  return seeded;
+}
+
+export async function seedDemoCopy(db: Queryable, sourceId: number, ownerId: number): Promise<Venue> {
+  await seedUser(db, ownerId);
+  const copy = await venues.insertDemoCopy(db, sourceId, ownerId, SEEDED_AT);
+  if (!copy) throw new Error(`User ${ownerId} already owns a venue`);
+  return copy;
 }
 
 export async function seedMenuItem(

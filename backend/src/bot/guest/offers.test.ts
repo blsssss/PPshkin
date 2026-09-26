@@ -10,7 +10,9 @@ import {
   saladOffer,
   type OffersWorld,
 } from '../../../test/offers.ts';
+import { fakeDemo } from '../../../test/demo.ts';
 import { BAUMANA } from '../../../test/venues.ts';
+import type { DemoService } from '../../services/demo.ts';
 import type { RecommendedOffer } from '../../services/recommendations.ts';
 import { conflict } from '../../shared/errors.ts';
 import { dislikeMessage, isLocationStale, renderOfferCard, toOfferCard } from './offers.ts';
@@ -51,10 +53,12 @@ interface ChatSetup {
   located?: 'fresh' | 'stale';
   offers?: RecommendedOffer[];
   miniAppEnabled?: boolean;
+  demo?: DemoService;
 }
 
 function offersChat(setup: ChatSetup = {}) {
   const world: OffersWorld = offersWorld({ offers: setup.offers });
+  if (setup.demo) world.services.demo = setup.demo;
   if (setup.located) {
     world.user.location = BAUMANA;
     const age = setup.located === 'fresh' ? HOUR_MS : 13 * HOUR_MS;
@@ -815,3 +819,90 @@ describe('contextual suggestion after a meal', () => {
 function recommendedScore(score: number): RecommendedOffer {
   return { ...eclairOffer, score };
 }
+
+describe('demo mode', () => {
+  const FAR =
+    'Вы далеко от Казани, поэтому показываем тестовые заведения в центре Казани, расстояние считаем от ул. Баумана.';
+  const SAMPLE = { type: 'callback', text: 'Заполнить дневник примером', payload: 'of:demo' };
+
+  it('says why far away guests see Kazan', async () => {
+    const chat = offersChat({ located: 'fresh', demo: fakeDemo() });
+    chat.world.recommend.mockResolvedValue({
+      ...recommendationsResult('ok', [eclairOffer]),
+      demoCenterUsed: true,
+    });
+
+    const [card] = sent(await chat.send('/eat'));
+
+    expect(card?.text).toBe(`${FAR}\n\n${ECLAIR_TEXT}`);
+  });
+
+  it('says it on an empty result too', async () => {
+    const chat = offersChat({ located: 'fresh' });
+    chat.world.recommend.mockResolvedValue({
+      ...recommendationsResult('nothing_fits'),
+      demoCenterUsed: true,
+    });
+
+    const [reply] = sent(await chat.send('/eat'));
+
+    expect(reply?.text.startsWith(`${FAR}\n\n`)).toBe(true);
+  });
+
+  it('offers a diary sample while the profile is collected and fills it', async () => {
+    const demo = fakeDemo();
+    const chat = offersChat({ located: 'fresh', demo });
+    chat.world.insights.mockResolvedValue(insightsOf('collecting', 3));
+
+    const [card] = sent(await chat.send('/eat'));
+    expect(card?.buttons.at(-1)).toEqual([SAMPLE]);
+
+    const replies = await chat.press('of:demo', card?.messageId);
+
+    expect(demo.fillDiary).toHaveBeenCalledWith(GUEST_ID);
+    expect(answers(replies)[0]?.message).toMatchObject({
+      text: 'Добавили пример дневника за 5 дней. Теперь подбор учитывает привычки, например десерт около 16:00.',
+      buttons: [[{ type: 'callback', text: 'Что поесть?', payload: 'cmd:eat' }]],
+    });
+  });
+
+  it('offers the sample on an empty diary', async () => {
+    const chat = offersChat({ located: 'fresh', demo: fakeDemo() });
+    chat.world.recommend.mockResolvedValue(recommendationsResult('profile_empty'));
+    chat.world.insights.mockResolvedValue(insightsOf('empty', 5));
+
+    const [reply] = sent(await chat.send('/eat'));
+
+    expect(reply?.buttons).toEqual([
+      [{ type: 'callback', text: 'Как записать еду', payload: 'cmd:help' }],
+      [SAMPLE],
+    ]);
+  });
+
+  it('does not offer the sample to a ready profile or outside demo mode', async () => {
+    const ready = offersChat({ located: 'fresh', demo: fakeDemo() });
+    const off = offersChat({ located: 'fresh' });
+    off.world.insights.mockResolvedValue(insightsOf('collecting', 3));
+
+    const [readyCard] = sent(await ready.send('/eat'));
+    const [offCard] = sent(await off.send('/eat'));
+
+    expect(payloads(readyCard)).not.toContain('of:demo');
+    expect(payloads(offCard)).not.toContain('of:demo');
+  });
+
+  it('explains a sample that is already there', async () => {
+    const demo = fakeDemo({
+      fillDiary: vi.fn<DemoService['fillDiary']>(() =>
+        Promise.reject(conflict('demo_diary_exists', 'Demo diary already added')),
+      ),
+    });
+    const chat = offersChat({ located: 'fresh', demo });
+    chat.world.insights.mockResolvedValue(insightsOf('collecting', 3));
+    const [card] = sent(await chat.send('/eat'));
+
+    const replies = await chat.press('of:demo', card?.messageId);
+
+    expect(answers(replies)[0]?.notification).toBe('Пример уже добавлен');
+  });
+});

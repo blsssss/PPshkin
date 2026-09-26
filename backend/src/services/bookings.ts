@@ -85,14 +85,19 @@ function dealRunning(deal: Deal, now: Date): boolean {
   return deal.cancelledAt === null && deal.startsAt <= now && deal.endsAt > now;
 }
 
-async function lockBookableItem(db: Queryable, itemId: number): Promise<MenuItem> {
+async function lockBookableItem(
+  db: Queryable,
+  itemId: number,
+  userId: number,
+): Promise<{ item: MenuItem; venue: Venue }> {
   const [found] = await menuItems.findByIds(db, [itemId]);
-  if (!found) throw notFound('menu_item_not_found', 'Menu item not found');
+  const venue = found ? await venues.findVisible(db, found.venueId, userId) : null;
+  if (!found || !venue) throw notFound('menu_item_not_found', 'Menu item not found');
   const item = await lockMenuItem(db, found.venueId, found.id);
   if (!item.isAvailable) {
     throw unprocessable('menu_item_unavailable', 'The venue has hidden this item from guests');
   }
-  return item;
+  return { item, venue };
 }
 
 async function lockBookableDeal(db: Queryable, item: MenuItem, dealId: number, now: Date): Promise<Deal> {
@@ -155,9 +160,7 @@ export function createBookingsService({
     now: Date,
   ): Promise<BookingView> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
-    const item = await lockBookableItem(client, input.menuItemId);
-    const venue = await venues.findById(client, item.venueId);
-    if (!venue) throw new Error(`Menu item ${item.id} refers to a missing venue`);
+    const { item, venue } = await lockBookableItem(client, input.menuItemId, userId);
     if (!isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone)) {
       throw conflict('venue_closed', 'The venue is closed now');
     }
