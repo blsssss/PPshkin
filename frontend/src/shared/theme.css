@@ -1,0 +1,86 @@
+.ppsh-app {
+  --ppsh-violet: #6e1aff;
+  --ppsh-violet-strong: #5a12d6;
+  --ppsh-blue: #0077ff;
+  --ppsh-blue-strong: #0062db;
+  --ppsh-cyan: #7dedf7;
+  --ppsh-purple: #9600ff;
+  --ppsh-pink: #ff3785;
+  --ppsh-pink-soft: #ffebf3;
+  --ppsh-panel: #ebf4f9;
+  --ppsh-accent-text: #6e1aff;
+  --ppsh-on-accent: #ffffff;
+  --ppsh-on-cyan: #000000;
+  --ppsh-on-pink: #000000;
+  --ppsh-qr-paper: #ffffff;
+  --ppsh-skeleton: rgba(110, 26, 255, 0.08);
+  --ppsh-skeleton-shine: rgba(110, 26, 255, 0.16);
+  --ppsh-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --ppsh-content-width: 560px;
+  --ppsh-tabbar-height: 60px;
+  --ppsh-gutter: 16px;
+
+  --button-primary: var(--ppsh-violet);
+  --states-button-primary-hover: #5d12e0;
+  --states-button-primary-pressed: #4f0fc0;
+  --text-themed: var(--ppsh-accent-text);
+  --icon-themed: var(--ppsh-violet);
+  --controls-active: var(--ppsh-violet);
+  --counter-themed: var(--ppsh-violet);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ppsh-app {
+    --ppsh-violet: #7c3aff;
+    --ppsh-violet-strong: #9a66ff;
+    --ppsh-panel: #22232b;
+    --ppsh-pink-soft: #3a1628;
+    --ppsh-accent-text: #a57aff;
+    --ppsh-skeleton: rgba(255, 255, 255, 0.06);
+    --ppsh-skeleton-shine: rgba(255, 255, 255, 0.12);
+
+    --states-button-primary-hover: #8a4dff;
+    --states-button-primary-pressed: #6a2ae6;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background-primary, #ffffff);
+}
+
+.ppsh-app {
+  min-height: 100dvh;
+  color: var(--text-primary);
+  background: var(--background-primary);
+  font-family: var(--family-base);
+}
+
+.ppsh-app :focus-visible {
+  outline: 3px solid var(--ppsh-blue);
+  outline-offset: 2px;
+}
+
+.ppsh-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ppsh-app *,
+  .ppsh-app *::before,
+  .ppsh-app *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

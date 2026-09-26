@@ -1,0 +1,28 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+}
+
+.mark {
+  width: 40px;
+  height: 40px;
+}
+
+.body {
+  fill: currentColor;
+}
+
+.corner {
+  fill: var(--ppsh-cyan);
+}
+
+.word {
+  font-family: var(--ppsh-font-mono);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}

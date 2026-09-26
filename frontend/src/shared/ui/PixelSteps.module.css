@@ -1,0 +1,33 @@
+.steps {
+  position: absolute;
+  width: min(60vw, 280px);
+  height: auto;
+  pointer-events: none;
+}
+
+.top-right {
+  top: 0;
+  right: 0;
+}
+
+.bottom-left {
+  bottom: 0;
+  left: 0;
+  transform: rotate(180deg);
+}
+
+.violet {
+  fill: var(--ppsh-violet);
+}
+
+.cyan {
+  fill: var(--ppsh-cyan);
+}
+
+.pink {
+  fill: var(--ppsh-pink);
+}
+
+.blue {
+  fill: var(--ppsh-blue);
+}

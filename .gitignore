@@ -10,3 +10,4 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
+frontend/src/api/schema.d.ts

@@ -1,0 +1,27 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.block {
+  display: block;
+  max-width: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--ppsh-skeleton) 0%,
+    var(--ppsh-skeleton-shine) 50%,
+    var(--ppsh-skeleton) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

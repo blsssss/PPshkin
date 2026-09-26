@@ -21,6 +21,39 @@ npm test
 
 `npm run format` приводит код к стилю Prettier.
 
+Из каталога `frontend`:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+`lint`, `typecheck` и `test` сначала генерируют типы API из `openapi.yaml` скриптом `api:generate`.
+
+## Соглашения фронтенда
+
+`frontend/` - мини-приложение MAX на React 19, Vite, TypeScript и MAX UI. Версии зависимостей закреплены точно, `react` и `react-dom` ровно 19.2.8: этого требует `@maxhub/max-ui` 0.5.0.
+
+| Каталог | Что в нём |
+| --- | --- |
+| `frontend/src/app/` | корень, роутер, экраны входа, нижняя панель, разбор `startParam` |
+| `frontend/src/max/` | обёртка MAX Bridge: все вызовы `window.WebApp` только через неё |
+| `frontend/src/api/` | клиент `openapi-fetch`, вход и сессия, `ApiError`, словарь текстов ошибок `messages.ts` |
+| `frontend/src/shared/` | общие компоненты (`ui/`), форматирование, словари подписей, тема |
+| `frontend/src/features/<раздел>/` | экраны разделов |
+
+- Типы запросов и ответов берутся только из `frontend/src/api/schema.d.ts`, который генерирует скрипт `api:generate`. Файл не коммитится. Ручных DTO нет, поэтому расхождение с бэкендом ловит `npm run typecheck`.
+- Пользователю не показывается `detail` из ответа API: текст выбирается по `code` через `userMessage(error)`, новые коды добавляются в `frontend/src/api/messages.ts`.
+- Скрипт MAX Bridge подключается только с `https://st.max.ru/js/max-web-app.js`. Обёртки Bridge не бросают исключений и возвращают фолбэк вне MAX. `openLink`, `openMaxLink` и `shareMaxContent` вызываются синхронно в обработчике клика.
+- Токен сессии хранится только в памяти, запросы идут с заголовком `Authorization`, без cookies.
+- Цвета задаются только в `frontend/src/shared/theme.css` (токены `--ppsh-*` и переменные MAX UI), компоненты используют переменные. Шрифты только со свободной лицензией.
+- Все обращения к `localStorage` в `try/catch`: в веб-версии MAX приложение открыто в iframe.
+- Тесты не ходят в сеть: `fetch` подменяется, `window.WebApp` подменяется фейком из `frontend/test/webapp.ts`.
+- Вне MAX для разработки: `DEMO_MODE=true` и `DEMO_GUEST_TOKEN` на бэкенде, то же значение в `VITE_DEV_TOKEN` в корневом `.env`, затем `npm run dev` в `frontend/`. `VITE_DEV_TOKEN` работает только в `npm run dev` и не попадает в сборку.
+
 ## Соглашения бэкенда
 
 `backend/` - самостоятельный сервис на Node 24 и TypeScript: Fastify 5, zod 4, PostgreSQL 18. Перед тем как писать новый модуль, откройте соседний готовый (`src/http/routes/auth.ts`, `src/services/auth.ts`, `src/repositories/users.ts`) и повторите его устройство. Ниже собрано то, что проверяется на ревью.
