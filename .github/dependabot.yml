@@ -28,6 +28,13 @@ updates:
         dependency-type: development
       runtime-dependencies:
         dependency-type: production
+  - package-ecosystem: pip
+    directory: /deploy/ansible
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

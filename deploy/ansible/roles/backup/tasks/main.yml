@@ -1,0 +1,12 @@
+- name: Install the backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: "{{ backup_app_dir }}/backup.sh"
+    mode: "0750"
+
+- name: Schedule the nightly database backup
+  ansible.builtin.cron:
+    name: ppshkin database backup
+    minute: "{{ backup_minute }}"
+    hour: "{{ backup_hour }}"
+    job: "{{ backup_app_dir }}/backup.sh"

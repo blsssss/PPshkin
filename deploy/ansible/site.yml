@@ -1,0 +1,8 @@
+- name: Deploy PPshkin
+  hosts: all
+  gather_facts: false
+  roles:
+    - app
+    - role: backup
+      vars:
+        backup_app_dir: "{{ app_dir }}"

@@ -1,0 +1,23 @@
+app_dir: /opt/ppshkin
+app_source_dir: "{{ playbook_dir }}/../.."
+app_pull_images: true
+app_wait_timeout: 180
+app_env_required:
+  - ACME_EMAIL
+  - POSTGRES_PASSWORD
+  - SESSION_SECRET
+app_env_names:
+  - ACME_EMAIL
+  - BOT_MODE
+  - POSTGRES_PASSWORD
+  - SESSION_SECRET
+  - MAX_BOT_TOKEN
+  - MAX_BOT_USERNAME
+  - MAX_WEBHOOK_SECRET
+  - MINI_APP_ENABLED
+  - PROACTIVE_OFFERS
+  - CHADGPT_API_KEY
+  - DEMO_MODE
+  - DEMO_GUEST_TOKEN
+  - DEMO_VENUE_TOKEN
+  - LOG_LEVEL

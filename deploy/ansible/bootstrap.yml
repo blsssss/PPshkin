@@ -1,0 +1,7 @@
+- name: Prepare the server for PPshkin
+  hosts: all
+  vars:
+    ansible_user: root
+  roles:
+    - docker
+    - base

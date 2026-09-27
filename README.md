@@ -580,7 +580,7 @@ docker compose up -d --wait
 
 ## Развёртывание
 
-Продакшен поднимается одной командой `docker compose -f compose.prod.yaml up -d --wait` на сервере в России: Caddy с Let's Encrypt, образы backend и мини-приложения из GHCR, PostgreSQL на томе Docker, бот в режиме webhook. Требования к серверу, DNS, файл `.env`, подписка webhook, регистрация мини-приложения, обновление, откат и резервные копии: [docs/deploy.md](docs/deploy.md).
+Продакшен работает на сервере в России из `compose.prod.yaml`: Caddy с Let's Encrypt, образы backend и мини-приложения из GHCR, PostgreSQL на томе Docker, бот в режиме webhook. Каждый push в `main` выкатывается автоматически: GitHub Actions собирает образы с тегом коммита, Ansible из [deploy/ansible](deploy/ansible) собирает `.env` из секретов окружения `production`, делает копию базы, поднимает сервисы и при неудаче возвращает предыдущую версию. Настройка сервера, секреты, webhook, регистрация мини-приложения, заморозка версии, откат и резервные копии: [docs/deploy.md](docs/deploy.md).
 
 ## Разработка
 
@@ -595,7 +595,7 @@ npm run typecheck
 npm test
 ```
 
-`openapi.yaml` генерируется из кода командой `npm run openapi` в `backend/`, мини-приложение генерирует из него типы клиента. CI (`.github/workflows/ci.yml`) проверяет backend, frontend, сборку и запуск `compose.yaml`, а также продакшен-конфигурацию `compose.prod.yaml` с Caddy.
+`openapi.yaml` генерируется из кода командой `npm run openapi` в `backend/`, мини-приложение генерирует из него типы клиента. CI (`.github/workflows/ci.yml`) проверяет backend, frontend, сборку и запуск `compose.yaml`, а также выкат `compose.prod.yaml` с Caddy плейбуком Ansible на раннере CI вместе с автоматическим откатом неисправной версии.
 
 Живые проверки MAX, ChadGPT и рабочего API (`npm run smoke` в `backend/`, workflow `.github/workflows/smoke.yml`) обращаются к настоящим сервисам и запускаются только вручную, в CI их нет: [docs/smoke.md](docs/smoke.md).
 

@@ -113,39 +113,59 @@ jobs:
     env:
       DOMAIN: localhost
       ACME_EMAIL: ci@example.com
-      IMAGE_TAG: ci
       BOT_MODE: "off"
-      POSTGRES_PASSWORD: ci-password
+      DEMO_MODE: "true"
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: install Ansible
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --quiet --requirement deploy/ansible/requirements.txt
+          echo "$RUNNER_TEMP/ansible/bin" >> "$GITHUB_PATH"
+      - run: ansible-lint
+        working-directory: deploy/ansible
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
           context: backend
           load: true
-          tags: ghcr.io/blsssss/ppshkin-backend:ci
+          tags: ghcr.io/blsssss/ppshkin-backend:sha-good
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
       - uses: docker/build-push-action@v7
         with:
           context: frontend
           load: true
-          tags: ghcr.io/blsssss/ppshkin-frontend:ci
+          tags: ghcr.io/blsssss/ppshkin-frontend:sha-good
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-      - run: |
-          secret=$(openssl rand -hex 32)
-          echo "SESSION_SECRET=$secret" > .env
-      - run: docker compose -f compose.prod.yaml config --quiet
+      - name: a broken release whose backend exits on start
+        run: |
+          docker create --name broken-backend ghcr.io/blsssss/ppshkin-backend:sha-good
+          docker commit --change 'ENTRYPOINT ["false"]' broken-backend ghcr.io/blsssss/ppshkin-backend:sha-broken
+          docker rm broken-backend
+          docker tag ghcr.io/blsssss/ppshkin-frontend:sha-good ghcr.io/blsssss/ppshkin-frontend:sha-broken
+      - name: release secrets
+        run: |
+          {
+            echo "APP_DIR=$RUNNER_TEMP/ppshkin"
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "SESSION_SECRET=$(openssl rand -hex 32)"
+            echo "DEMO_GUEST_TOKEN=$(openssl rand -hex 24)"
+            echo "DEMO_VENUE_TOKEN=$(openssl rand -hex 24)"
+          } >> "$GITHUB_ENV"
       - run: >-
           docker run --rm
           --env DOMAIN --env ACME_EMAIL
           --volume "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
           caddy:2.11.4-alpine
           caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-      - run: docker compose -f compose.prod.yaml up --detach --wait --wait-timeout 180
+      - name: Ansible deploys the good release
+        run: >-
+          ansible-playbook -i localhost, -c local deploy/ansible/site.yml
+          -e app_domain=localhost -e app_image_tag=sha-good -e "app_dir=$APP_DIR" -e app_pull_images=false
       - name: https://localhost/health answers 200
         run: |
           status=$(curl -sk --retry 10 --retry-delay 1 --retry-all-errors --output /dev/null --write-out '%{http_code}' https://localhost/health)
@@ -156,6 +176,9 @@ jobs:
           result=$(curl -sk --output /dev/null --write-out '%{http_code} %{content_type}' https://localhost/api/v1/me)
           echo "$result"
           grep -Eq '^401 application/problem\+json(;|$)' <<< "$result"
+      - name: the demo guest token lists at least six demo venues over HTTPS
+        run: |
+          curl -sk --fail -H "Authorization: Bearer $DEMO_GUEST_TOKEN" "https://localhost/api/v1/venues?lat=55.7887&lon=49.1221" | jq -e '.items | length >= 6'
       - name: https://localhost/ serves the mini app
         run: |
           page="$RUNNER_TEMP/index.html"
@@ -179,9 +202,34 @@ jobs:
           curl -s --max-time 3 http://127.0.0.1:3000/health || code=$?
           echo "curl exit code $code"
           test "$code" = 7
+      - name: the release, the private environment file and the nightly backup are in place
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          test "$(cat release)" = sha-good
+          test "$(stat -c %a .env)" = 600
+          crontab -l | grep -F "$APP_DIR/backup.sh"
+          ./backup.sh
+          test -s "backups/ppshkin-$(date +%F).dump"
+      - name: a broken release fails the playbook
+        run: |
+          if ansible-playbook -i localhost, -c local deploy/ansible/site.yml -e app_domain=localhost -e app_image_tag=sha-broken -e "app_dir=$APP_DIR" -e app_pull_images=false -e app_wait_timeout=60; then
+            echo "the broken release was reported as deployed"
+            exit 1
+          fi
+      - name: the good release serves again after the rollback
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          test "$(cat release)" = sha-good
+          docker compose -f compose.prod.yaml ps --format '{{.Image}}' backend | grep -Fx ghcr.io/blsssss/ppshkin-backend:sha-good
+          ls backups/predeploy-*.dump
+          status=$(curl -sk --retry 10 --retry-delay 1 --retry-all-errors --output /dev/null --write-out '%{http_code}' https://localhost/ready)
+          echo "$status"
+          test "$status" = 200
       - if: failure()
+        working-directory: ${{ env.APP_DIR }}
         run: docker compose -f compose.prod.yaml logs --no-color
       - if: always()
+        working-directory: ${{ env.APP_DIR }}
         run: docker compose -f compose.prod.yaml down --volumes
 
   ci:

@@ -1,0 +1,69 @@
+- name: Check that the CI deploy key is given
+  ansible.builtin.assert:
+    that: base_deploy_public_key is defined and base_deploy_public_key is match('ssh-ed25519 ')
+    fail_msg: pass the public CI deploy key as -e base_deploy_public_key=...
+    quiet: true
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - unattended-upgrades
+      - cron
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+- name: Allow SSH, HTTP and HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ base_open_ports }}"
+
+- name: Deny other incoming traffic
+  community.general.ufw:
+    state: enabled
+    direction: incoming
+    policy: deny
+
+- name: Allow SSH logins only with keys
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-ppshkin.conf
+    mode: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+  notify: Reload SSH
+
+- name: Create the deploy user
+  ansible.builtin.user:
+    name: "{{ base_deploy_user }}"
+    shell: /bin/bash
+    groups: docker
+    append: true
+    password_lock: true
+
+- name: Authorize the CI deploy key
+  ansible.posix.authorized_key:
+    user: "{{ base_deploy_user }}"
+    key: "{{ base_deploy_public_key }}"
+    key_options: no-port-forwarding,no-agent-forwarding,no-X11-forwarding
+    exclusive: true
+
+- name: Create the service directory
+  ansible.builtin.file:
+    path: "{{ base_app_dir }}"
+    state: directory
+    owner: "{{ base_deploy_user }}"
+    group: "{{ base_deploy_user }}"
+    mode: "0750"
