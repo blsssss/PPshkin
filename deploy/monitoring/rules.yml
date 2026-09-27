@@ -1,0 +1,79 @@
+groups:
+  - name: ppshkin
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} не отвечает Prometheus"
+          description: "Цель {{ $labels.instance }} недоступна больше 2 минут."
+
+      - alert: SiteUnavailable
+        expr: probe_success{job="blackbox"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сайт недоступен по HTTPS"
+          description: "{{ $labels.instance }} не отвечает 200 больше 2 минут: бот, мини-приложение и API недоступны пользователям."
+
+      - alert: CertificateExpiresSoon
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox"} - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Сертификат истекает через {{ $value | humanize }} дн."
+          description: "Caddy не продлил сертификат {{ $labels.instance }}, проверьте журнал caddy."
+
+      - alert: HighErrorRate
+        expr: >-
+          sum(rate(http_request_duration_seconds_count{job="backend",status_code=~"5.."}[5m]))
+          / sum(rate(http_request_duration_seconds_count{job="backend"}[5m])) > 0.05
+          and sum(rate(http_request_duration_seconds_count{job="backend"}[5m])) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ошибки 5xx: {{ $value | humanizePercentage }} запросов"
+          description: "Backend отвечает ошибками сервера больше 5 минут, смотрите журнал backend."
+
+      - alert: SlowResponses
+        expr: >-
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="backend",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[5m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "95-й перцентиль ответа {{ $value | humanizeDuration }}"
+          description: "API без распознавания отвечает медленнее 2 секунд больше 10 минут."
+
+      - alert: DiskAlmostFull
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Диск заполнен на {{ $value | humanizePercentage }}"
+          description: "Проверьте копии базы в /opt/ppshkin/backups и образы Docker."
+
+      - alert: MemoryHigh
+        expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Память занята на {{ $value | humanizePercentage }}"
+          description: "Сервер близок к исчерпанию памяти, возможен OOM контейнеров."
+
+      - alert: CpuHigh
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU загружен на {{ $value | humanizePercentage }}"
+          description: "Процессор загружен больше 90% дольше 15 минут."

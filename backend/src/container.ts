@@ -19,6 +19,7 @@ import type { Services } from './services/index.ts';
 import { createInsightsService } from './services/insights.ts';
 import { createMenuImportsService } from './services/menu-imports.ts';
 import { createMenuService } from './services/menu.ts';
+import { createMetricsService } from './services/metrics.ts';
 import { createProfileService } from './services/profile.ts';
 import { createRecommendationsService } from './services/recommendations.ts';
 import { createVenuesService } from './services/venues.ts';
@@ -48,6 +49,7 @@ export function createServices({
   const bookings = createBookingsService({ pool, clock, consents, notifier, background });
   return {
     health: createHealthService(pool),
+    metrics: createMetricsService(pool),
     auth: createAuthService(
       pool,
       {

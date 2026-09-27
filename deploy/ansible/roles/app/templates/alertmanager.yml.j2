@@ -1,0 +1,14 @@
+route:
+  receiver: telegram
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token: "{{ lookup('ansible.builtin.env', 'ALERT_BOT_TOKEN') }}"
+        chat_id: {{ lookup('ansible.builtin.env', 'ALERT_CHAT_ID') | int }}
+        parse_mode: HTML
+        send_resolved: true

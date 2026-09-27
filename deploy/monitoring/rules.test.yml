@@ -1,0 +1,65 @@
+rule_files:
+  - rules.yml
+
+evaluation_interval: 30s
+
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'up{job="backend",instance="backend:3000"}'
+        values: 1 1 0 0 0 0 0 0
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: TargetDown
+        exp_alerts: []
+      - eval_time: 3m30s
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: backend
+              instance: backend:3000
+            exp_annotations:
+              summary: "backend не отвечает Prometheus"
+              description: "Цель backend:3000 недоступна больше 2 минут."
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="backend",route="/api/v1/me",status_code="200"}'
+        values: 0+6x20
+      - series: 'http_request_duration_seconds_count{job="backend",route="/api/v1/me",status_code="500"}'
+        values: 0+3x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Ошибки 5xx: 33.33% запросов"
+              description: "Backend отвечает ошибками сервера больше 5 минут, смотрите журнал backend."
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="backend",route="/api/v1/me",status_code="500"}'
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HighErrorRate
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox",instance="https://hackathon.easymythic.dev/ready"}'
+        values: 1 0 0 0 0
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SiteUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: blackbox
+              instance: https://hackathon.easymythic.dev/ready
+            exp_annotations:
+              summary: "Сайт недоступен по HTTPS"
+              description: "https://hackathon.easymythic.dev/ready не отвечает 200 больше 2 минут: бот, мини-приложение и API недоступны пользователям."

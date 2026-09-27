@@ -11,12 +11,14 @@ import type { HealthService } from './health.ts';
 import type { InsightsService } from './insights.ts';
 import type { MenuImportsService } from './menu-imports.ts';
 import type { MenuService } from './menu.ts';
+import type { MetricsService } from './metrics.ts';
 import type { ProfileService } from './profile.ts';
 import type { RecommendationsService } from './recommendations.ts';
 import type { VenuesService } from './venues.ts';
 
 export interface Services {
   health: HealthService;
+  metrics: MetricsService;
   auth: AuthService;
   profile: ProfileService;
   consents: ConsentsService;

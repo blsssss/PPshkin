@@ -67,5 +67,8 @@ jobs:
           DEMO_GUEST_TOKEN: ${{ secrets.DEMO_GUEST_TOKEN }}
           DEMO_VENUE_TOKEN: ${{ secrets.DEMO_VENUE_TOKEN }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          ALERT_BOT_TOKEN: ${{ secrets.ALERT_BOT_TOKEN }}
+          ALERT_CHAT_ID: ${{ secrets.ALERT_CHAT_ID }}
       - name: https://hackathon.easymythic.dev/ready answers 200
         run: curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors https://hackathon.easymythic.dev/ready
