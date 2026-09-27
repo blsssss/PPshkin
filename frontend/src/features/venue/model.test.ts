@@ -196,6 +196,7 @@ describe('menu', () => {
 
   it('matches names without case, spaces and ё', () => {
     expect(normalizeName('  Ёжик В Тумане ')).toBe(normalizeName('ежик в тумане'));
+    expect(normalizeName('Пирожное   Ёжик')).toBe(normalizeName('пирожное ежик'));
   });
 });
 

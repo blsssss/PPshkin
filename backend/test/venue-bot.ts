@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { normalizeBookingCode } from '../src/domain/bookings.ts';
+import { menuNameKey } from '../src/domain/menu-imports.ts';
 import type { Booking, Deal, MenuImport, MenuItem, ParsedMenuItem, Venue } from '../src/domain/models.ts';
 import type { VenueAnalytics } from '../src/services/analytics.ts';
 import type { BookingView } from '../src/services/bookings.ts';
@@ -196,7 +197,23 @@ export function venueFake(clock: Clock) {
         if (found.status === 'applied') throw conflict('import_already_applied', 'Already applied');
         if (found.status !== 'ready') throw conflict('import_not_ready', 'Not ready');
         found.status = 'applied';
-        return items.map((item) => fake.seedItem({ ...item, nutritionSource: 'estimate' }));
+        const venue = ownVenue(ownerId);
+        const onMenu = new Map(
+          state.items
+            .filter((item) => item.venueId === venue.id && item.archivedAt === null)
+            .map((item) => [menuNameKey(item.name), item]),
+        );
+        const added: MenuItem[] = [];
+        const duplicates = new Set<MenuItem>();
+        for (const item of items) {
+          const existing = onMenu.get(menuNameKey(item.name));
+          if (existing && !added.includes(existing)) duplicates.add(existing);
+          if (existing) continue;
+          const created = fake.seedItem({ ...item, nutritionSource: 'estimate' });
+          added.push(created);
+          onMenu.set(menuNameKey(item.name), created);
+        }
+        return { added, duplicates: [...duplicates] };
       }),
     },
     deals: {

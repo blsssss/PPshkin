@@ -25,6 +25,8 @@ const ITEM_FORMS: PluralForms = ['позиция', 'позиции', 'позиц
 const ITEM_OBJECT_FORMS: PluralForms = ['позицию', 'позиции', 'позиций'];
 const ADDED_FORMS: PluralForms = ['Добавлена', 'Добавлено', 'Добавлено'];
 const SKIPPED_FORMS: PluralForms = ['пропущена', 'пропущено', 'пропущено'];
+const NEW_ITEM_FORMS: PluralForms = ['новая позиция', 'новые позиции', 'новых позиций'];
+const WAS_FORMS: PluralForms = ['была', 'были', 'были'];
 const BOOKING_FORMS: PluralForms = ['бронь', 'брони', 'броней'];
 const DAY_FORMS: PluralForms = ['день', 'дня', 'дней'];
 
@@ -274,13 +276,31 @@ export function importReadyText(items: readonly ParsedMenuItem[]): string {
   ].join('\n');
 }
 
-export function importAppliedText(added: number, skipped: readonly string[]): string {
-  const result = `${plural(added, ADDED_FORMS)} ${counted(added, ITEM_FORMS)}.`;
+function namesList(names: readonly string[]): string {
+  const shown = names.slice(0, SKIPPED_NAMES_LIMIT).map(itemName);
+  const rest = names.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} и ещё ${rest}` : shown.join(', ');
+}
+
+function addedText(added: number, skipped: readonly string[], duplicates: readonly string[]): string {
+  if (duplicates.length === 0) return `${plural(added, ADDED_FORMS)} ${counted(added, ITEM_FORMS)}.`;
+  const list = namesList(duplicates);
+  if (added === 0) {
+    const all = skipped.length === 0 ? 'Все позиции' : 'Позиции с ценой';
+    return `${all} уже есть в меню: ${list}. Новых не добавлено.`;
+  }
+  const were = `${duplicates.length} уже ${plural(duplicates.length, WAS_FORMS)} в меню`;
+  return `${plural(added, ADDED_FORMS)} ${counted(added, NEW_ITEM_FORMS)}, ${were}: ${list}.`;
+}
+
+export function importAppliedText(
+  added: number,
+  skipped: readonly string[],
+  duplicates: readonly string[] = [],
+): string {
+  const result = addedText(added, skipped, duplicates);
   if (skipped.length === 0) return result;
-  const names = skipped.slice(0, SKIPPED_NAMES_LIMIT).map(itemName);
-  const rest = skipped.length - names.length;
-  const list = rest > 0 ? `${names.join(', ')} и ещё ${rest}` : names.join(', ');
-  return `${result} Без цены ${plural(skipped.length, SKIPPED_FORMS)} ${skipped.length}: ${list}. Их можно добавить в кабинете.`;
+  return `${result} Без цены ${plural(skipped.length, SKIPPED_FORMS)} ${skipped.length}: ${namesList(skipped)}. Их можно добавить в кабинете.`;
 }
 
 function discountPercent(priceRub: number, regularRub: number): number {

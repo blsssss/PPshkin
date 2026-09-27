@@ -14,6 +14,7 @@ import {
   toDeal,
 } from '../schemas/deals.ts';
 import {
+  AppliedMenuImportSchema,
   ApplyMenuImportBody,
   MenuImportSchema,
   MenuImportTextBody,
@@ -298,6 +299,8 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         description: [
           'Добавляет проверенные владельцем позиции одной транзакцией, калорийность помечается как оценка (nutritionSource = estimate).',
           'Цена обязательна у каждой позиции. Импорт применяется один раз.',
+          'Позиция, название которой уже есть в меню (без учёта регистра, лишних пробелов и ё/е), не добавляется повторно и не меняется: она возвращается в duplicates.',
+          'Повтор позиции внутри одного импорта добавляется один раз. Если все позиции уже есть в меню, items пустой, а импорт всё равно считается применённым.',
           'Коды ошибок: import_not_ready (409, импорт ещё распознаётся или завершился ошибкой),',
           'import_already_applied (409, позиции уже в меню, обновите меню),',
           `import_not_found (404, импорт принадлежит другому заведению или не существует), ${NO_VENUE}, ${BAD_INPUT}.`,
@@ -306,14 +309,18 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         params: IdParams,
         body: ApplyMenuImportBody,
         response: {
-          201: success('Позиции добавлены в меню', MenuItemListSchema),
+          201: success('Новые позиции добавлены в меню', AppliedMenuImportSchema),
           ...errorResponses(400, 401, 404, 409, 413, 415),
         },
       },
     },
     async (request, reply) => {
-      const created = await menuImports.apply(userId(request), request.params.id, request.body.items);
-      return reply.code(201).send({ items: created.map(toMenuItem) });
+      const { added, duplicates } = await menuImports.apply(
+        userId(request),
+        request.params.id,
+        request.body.items,
+      );
+      return reply.code(201).send({ items: added.map(toMenuItem), duplicates: duplicates.map(toMenuItem) });
     },
   );
 

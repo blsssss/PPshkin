@@ -1,5 +1,5 @@
 import { withTransaction, type Pool } from '../db/pool.ts';
-import { STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
+import { menuNameKey, STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
 import type { MenuImport, MenuItem } from '../domain/models.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
@@ -14,11 +14,16 @@ import { requireOwnedVenue, venueNotFound } from './venues.ts';
 
 export type ParsedMenuItemInput = Omit<MenuItemInput, 'isAvailable'>;
 
+export interface AppliedMenuImport {
+  added: MenuItem[];
+  duplicates: MenuItem[];
+}
+
 export interface MenuImportsService {
   fromPhoto(ownerId: number, image: Buffer): Promise<MenuImport>;
   fromText(ownerId: number, text: string): Promise<MenuImport>;
   get(ownerId: number, importId: number): Promise<MenuImport>;
-  apply(ownerId: number, importId: number, items: ParsedMenuItemInput[]): Promise<MenuItem[]>;
+  apply(ownerId: number, importId: number, items: ParsedMenuItemInput[]): Promise<AppliedMenuImport>;
 }
 
 interface MenuImportsDependencies {
@@ -134,8 +139,9 @@ export function createMenuImportsService({
     },
 
     async apply(ownerId, importId, items) {
-      const venue = await requireOwnedVenue(pool, ownerId);
       return withTransaction(pool, async (client) => {
+        const venue = await venues.lockByOwner(client, ownerId);
+        if (!venue) throw venueNotFound();
         const locked = await menuImports.lockInVenue(client, venue.id, importId);
         if (!locked) throw importNotFound();
         const now = clock.now();
@@ -146,12 +152,26 @@ export function createMenuImportsService({
         if (status !== 'ready') {
           throw conflict('import_not_ready', 'Only a recognized import can be applied, wait for it or retry');
         }
-        const created: MenuItem[] = [];
+        const onMenu = new Map<string, MenuItem>();
+        for (const item of await menuItems.listOnMenu(client, venue.id)) {
+          const key = menuNameKey(item.name);
+          if (!onMenu.has(key)) onMenu.set(key, item);
+        }
+        const added: MenuItem[] = [];
+        const duplicates = new Map<number, MenuItem>();
         for (const item of items) {
-          created.push(await menuItems.insert(client, venue.id, menuItemFields(item, 'estimate'), now));
+          const key = menuNameKey(item.name);
+          const existing = onMenu.get(key);
+          if (existing) {
+            if (!added.includes(existing)) duplicates.set(existing.id, existing);
+            continue;
+          }
+          const created = await menuItems.insert(client, venue.id, menuItemFields(item, 'estimate'), now);
+          added.push(created);
+          onMenu.set(key, created);
         }
         await menuImports.markApplied(client, locked.id);
-        return created;
+        return { added, duplicates: [...duplicates.values()] };
       });
     },
   };
