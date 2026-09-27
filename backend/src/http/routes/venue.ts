@@ -14,6 +14,7 @@ import {
   toDeal,
 } from '../schemas/deals.ts';
 import {
+  AppliedMenuImportSchema,
   ApplyMenuImportBody,
   MenuImportSchema,
   MenuImportTextBody,
@@ -36,6 +37,8 @@ interface VenueRouteOptions {
 
 const NO_VENUE = 'venue_not_found (404, заведения ещё нет, предложите создать его через POST /api/v1/venue)';
 const BAD_INPUT = 'validation_failed (400, исправьте поля из errors)';
+const ENDS_AFTER_CLOSING =
+  'deal_ends_after_closing (422, окончание позже ближайшего закрытия заведения или заведение сейчас закрыто: выберите окончание не позже закрытия или выставьте предложение в часы работы)';
 const BAD_ID = 'validation_failed (400, id должен быть положительным целым числом)';
 
 const IMPORT_POLLING =
@@ -298,6 +301,8 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         description: [
           'Добавляет проверенные владельцем позиции одной транзакцией, калорийность помечается как оценка (nutritionSource = estimate).',
           'Цена обязательна у каждой позиции. Импорт применяется один раз.',
+          'Позиция, название которой уже есть в меню (без учёта регистра, лишних пробелов и ё/е), не добавляется повторно и не меняется: она возвращается в duplicates.',
+          'Повтор позиции внутри одного импорта добавляется один раз. Если все позиции уже есть в меню, items пустой, а импорт всё равно считается применённым.',
           'Коды ошибок: import_not_ready (409, импорт ещё распознаётся или завершился ошибкой),',
           'import_already_applied (409, позиции уже в меню, обновите меню),',
           `import_not_found (404, импорт принадлежит другому заведению или не существует), ${NO_VENUE}, ${BAD_INPUT}.`,
@@ -306,14 +311,18 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         params: IdParams,
         body: ApplyMenuImportBody,
         response: {
-          201: success('Позиции добавлены в меню', MenuItemListSchema),
+          201: success('Новые позиции добавлены в меню', AppliedMenuImportSchema),
           ...errorResponses(400, 401, 404, 409, 413, 415),
         },
       },
     },
     async (request, reply) => {
-      const created = await menuImports.apply(userId(request), request.params.id, request.body.items);
-      return reply.code(201).send({ items: created.map(toMenuItem) });
+      const { added, duplicates } = await menuImports.apply(
+        userId(request),
+        request.params.id,
+        request.body.items,
+      );
+      return reply.code(201).send({ items: added.map(toMenuItem), duplicates: duplicates.map(toMenuItem) });
     },
   );
 
@@ -349,12 +358,14 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         tags: ['venue'],
         summary: 'Выставить горящее предложение',
         description: [
-          'Позиция продаётся со скидкой с текущего момента до endsAt, не дольше 24 часов.',
+          'Позиция продаётся со скидкой с текущего момента до endsAt, не дольше 24 часов и не позже ближайшего закрытия заведения.',
+          'Выставить предложение можно только в часы работы заведения, у круглосуточного заведения ограничения по закрытию нет.',
           'Если владелец выбирает скидку в процентах, цену считает клиент: round(цена позиции * (1 - процент / 100)).',
           'Коды ошибок: menu_item_not_found (404, позиция удалена или принадлежит другому заведению),',
           'menu_item_unavailable (422, позиция скрыта от гостей, сначала включите её),',
           'deal_price_not_lower (422, цена предложения должна быть ниже цены в меню),',
           'deal_window_invalid (422, выберите окончание в ближайшие 24 часа),',
+          `${ENDS_AFTER_CLOSING},`,
           'deal_exists (409, на позицию уже есть горящее предложение, измените или снимите его),',
           `${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
@@ -383,13 +394,15 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         summary: 'Изменить горящее предложение',
         description: [
           'Меняет остаток порций или время окончания, нужно хотя бы одно поле.',
+          'Новое время окончания не позже ближайшего закрытия заведения, считая от начала предложения или от текущего момента, если предложение уже идёт.',
           'Коды ошибок: deal_not_found (404, предложение принадлежит другому заведению или не существует),',
           'deal_finished (409, предложение снято, его время вышло или позиция удалена, выставьте новое),',
           'deal_exists (409, вернуть порции распроданному предложению нельзя: на позицию уже выставлено новое),',
           'menu_item_unavailable (422, чтобы вернуть порции распроданному предложению, сначала включите позицию),',
           'deal_price_not_lower (422, цена в меню стала не выше цены предложения, выставьте новое предложение),',
           'deal_quantity_invalid (422, остаток не может быть больше quantityTotal),',
-          `deal_window_invalid (422, выберите окончание в ближайшие 24 часа), ${NO_VENUE}, ${BAD_INPUT}.`,
+          'deal_window_invalid (422, выберите окончание в ближайшие 24 часа),',
+          `${ENDS_AFTER_CLOSING}, ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
         params: IdParams,

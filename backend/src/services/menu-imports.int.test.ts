@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { raceBehindLock } from '../../test/locks.ts';
 import { seedUser, seedVenue } from '../../test/venues.ts';
 import type { ParsedMenuItem } from '../domain/models.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
@@ -186,9 +187,10 @@ describe('applying a menu import', () => {
     const started = await imports.fromText(OWNER, MENU_TEXT);
     await background.idle();
     clock.advance(MINUTE);
-    const created = await imports.apply(OWNER, started.id, CONFIRMED);
-    expect(created).toHaveLength(2);
-    expect(created[1]).toMatchObject({
+    const { added, duplicates } = await imports.apply(OWNER, started.id, CONFIRMED);
+    expect(duplicates).toEqual([]);
+    expect(added).toHaveLength(2);
+    expect(added[1]).toMatchObject({
       name: 'Эклер',
       description: 'Заварной',
       priceRub: 150,
@@ -219,6 +221,92 @@ describe('applying a menu import', () => {
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
       reason: { code: 'import_already_applied' },
     });
+    expect(await menu.list(OWNER)).toHaveLength(2);
+  });
+
+  it('skips items that are already on the menu', async () => {
+    const cappuccino = await menu.create(OWNER, {
+      name: 'Капучино',
+      category: 'drink',
+      priceRub: 220,
+      kcal: 130,
+    });
+    const hedgehog = await menu.create(OWNER, {
+      name: 'Пирожное Ёжик',
+      category: 'dessert',
+      priceRub: 160,
+      kcal: 350,
+    });
+    const archived = await menu.create(OWNER, { name: 'Латте', category: 'drink', priceRub: 240, kcal: 160 });
+    await menu.archive(OWNER, archived.id);
+    const imports = service();
+    const started = await imports.fromText(OWNER, MENU_TEXT);
+    await background.idle();
+
+    const { added, duplicates } = await imports.apply(OWNER, started.id, [
+      { ...CONFIRMED[0]!, name: '  КАПУЧИНО ', priceRub: 250, kcal: 125 },
+      { ...CONFIRMED[1]!, name: 'пирожное   ежик' },
+      { ...CONFIRMED[0]!, name: 'Латте', priceRub: 240 },
+      CONFIRMED[1]!,
+    ]);
+
+    expect(added.map((item) => item.name)).toEqual(['Латте', 'Эклер']);
+    expect(duplicates).toEqual([cappuccino, hedgehog]);
+    const onMenu = await menu.list(OWNER);
+    expect(onMenu.map((item) => item.name).sort()).toEqual(['Капучино', 'Латте', 'Пирожное Ёжик', 'Эклер']);
+    expect(onMenu.find((item) => item.id === cappuccino.id)).toEqual(cappuccino);
+    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'applied' });
+  });
+
+  it('applies an import whose items are all on the menu without adding anything', async () => {
+    const cappuccino = await menu.create(OWNER, {
+      name: 'Капучино',
+      category: 'drink',
+      priceRub: 190,
+      kcal: 120,
+    });
+    const imports = service();
+    const started = await imports.fromText(OWNER, MENU_TEXT);
+    await background.idle();
+
+    const applied = await imports.apply(OWNER, started.id, [CONFIRMED[0]!, CONFIRMED[0]!]);
+
+    expect(applied).toEqual({ added: [], duplicates: [cappuccino] });
+    expect(await menu.list(OWNER)).toEqual([cappuccino]);
+    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'applied' });
+  });
+
+  it('adds an item repeated within one import once', async () => {
+    const imports = service();
+    const started = await imports.fromText(OWNER, MENU_TEXT);
+    await background.idle();
+
+    const { added, duplicates } = await imports.apply(OWNER, started.id, [
+      CONFIRMED[1]!,
+      { ...CONFIRMED[1]!, name: ' ЭКЛЕР', priceRub: 170 },
+    ]);
+
+    expect(added).toMatchObject([{ name: 'Эклер', priceRub: 150 }]);
+    expect(duplicates).toEqual([]);
+    expect(await menu.list(OWNER)).toHaveLength(1);
+  });
+
+  it('adds an item only once when two imports are applied at the same time', async () => {
+    const imports = service();
+    const first = await imports.fromText(OWNER, MENU_TEXT);
+    await background.idle();
+    const second = await imports.fromText(OWNER, MENU_TEXT);
+    await background.idle();
+
+    const results = await raceBehindLock(
+      pool,
+      { text: 'select id from venues where owner_id = $1 for update', values: [OWNER] },
+      [() => imports.apply(OWNER, first.id, CONFIRMED), () => imports.apply(OWNER, second.id, CONFIRMED)],
+    );
+
+    const applied = results.map((result) => (result.status === 'fulfilled' ? result.value : null));
+    expect(applied.map((result) => result?.added.length).sort()).toEqual([0, 2]);
+    expect(applied.map((result) => result?.duplicates.length).sort()).toEqual([0, 2]);
     expect(await menu.list(OWNER)).toHaveLength(2);
   });
 

@@ -103,7 +103,7 @@ function importsStub(overrides: Partial<MenuImportsService> = {}): MenuImportsSe
     fromPhoto: () => Promise.resolve(processing),
     fromText: () => Promise.resolve({ ...processing, source: 'text' }),
     get: () => Promise.resolve(readyImport),
-    apply: () => Promise.resolve([sampleMenuItem]),
+    apply: () => Promise.resolve({ added: [sampleMenuItem], duplicates: [] }),
     ...overrides,
   };
 }
@@ -543,7 +543,7 @@ describe('menu import routes', () => {
   it('applies confirmed items that all have a price', async () => {
     const apply = vi
       .fn<MenuImportsService['apply']>()
-      .mockResolvedValueOnce([sampleMenuItem])
+      .mockResolvedValueOnce({ added: [sampleMenuItem], duplicates: [] })
       .mockRejectedValueOnce(conflict('import_already_applied', 'done'));
     app = await buildTestApp({ services: { menuImports: importsStub({ apply }) } });
     const url = '/api/v1/venue/menu/imports/31/apply';
@@ -559,7 +559,7 @@ describe('menu import routes', () => {
     const applied = await app.inject({ method: 'POST', url, headers: owner, payload: { items: [item] } });
     expect(applied.statusCode).toBe(201);
     expectContract(applied, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
-    expect(applied.json()).toEqual({ items: [menuItemDto] });
+    expect(applied.json()).toEqual({ items: [menuItemDto], duplicates: [] });
     expect(apply).toHaveBeenCalledWith(OWNER_ID, 31, [item]);
 
     const again = await app.inject({ method: 'POST', url, headers: owner, payload: { items: [item] } });
@@ -579,6 +579,42 @@ describe('menu import routes', () => {
       expectContract(rejected, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
     }
     expect(apply).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the items that were already on the menu', async () => {
+    const croissant = { ...sampleMenuItem, id: 12, name: 'Круассан', priceRub: 150, kcal: 280 };
+    const apply = vi
+      .fn<MenuImportsService['apply']>()
+      .mockResolvedValueOnce({ added: [sampleMenuItem], duplicates: [croissant] })
+      .mockResolvedValueOnce({ added: [], duplicates: [croissant] });
+    app = await buildTestApp({ services: { menuImports: importsStub({ apply }) } });
+    const croissantDto = { ...menuItemDto, id: 12, name: 'Круассан', priceRub: 150, kcal: 280 };
+    const payload = {
+      items: [
+        { name: 'Эклер', category: 'dessert', priceRub: 200, kcal: 330 },
+        { name: 'круассан', category: 'bakery', priceRub: 150, kcal: 290 },
+      ],
+    };
+
+    const partly = await app.inject({
+      method: 'POST',
+      url: '/api/v1/venue/menu/imports/31/apply',
+      headers: owner,
+      payload,
+    });
+    expect(partly.statusCode).toBe(201);
+    expectContract(partly, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
+    expect(partly.json()).toEqual({ items: [menuItemDto], duplicates: [croissantDto] });
+
+    const nothingNew = await app.inject({
+      method: 'POST',
+      url: '/api/v1/venue/menu/imports/32/apply',
+      headers: owner,
+      payload,
+    });
+    expect(nothingNew.statusCode).toBe(201);
+    expectContract(nothingNew, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
+    expect(nothingNew.json()).toEqual({ items: [], duplicates: [croissantDto] });
   });
 });
 
@@ -659,6 +695,7 @@ describe('deal routes', () => {
       unprocessable('menu_item_unavailable', 'x'),
       unprocessable('deal_price_not_lower', 'x'),
       unprocessable('deal_window_invalid', 'x'),
+      unprocessable('deal_ends_after_closing', 'x'),
     ];
     const create = vi.fn<DealsService['create']>();
     for (const failure of failures) create.mockRejectedValueOnce(failure);
@@ -681,7 +718,8 @@ describe('deal routes', () => {
       .fn<DealsService['update']>()
       .mockResolvedValueOnce({ ...dealView, deal: { ...sampleDeal, quantityLeft: 0 }, status: 'sold_out' })
       .mockRejectedValueOnce(conflict('deal_finished', 'over'))
-      .mockRejectedValueOnce(unprocessable('deal_quantity_invalid', 'too many'));
+      .mockRejectedValueOnce(unprocessable('deal_quantity_invalid', 'too many'))
+      .mockRejectedValueOnce(unprocessable('deal_ends_after_closing', 'after closing'));
     app = await buildTestApp({ services: { deals: dealsStub({ update }) } });
     const url = '/api/v1/venue/deals/21';
     const path = '/api/v1/venue/deals/{id}';
@@ -708,6 +746,16 @@ describe('deal routes', () => {
     const tooMany = await app.inject({ method: 'PATCH', url, headers: owner, payload: { quantityLeft: 50 } });
     expect(tooMany.statusCode).toBe(422);
     expectContract(tooMany, 'PATCH', path);
+
+    const afterClosing = await app.inject({
+      method: 'PATCH',
+      url,
+      headers: owner,
+      payload: { endsAt: '2026-09-25T19:30:00Z' },
+    });
+    expect(afterClosing.statusCode).toBe(422);
+    expectContract(afterClosing, 'PATCH', path);
+    expect(afterClosing.json()).toMatchObject({ code: 'deal_ends_after_closing' });
 
     for (const payload of [{}, { quantityLeft: -1 }, { endsAt: 'soon' }]) {
       const invalid = await app.inject({ method: 'PATCH', url, headers: owner, payload });

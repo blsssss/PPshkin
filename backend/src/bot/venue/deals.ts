@@ -1,7 +1,7 @@
 import type { MenuItem, Venue } from '../../domain/models.ts';
 import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
 import type { DealView } from '../../services/deals.ts';
-import { formatLocalTime, isOpenAt, nextClosingAt } from '../../shared/time.ts';
+import { formatLocalTime, isOpenAt, localParts, minutesOfDay, nextClosingAt } from '../../shared/time.ts';
 import { answerStale, byAction, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, MessageInput } from '../context.ts';
 import type { ActiveFlow, Flow } from '../state.ts';
@@ -28,6 +28,7 @@ import {
   dealOfferText,
   dealPublished,
   dealQuestion,
+  dealsPausedText,
   dealsText,
   dealSummary,
   discountOption,
@@ -47,7 +48,6 @@ import {
   UNTIL_QUESTION,
   untilClosingOption,
   VENUE_BUTTONS,
-  VENUE_CLOSED_WARNING,
   VENUE_ERROR_TEXTS,
   WIZARD_STALE,
   withNote,
@@ -70,6 +70,11 @@ type ChosenOffer = ChosenItem & DealOffer;
 interface Rendered {
   state: DealState | null;
   screen: OutgoingMessage;
+  paused?: boolean;
+}
+
+interface SaleWindow {
+  closing: Date | null;
 }
 
 interface Presentation {
@@ -93,6 +98,7 @@ const PUBLISH_FAILURES = [
   'deal_exists',
   'deal_price_not_lower',
   'deal_window_invalid',
+  'deal_ends_after_closing',
   'menu_item_unavailable',
   'menu_item_not_found',
 ] as const satisfies readonly VenueErrorCode[];
@@ -122,9 +128,26 @@ function discountOptions(regularRub: number): { percent: number; priceRub: numbe
   })).filter(({ priceRub }) => priceRub >= 1 && priceRub < regularRub);
 }
 
-function closingTime(venue: Venue, now: Date): Date | null {
+function saleWindow(venue: Venue, now: Date): SaleWindow | null {
+  if (!isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone)) return null;
   const closing = nextClosingAt(venue.opensAt, venue.closesAt, now, venue.timezone);
-  return closing && closing.getTime() - now.getTime() >= CLOSING_MARGIN_MS ? closing : null;
+  if (closing && closing.getTime() - now.getTime() < CLOSING_MARGIN_MS) return null;
+  return { closing };
+}
+
+function endAfter(now: Date, minutes: number): Date {
+  return new Date(now.getTime() + minutes * MINUTE_MS);
+}
+
+function fittingDurations({ closing }: SaleWindow, now: Date) {
+  return DURATION_CHOICES.filter(({ minutes }) => !closing || endAfter(now, minutes) <= closing);
+}
+
+function pausedScreen(venue: Venue, now: Date): OutgoingMessage {
+  const { hour, minute } = localParts(now, venue.timezone);
+  const opensToday = hour * 60 + minute < (minutesOfDay(venue.opensAt) ?? 0);
+  const open = isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone);
+  return { text: dealsPausedText(open, opensToday, venue.opensAt), buttons: [dealsRow()] };
 }
 
 function cancelRow(): Button[] {
@@ -178,19 +201,24 @@ function discountScreen(item: ChosenItem, quantity: number): OutgoingMessage {
 }
 
 function endsAtChoice(value: string | undefined, venue: Venue, now: Date): Date | null {
-  if (value === UNTIL_CLOSING) return closingTime(venue, now);
-  const duration = DURATION_CHOICES.find(({ id }) => id === value);
-  return duration ? new Date(now.getTime() + duration.minutes * MINUTE_MS) : null;
+  const window = saleWindow(venue, now);
+  if (!window) return null;
+  if (value === UNTIL_CLOSING) return window.closing;
+  const duration = fittingDurations(window, now).find(({ id }) => id === value);
+  return duration ? endAfter(now, duration.minutes) : null;
 }
 
-function untilScreen(offer: ChosenOffer, venue: Venue, now: Date): OutgoingMessage {
-  const closing = closingTime(venue, now);
-  const closed = !isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone);
-  const closingLabel = closing ? untilClosingOption(formatLocalTime(closing, venue.timezone)) : null;
+function untilScreen(offer: ChosenOffer, window: SaleWindow, venue: Venue, now: Date): OutgoingMessage {
+  const durations = fittingDurations(window, now);
+  const closingLabel = window.closing
+    ? untilClosingOption(formatLocalTime(window.closing, venue.timezone))
+    : null;
   return {
-    text: [...(closed ? [VENUE_CLOSED_WARNING, ''] : []), dealOfferText(offer), UNTIL_QUESTION].join('\n'),
+    text: [dealOfferText(offer), UNTIL_QUESTION].join('\n'),
     buttons: [
-      DURATION_CHOICES.map(({ id, label }) => venueButton(label, 'dl', 'until', id)),
+      ...(durations.length > 0
+        ? [durations.map(({ id, label }) => venueButton(label, 'dl', 'until', id))]
+        : []),
       ...(closingLabel ? [[venueButton(closingLabel, 'dl', 'until', UNTIL_CLOSING)]] : []),
       cancelRow(),
     ],
@@ -208,7 +236,12 @@ function inputScreen(text: string): OutgoingMessage {
   return { text, buttons: [cancelRow()] };
 }
 
-function stepScreen({ step, draft }: DealState, venue: Venue, now: Date): OutgoingMessage | null {
+function stepScreen(
+  { step, draft }: DealState,
+  window: SaleWindow,
+  venue: Venue,
+  now: Date,
+): OutgoingMessage | null {
   const item = chosenItem(draft);
   const offer = chosenOffer(draft);
   switch (step) {
@@ -223,7 +256,7 @@ function stepScreen({ step, draft }: DealState, venue: Venue, now: Date): Outgoi
     case 'price_input':
       return item ? inputScreen(pricePrompt(item.itemPriceRub - 1)) : null;
     case 'until':
-      return offer ? untilScreen(offer, venue, now) : null;
+      return offer ? untilScreen(offer, window, venue, now) : null;
     case 'confirm':
       return offer && draft.endsAt !== undefined ? confirmScreen(offer, new Date(draft.endsAt), venue) : null;
   }
@@ -280,14 +313,17 @@ export function createDealScreens({ services }: BotKit) {
   }
 
   async function render(ctx: BotContext, venue: Venue, state: DealState): Promise<Rendered> {
-    const screen = stepScreen(state, venue, ctx.now);
+    const window = saleWindow(venue, ctx.now);
+    if (!window) return { state: null, screen: pausedScreen(venue, ctx.now), paused: true };
+    const screen = stepScreen(state, window, venue, ctx.now);
     if (screen) return { state, screen };
     return renderItems(ctx, state.step === 'item' ? state.page : 1);
   }
 
   async function present(ctx: BotContext, venue: Venue, next: DealState, how: Presentation): Promise<void> {
-    const { state, screen } = await render(ctx, venue, next);
-    const message = how.error === undefined ? screen : { ...screen, text: withNote(how.error, screen.text) };
+    const { state, screen, paused } = await render(ctx, venue, next);
+    const message =
+      how.error === undefined || paused ? screen : { ...screen, text: withNote(how.error, screen.text) };
     if (how.via === 'answer') {
       if (state) await saveFlow(ctx, { name: 'deal_wizard', ...state, messageId: ctx.callbackMessageId });
       else await clearFlow(ctx, 'deal_wizard');
@@ -403,7 +439,7 @@ export function createDealScreens({ services }: BotKit) {
     code: (typeof PUBLISH_FAILURES)[number],
   ): Promise<void> {
     const error = VENUE_ERROR_TEXTS[code];
-    if (code === 'deal_window_invalid') {
+    if (code === 'deal_window_invalid' || code === 'deal_ends_after_closing') {
       const draft = { ...state.draft, endsAt: undefined };
       await present(ctx, venue, { ...state, step: 'until', draft }, { via: 'reply', error });
       return;

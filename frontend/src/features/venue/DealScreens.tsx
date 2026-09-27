@@ -6,7 +6,6 @@ import { userMessage } from '../../api/messages.ts';
 import { buildStartAppLink } from '../../app/startParam.ts';
 import { haptic } from '../../max/bridge.ts';
 import { formatPrice } from '../../shared/format.ts';
-import { isOpenNow } from '../../shared/openNow.ts';
 import { useOnline } from '../../shared/useOnline.ts';
 import { useUnsavedChanges } from '../../shared/useUnsavedChanges.tsx';
 import { ActionBar } from '../../shared/ui/ActionBar.tsx';
@@ -26,16 +25,22 @@ import {
   DEAL_STATUS_LABELS,
   dealPreview,
   dealPriceLine,
+  defaultEnd,
   discountedPrice,
   DISCOUNTS,
+  endsBeforeClosing,
+  fittingHours,
   MAX_QUANTITY,
   QUANTITIES,
   resolveEnd,
+  saleWindow,
+  salePausedText,
   validDealPrice,
   venueClock,
   withinWindow,
   type Deal,
   type EndChoice,
+  type SaleWindow,
 } from './dealModel.ts';
 import { useCancelDeal, useCreateDeal, useUpdateDeal, useVenueDeals } from './dealQueries.ts';
 import { normalizeName, type MenuItem, type Venue } from './model.ts';
@@ -52,6 +57,14 @@ const FORM_ERRORS: Record<string, string> = {
 
 function dealError(error: unknown): string {
   return isApiError(error) ? (FORM_ERRORS[error.code] ?? userMessage(error)) : userMessage(error);
+}
+
+function endError(endsAt: Date, window: SaleWindow, venue: Venue, now: Date): string | null {
+  if (!withinWindow(endsAt, now)) return 'Время окончания должно быть в ближайшие 24 часа';
+  if (window.closing !== null && !endsBeforeClosing(endsAt, window)) {
+    return `Время окончания должно быть не позже закрытия в ${venueClock(window.closing.toISOString(), venue.timezone)}`;
+  }
+  return null;
 }
 
 function DealCard({ deal, venue, finished }: { deal: Deal; venue: Venue; finished: boolean }) {
@@ -234,34 +247,32 @@ function quantityOf(quantity: Quantity): number | null {
 
 function EndChoices({
   venue,
+  window,
+  now,
   value,
   onChange,
 }: {
   venue: Venue;
+  window: SaleWindow;
+  now: Date;
   value: EndChoice | { kind: 'none' };
   onChange: (value: EndChoice) => void;
 }) {
-  const roundTheClock = venue.opensAt === venue.closesAt;
   return (
     <>
       <ChipRow label="До какого времени">
-        <Chip
-          pressed={value.kind === 'hours' && value.hours === 1}
-          onClick={() => {
-            onChange({ kind: 'hours', hours: 1 });
-          }}
-        >
-          1 час
-        </Chip>
-        <Chip
-          pressed={value.kind === 'hours' && value.hours === 2}
-          onClick={() => {
-            onChange({ kind: 'hours', hours: 2 });
-          }}
-        >
-          2 часа
-        </Chip>
-        {!roundTheClock && (
+        {fittingHours(window, now).map((hours) => (
+          <Chip
+            key={hours}
+            pressed={value.kind === 'hours' && value.hours === hours}
+            onClick={() => {
+              onChange({ kind: 'hours', hours });
+            }}
+          >
+            {hours === 1 ? '1 час' : '2 часа'}
+          </Chip>
+        ))}
+        {window.closing !== null && (
           <Chip
             pressed={value.kind === 'closing'}
             onClick={() => {
@@ -320,7 +331,10 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
   const [search, setSearch] = useState('');
   const [quantity, setQuantity] = useState<Quantity>(() => initialQuantity(params));
   const [price, setPrice] = useState<Price>(() => initialPrice(params));
-  const [end, setEnd] = useState<EndChoice>({ kind: 'hours', hours: 2 });
+  const [end, setEnd] = useState<EndChoice>(() => {
+    const opened = new Date();
+    return defaultEnd(saleWindow(venue, opened), opened);
+  });
   const [error, setError] = useState<{ text: string; open: boolean } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [published, setPublished] = useState<Deal | null>(null);
@@ -332,11 +346,13 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
   const busy = new Set(active.map((deal) => deal.menuItemId));
   const item = available.find((entry) => entry.id === itemId);
   const now = new Date();
+  const window = saleWindow(venue, now);
   const amount = priceOf(price, item);
   const count = quantityOf(quantity);
   const endsAt = resolveEnd(end, venue, now);
   const priceValid = item !== undefined && amount !== null && validDealPrice(amount, item.priceRub);
-  const endValid = endsAt !== null && withinWindow(endsAt, now);
+  const endProblem = endsAt === null || window === null ? null : endError(endsAt, window, venue, now);
+  const endValid = endsAt !== null && window !== null && endProblem === null;
   const ready = item !== undefined && !busy.has(item.id) && priceValid && count !== null && endValid;
   const shown =
     search.trim().length === 0
@@ -403,9 +419,7 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
 
   return (
     <>
-      {!isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, now) && (
-        <Notice>Заведение сейчас закрыто: гости не смогут забронировать до открытия</Notice>
-      )}
+      {window === null && <Notice>{salePausedText(venue, now)}</Notice>}
       <h2 className={styles.sectionTitle}>Позиция</h2>
       {available.length > 8 && (
         <Field
@@ -509,12 +523,14 @@ function DealForm({ venue, menu, active }: { venue: Venue; menu: MenuItem[]; act
         />
       )}
       {fieldErrors.priceRub !== undefined && <p className={styles.error}>{fieldErrors.priceRub}</p>}
-      <h2 className={styles.sectionTitle}>До какого времени</h2>
-      <EndChoices venue={venue} value={end} onChange={setEnd} />
-      {fieldErrors.endsAt !== undefined && <p className={styles.error}>{fieldErrors.endsAt}</p>}
-      {endsAt !== null && !endValid && (
-        <p className={styles.error}>Время окончания должно быть в ближайшие 24 часа</p>
+      {window !== null && (
+        <>
+          <h2 className={styles.sectionTitle}>До какого времени</h2>
+          <EndChoices venue={venue} window={window} now={now} value={end} onChange={setEnd} />
+        </>
       )}
+      {fieldErrors.endsAt !== undefined && <p className={styles.error}>{fieldErrors.endsAt}</p>}
+      {endProblem !== null && <p className={styles.error}>{endProblem}</p>}
       {ready && (
         <p className={styles.counter}>
           {dealPreview(item.name, amount, item.priceRub, count, endsAt, venue.timezone)}
@@ -606,8 +622,10 @@ function EditDeal({ deal, venue }: { deal: Deal; venue: Venue }) {
   const quantity = Number(shown.trim());
   const numeric = shown.trim().length > 0 && /^\d+$/.test(shown.trim());
   const quantityValid = numeric && quantity <= deal.quantityTotal;
+  const window = saleWindow(venue, new Date(Math.max(now.getTime(), Date.parse(deal.startsAt))));
   const endsAt = end === null ? null : resolveEnd(end, venue, now);
-  const endValid = end === null || (endsAt !== null && withinWindow(endsAt, now));
+  const endProblem = endsAt === null || window === null ? null : endError(endsAt, window, venue, now);
+  const endValid = end === null || (endsAt !== null && window !== null && endProblem === null);
   const patch = {
     ...(left !== null && quantityValid && quantity !== deal.quantityLeft ? { quantityLeft: quantity } : {}),
     ...(endsAt !== null && endValid ? { endsAt: endsAt.toISOString() } : {}),
@@ -667,8 +685,20 @@ function EditDeal({ deal, venue }: { deal: Deal; venue: Venue }) {
         }
       />
       <h2 className={styles.sectionTitle}>Новое время окончания</h2>
-      <EndChoices venue={venue} value={end ?? { kind: 'none' }} onChange={setEnd} />
-      {!endValid && <p className={styles.error}>Время окончания должно быть в ближайшие 24 часа</p>}
+      {window === null ? (
+        <p className={styles.muted}>
+          Время окончания можно изменить в часы работы заведения, но не позже чем за 15 минут до закрытия
+        </p>
+      ) : (
+        <EndChoices
+          venue={venue}
+          window={window}
+          now={now}
+          value={end ?? { kind: 'none' }}
+          onChange={setEnd}
+        />
+      )}
+      {endProblem !== null && <p className={styles.error}>{endProblem}</p>}
       {fieldErrors.endsAt !== undefined && <p className={styles.error}>{fieldErrors.endsAt}</p>}
       {error !== null && <Notice tone="error">{error}</Notice>}
       <ActionBar sends>

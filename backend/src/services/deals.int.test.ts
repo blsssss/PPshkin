@@ -97,7 +97,10 @@ describe('creating deals', () => {
         code: 'deal_window_invalid',
       });
     }
-    expect((await service.create(OWNER, input({ endsAt: inHours(24) }))).status).toBe('active');
+    const allDay = await seedVenue(pool, OTHER_OWNER, { opensAt: '00:00', closesAt: '00:00' });
+    const coffee = await seedMenuItem(pool, allDay.id, { priceRub: 200 });
+    const longest = input({ menuItemId: coffee.id, endsAt: inHours(24) });
+    expect((await service.create(OTHER_OWNER, longest)).status).toBe('active');
   });
 
   it('allows one live deal per item and a new one after it sells out, ends or is cancelled', async () => {
@@ -264,6 +267,103 @@ describe('changing deals', () => {
       [deal.id, 'sold_out', null],
       [ended.id, 'ended', null],
     ]);
+  });
+});
+
+describe('deals and opening hours', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('ends a deal no later than the venue closes', async () => {
+    clock.set('2026-09-25T18:48:00Z');
+    for (const endsAt of [inHours(1), inHours(2), at('2026-09-25T19:00:01Z')]) {
+      await expect(service.create(OWNER, input({ endsAt }))).rejects.toMatchObject({
+        status: 422,
+        code: 'deal_ends_after_closing',
+      });
+    }
+    const view = await service.create(OWNER, input({ endsAt: at('2026-09-25T19:00:00Z') }));
+    expect(view.deal.endsAt).toEqual(at('2026-09-25T19:00:00Z'));
+  });
+
+  it.each([
+    ['after closing', '2026-09-25T19:30:00Z'],
+    ['before opening', '2026-09-25T04:00:00Z'],
+  ])('does not start a deal %s', async (_case, now) => {
+    clock.set(now);
+    await expect(service.create(OWNER, input({ endsAt: inHours(1) }))).rejects.toMatchObject({
+      status: 422,
+      code: 'deal_ends_after_closing',
+    });
+    expect(await service.list(OWNER, 'active')).toEqual([]);
+  });
+
+  it('keeps a new end time of a deal before the closing', async () => {
+    clock.set('2026-09-25T17:00:00Z');
+    const { deal } = await service.create(OWNER, input({ endsAt: inHours(1) }));
+    await expect(service.update(OWNER, deal.id, { endsAt: inHours(3) })).rejects.toMatchObject({
+      status: 422,
+      code: 'deal_ends_after_closing',
+    });
+    expect((await service.update(OWNER, deal.id, { endsAt: inHours(2) })).deal.endsAt).toEqual(inHours(2));
+    clock.set('2026-09-25T18:55:00Z');
+    expect((await service.update(OWNER, deal.id, { quantityLeft: 2 })).deal.quantityLeft).toBe(2);
+    await expect(
+      service.update(OWNER, deal.id, { endsAt: at('2026-09-25T19:30:00Z') }),
+    ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
+  });
+
+  it('checks a scheduled deal against the closing after its start', async () => {
+    clock.set('2026-09-25T04:00:00Z');
+    const scheduled = await seedDeal(pool, item, {
+      startsAt: at('2026-09-25T05:00:00Z'),
+      endsAt: at('2026-09-25T09:00:00Z'),
+    });
+    const moved = await service.update(OWNER, scheduled.id, { endsAt: at('2026-09-25T19:00:00Z') });
+    expect(moved.status).toBe('scheduled');
+    await expect(
+      service.update(OWNER, scheduled.id, { endsAt: at('2026-09-25T19:01:00Z') }),
+    ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
+  });
+
+  it('has no closing limit round the clock', async () => {
+    const allDay = await seedVenue(pool, OTHER_OWNER, { opensAt: '00:00', closesAt: '00:00' });
+    const coffee = await seedMenuItem(pool, allDay.id, { priceRub: 200 });
+    clock.set('2026-09-25T21:30:00Z');
+    const view = await service.create(OTHER_OWNER, input({ menuItemId: coffee.id, endsAt: inHours(20) }));
+    expect(view.status).toBe('active');
+  });
+
+  it('sells until a closing after midnight', async () => {
+    const bar = await seedVenue(pool, OTHER_OWNER, { opensAt: '18:00', closesAt: '02:00' });
+    const snack = await seedMenuItem(pool, bar.id, { priceRub: 200 });
+    clock.set('2026-09-25T20:30:00Z');
+    await expect(
+      service.create(OTHER_OWNER, input({ menuItemId: snack.id, endsAt: inHours(3) })),
+    ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
+    const view = await service.create(OTHER_OWNER, input({ menuItemId: snack.id, endsAt: inHours(2.5) }));
+    expect(view.deal.endsAt).toEqual(at('2026-09-25T23:00:00Z'));
+  });
+});
+
+describe('deals after the closing', () => {
+  it('counts a deal as ended once the venue closes, even before its end time', async () => {
+    clock.set('2026-09-25T18:48:00Z');
+    const late = await seedDeal(pool, item, {
+      startsAt: clock.now(),
+      endsAt: new Date('2026-09-25T19:50:00Z'),
+    });
+    expect((await service.list(OWNER, 'active')).map((view) => view.deal.id)).toEqual([late.id]);
+
+    clock.set('2026-09-25T19:05:00Z');
+    expect(await service.list(OWNER, 'active')).toEqual([]);
+    expect(await service.list(OWNER, 'finished')).toMatchObject([{ status: 'ended', deal: { id: late.id } }]);
+    await expect(service.update(OWNER, late.id, { quantityLeft: 1 })).rejects.toMatchObject({
+      status: 409,
+      code: 'deal_finished',
+    });
+
+    clock.set('2026-09-26T06:00:00Z');
+    expect((await service.create(OWNER, input({ endsAt: inHours(1) }))).status).toBe('active');
   });
 });
 

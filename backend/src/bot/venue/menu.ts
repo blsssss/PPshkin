@@ -4,6 +4,7 @@ import { DownloadTooLargeError, UserUnreachableError } from '../../integrations/
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
 import type { Sleep } from '../../integrations/max/sleep.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
+import type { AppliedMenuImport } from '../../services/menu-imports.ts';
 import type { BackgroundTasks } from '../../shared/background.ts';
 import type { Clock } from '../../shared/clock.ts';
 import { answerStale, parseId } from '../callbacks.ts';
@@ -226,9 +227,9 @@ export function createMenuScreens({ services, messenger, logger }: BotKit, waiti
       await ctx.reply({ text: NO_PRICES, buttons: [uploadRow(VENUE_BUTTONS.uploadAgain)] });
       return;
     }
-    let added: MenuItem[];
+    let applied: AppliedMenuImport;
     try {
-      added = await menuImports.apply(ctx.user.id, importId, priced);
+      applied = await menuImports.apply(ctx.user.id, importId, priced);
     } catch (error) {
       const failure = knownFailure(error, APPLY_FAILURES);
       await ctx.reply({ text: VENUE_ERROR_TEXTS[failure], buttons: [menuRow()] });
@@ -236,7 +237,11 @@ export function createMenuScreens({ services, messenger, logger }: BotKit, waiti
     }
     const skipped = found.items.filter((item) => !hasPrice(item)).map((item) => item.name);
     await ctx.reply({
-      text: importAppliedText(added.length, skipped),
+      text: importAppliedText(
+        applied.added.length,
+        skipped,
+        applied.duplicates.map((item) => item.name),
+      ),
       buttons: [[...menuRow(), ...newDealRow(VENUE_BUTTONS.publishDeal)], uploadRow()],
     });
   });

@@ -1,9 +1,12 @@
 import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
-import type { Deal, MenuItem } from '../domain/models.ts';
+import { dealOverAt } from '../domain/deals.ts';
+import type { Deal, MenuItem, Venue } from '../domain/models.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
+import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../shared/errors.ts';
+import { isOpenAt, nextClosingAt } from '../shared/time.ts';
 import { lockMenuItem } from './menu.ts';
 import { requireOwnedVenue } from './venues.ts';
 
@@ -47,21 +50,32 @@ const HOUR_MS = 3_600_000;
 const MAX_DEAL_WINDOW_MS = 24 * HOUR_MS;
 const FINISHED_HISTORY_MS = 7 * 24 * HOUR_MS;
 
-export function dealStatus(deal: Deal, now: Date): DealStatus {
+export function dealStatus(
+  deal: Deal,
+  venue: Pick<Venue, 'opensAt' | 'closesAt' | 'timezone'>,
+  now: Date,
+): DealStatus {
   if (deal.cancelledAt) return 'cancelled';
   if (deal.quantityLeft === 0) return 'sold_out';
-  if (deal.endsAt <= now) return 'ended';
+  if (dealOverAt(deal, venue) <= now) return 'ended';
   if (deal.startsAt > now) return 'scheduled';
   return 'active';
 }
 
 export async function dealViews(db: Queryable, list: readonly Deal[], now: Date): Promise<DealView[]> {
   const itemIds = [...new Set(list.map((deal) => deal.menuItemId))];
-  const items = new Map((await menuItems.findByIds(db, itemIds)).map((item) => [item.id, item]));
+  const venueIds = [...new Set(list.map((deal) => deal.venueId))];
+  const [foundItems, foundVenues] = await Promise.all([
+    menuItems.findByIds(db, itemIds),
+    venues.findByIds(db, venueIds),
+  ]);
+  const items = new Map(foundItems.map((item) => [item.id, item]));
+  const places = new Map(foundVenues.map((venue) => [venue.id, venue]));
   return list.map((deal) => {
     const item = items.get(deal.menuItemId);
-    if (!item) throw new Error(`Deal ${deal.id} refers to a missing menu item`);
-    return { deal, item, status: dealStatus(deal, now) };
+    const venue = places.get(deal.venueId);
+    if (!item || !venue) throw new Error(`Deal ${deal.id} refers to a missing menu item or venue`);
+    return { deal, item, status: dealStatus(deal, venue, now) };
   });
 }
 
@@ -73,6 +87,20 @@ function assertWindow(endsAt: Date, now: Date, startsAt: Date = now): void {
   const end = endsAt.getTime();
   if (end <= Math.max(now.getTime(), startsAt.getTime()) || end > now.getTime() + MAX_DEAL_WINDOW_MS) {
     throw unprocessable('deal_window_invalid', 'The deal must end in the future and within 24 hours');
+  }
+}
+
+function assertBeforeClosing(venue: Venue, endsAt: Date, from: Date): void {
+  const closing = nextClosingAt(venue.opensAt, venue.closesAt, from, venue.timezone);
+  if (!closing) return;
+  if (!isOpenAt(venue.opensAt, venue.closesAt, from, venue.timezone)) {
+    throw unprocessable(
+      'deal_ends_after_closing',
+      'The venue is closed, publish the deal during its opening hours',
+    );
+  }
+  if (endsAt > closing) {
+    throw unprocessable('deal_ends_after_closing', 'The deal must end no later than the venue closes');
   }
 }
 
@@ -111,6 +139,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
         assertSellable(item, input.priceRub);
         const now = clock.now();
         assertWindow(input.endsAt, now);
+        assertBeforeClosing(venue, input.endsAt, now);
         if (await deals.findLiveForItem(client, item.id, now)) throw dealExists();
         const deal = await deals.insert(
           client,
@@ -123,7 +152,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           },
           now,
         );
-        return { deal, item, status: dealStatus(deal, now) };
+        return { deal, item, status: dealStatus(deal, venue, now) };
       });
     },
 
@@ -136,7 +165,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
         const deal = await deals.lockInVenue(client, venue.id, dealId);
         if (!deal) throw dealNotFound();
         const now = clock.now();
-        if (deal.cancelledAt || deal.endsAt <= now || item.archivedAt) {
+        if (deal.cancelledAt || dealOverAt(deal, venue) <= now || item.archivedAt) {
           throw conflict('deal_finished', 'The deal is cancelled or over, create a new one');
         }
         const quantityLeft = patch.quantityLeft ?? deal.quantityLeft;
@@ -146,7 +175,10 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
             `Quantity left cannot exceed the ${deal.quantityTotal} portions of the deal`,
           );
         }
-        if (patch.endsAt) assertWindow(patch.endsAt, now, deal.startsAt);
+        if (patch.endsAt) {
+          assertWindow(patch.endsAt, now, deal.startsAt);
+          assertBeforeClosing(venue, patch.endsAt, deal.startsAt > now ? deal.startsAt : now);
+        }
         if (quantityLeft > 0) {
           if (deal.quantityLeft === 0) assertSellable(item, deal.priceRub);
           const live = await deals.findLiveForItem(client, item.id, now);
@@ -156,7 +188,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           quantityLeft,
           endsAt: patch.endsAt ?? deal.endsAt,
         });
-        return { deal: updated, item, status: dealStatus(updated, now) };
+        return { deal: updated, item, status: dealStatus(updated, venue, now) };
       });
     },
 

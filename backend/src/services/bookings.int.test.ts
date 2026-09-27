@@ -208,10 +208,24 @@ describe('creating bookings', () => {
       code: 'menu_item_not_found',
     });
     clock.set('2026-09-25T19:00:00Z');
-    await expect(service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })).rejects.toMatchObject({
+    await expect(service.create(GUEST, { menuItemId: eclair.id })).rejects.toMatchObject({
       status: 409,
       code: 'venue_closed',
     });
+  });
+
+  it('says that a deal is over once the venue closes, even before its end time', async () => {
+    clock.set('2026-09-25T18:48:00Z');
+    const late = await seedDeal(pool, tart, { startsAt: clock.now(), endsAt: later(HOUR) });
+    clock.set('2026-09-25T19:05:00Z');
+    for (const dealId of [late.id, deal.id]) {
+      const menuItemId = dealId === late.id ? tart.id : eclair.id;
+      await expect(service.create(GUEST, { menuItemId, dealId })).rejects.toMatchObject({
+        status: 409,
+        code: 'deal_not_active',
+      });
+    }
+    expect(await quantityLeft(late.id)).toBe(5);
     expect(await quantityLeft(deal.id)).toBe(2);
   });
 
