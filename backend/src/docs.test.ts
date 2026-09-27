@@ -31,6 +31,8 @@ const LOCAL_DEMO_TOKENS = {
   DEMO_GUEST_TOKEN: 'local-demo-guest-token-not-secret',
   DEMO_VENUE_TOKEN: 'local-demo-venue-token-not-secret',
 };
+const BANNERS = ['docs/assets/banner-light.svg', 'docs/assets/banner-dark.svg'];
+const BANNER_MAX_BYTES = 150 * 1024;
 const LONG_DASHES = [0x2013, 0x2014];
 const LINK_TARGETS = [
   /\]\(\s*<?([^\s)>]+)/g,
@@ -85,6 +87,35 @@ function exists(target: string, from: string): boolean {
   }
 }
 
+function srcsetTargets(markdown: string): string[] {
+  const text = withoutFencedCode(markdown);
+  return [...text.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi)].flatMap((match) =>
+    (match[1] ?? '').split(',').map((candidate) => candidate.trim().split(/\s+/)[0] ?? ''),
+  );
+}
+
+function externalReferences(svg: string): string[] {
+  const hrefs = [...svg.matchAll(/\b(?:xlink:)?href\s*=\s*["']([^"']*)["']/gi)].map(
+    (match) => match[1] ?? '',
+  );
+  const urls = [...svg.matchAll(/url\(\s*["']?([^"')]*)/gi)].map((match) => match[1]?.trim() ?? '');
+  return [...hrefs, ...urls].filter((target) => !target.startsWith('#'));
+}
+
+function bannerProblems(svg: string): string[] {
+  const checks: [string, boolean][] = [
+    [`larger than ${BANNER_MAX_BYTES} bytes`, Buffer.byteLength(svg) > BANNER_MAX_BYTES],
+    ['no viewBox', !/<svg\b[^>]*\bviewBox="[^"]+"/.test(svg)],
+    ['no title', !/<title\b[^>]*>[^<]+<\/title>/.test(svg)],
+    [
+      'script, foreignObject, image, text or a web font',
+      /<(?:[\w-]+:)?(?:script|foreignObject|image|text)\b|@import|@font-face/i.test(svg),
+    ],
+    ['long dash', LONG_DASHES.some((code) => svg.includes(String.fromCodePoint(code)))],
+  ];
+  return [...checks.filter(([, failed]) => failed).map(([problem]) => problem), ...externalReferences(svg)];
+}
+
 function envExampleLines(): string[] {
   return read('.env.example')
     .split('\n')
@@ -121,6 +152,26 @@ describe('README.md', () => {
       .split('\n')
       .filter((line) => line.trimStart().startsWith('|'));
     expect(configKeys.filter((key) => !rows.some((row) => row.includes(`\`${key}\``)))).toEqual([]);
+  });
+});
+
+describe('README.md banner', () => {
+  it('shows the dark banner in the dark theme and the light one everywhere else', () => {
+    const readme = withoutFencedCode(read('README.md'));
+    expect(readme).toMatch(
+      /media="\(prefers-color-scheme: dark\)"\s+srcset="docs\/assets\/banner-dark\.svg"/,
+    );
+    expect(readme).toMatch(/<img src="docs\/assets\/banner-light\.svg"/);
+  });
+
+  it('points every srcset only to files that exist', () => {
+    const targets = srcsetTargets(read('README.md'));
+    expect(targets.length).toBeGreaterThan(0);
+    expect(targets.filter((target) => !exists(target, 'README.md'))).toEqual([]);
+  });
+
+  it.each(BANNERS)('%s is a self-contained SVG with outlined text', (path) => {
+    expect(bannerProblems(read(path))).toEqual([]);
   });
 });
 
@@ -244,9 +295,43 @@ describe('markdown helpers', () => {
     );
   });
 
+  it('collects srcset candidates outside code blocks without their descriptors', () => {
+    const markdown = [
+      `<source srcset="docs/a.svg 1x, docs/b.svg 2x"><source srcSet='docs/c.svg'>`,
+      '```html',
+      '<source srcset="fenced.svg">',
+      '```',
+    ].join('\n');
+    expect(srcsetTargets(markdown)).toEqual(['docs/a.svg', 'docs/b.svg', 'docs/c.svg']);
+  });
+
   it('resolves links relative to the linking file', () => {
     expect(exists('../compose.yaml', 'docs/deploy.md')).toBe(true);
     expect(exists('compose.yaml', 'docs/deploy.md')).toBe(false);
     expect(exists('/compose.yaml', 'README.md')).toBe(false);
+  });
+});
+
+describe('svg helpers', () => {
+  it('flags references that leave the file', () => {
+    const svg = `<use href="#mark"/><path fill="url(#glow)"/><use xlink:href="https://example.com/a.svg#x"/><style>a{b:url('x.woff')}</style>`;
+    expect(externalReferences(svg)).toEqual(['https://example.com/a.svg#x', 'x.woff']);
+  });
+
+  it('accepts a banner with a titled viewBox and outlined text only', () => {
+    const svg =
+      '<svg viewBox="0 0 4 4"><title id="t">Banner</title><path d="M0 0h4v4z" fill="url(#g)"/></svg>';
+    expect(bannerProblems(svg)).toEqual([]);
+  });
+
+  it('reports live text, web fonts, long dashes, a missing title and a missing viewBox', () => {
+    const webFont = '<svg viewBox="0 0 4 4"><title>B</title><style>@font-face{font-family:x}</style></svg>';
+    expect(bannerProblems('<svg><svg:text>Banner — new</svg:text></svg>')).toEqual([
+      'no viewBox',
+      'no title',
+      'script, foreignObject, image, text or a web font',
+      'long dash',
+    ]);
+    expect(bannerProblems(webFont)).toEqual(['script, foreignObject, image, text or a web font']);
   });
 });
