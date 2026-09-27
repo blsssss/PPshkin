@@ -1,0 +1,91 @@
+- name: Check the release parameters
+  ansible.builtin.assert:
+    that:
+      - app_image_tag is defined and app_image_tag | length > 0
+      - app_domain is defined and app_domain | length > 0
+    fail_msg: pass -e app_image_tag=sha-<commit> and set app_domain in the inventory
+    quiet: true
+
+- name: Check the required environment variables
+  ansible.builtin.assert:
+    that: lookup('ansible.builtin.env', item) | length > 0
+    fail_msg: "{{ item }} is not set in the controller environment"
+    quiet: true
+  loop: "{{ app_env_required }}"
+
+- name: Create the service directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop:
+    - "{{ app_dir }}"
+    - "{{ app_dir }}/deploy"
+    - "{{ app_dir }}/backups"
+
+- name: Install the Compose file
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/compose.prod.yaml"
+    dest: "{{ app_dir }}/compose.prod.yaml"
+    mode: "0644"
+
+- name: Install the Caddyfile
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/deploy/Caddyfile"
+    dest: "{{ app_dir }}/deploy/Caddyfile"
+    mode: "0644"
+  notify: Restart Caddy
+
+- name: Read the running release
+  ansible.builtin.slurp:
+    src: "{{ app_dir }}/release"
+  register: app_running_release
+  failed_when: false
+
+- name: Remember the running release
+  ansible.builtin.set_fact:
+    app_previous_tag: "{{ app_running_release.content | b64decode | trim if app_running_release.content is defined else '' }}"
+
+- name: Check whether the database is running
+  ansible.builtin.command:
+    cmd: docker compose -f compose.prod.yaml ps --status running --quiet db
+    chdir: "{{ app_dir }}"
+  register: app_database_container
+  changed_when: false
+  failed_when: false
+
+- name: Back up the database before the release
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      target="backups/predeploy-$(date +%Y%m%dT%H%M%S).dump" &&
+      docker compose -f compose.prod.yaml exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$target.partial" &&
+      mv "$target.partial" "$target"
+    chdir: "{{ app_dir }}"
+    executable: /bin/bash
+  when: app_database_container.rc == 0 and app_database_container.stdout | length > 0
+  changed_when: true
+
+- name: Roll out the release
+  block:
+    - name: Deploy {{ app_image_tag }}
+      ansible.builtin.include_tasks: release.yml
+      vars:
+        app_release_tag: "{{ app_image_tag }}"
+  rescue:
+    - name: Roll back to {{ app_previous_tag }}
+      ansible.builtin.include_tasks: release.yml
+      vars:
+        app_release_tag: "{{ app_previous_tag }}"
+      when: app_previous_tag | length > 0 and app_previous_tag != app_image_tag
+
+    - name: Report the failed release
+      ansible.builtin.fail:
+        msg: >-
+          {{ app_image_tag }} did not become healthy,
+          {{ 'rolled back to ' ~ app_previous_tag if app_previous_tag | length > 0 and app_previous_tag != app_image_tag else 'nothing to roll back to' }}
+
+- name: Remove dangling images
+  ansible.builtin.command:
+    cmd: docker image prune --force
+  changed_when: false

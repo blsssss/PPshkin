@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+cd {{ backup_app_dir }}
+target="backups/ppshkin-$(date +%F).dump"
+docker compose -f compose.prod.yaml exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$target.partial"
+mv "$target.partial" "$target"
+find backups -name '*.dump' -mtime +{{ backup_retention_days }} -delete

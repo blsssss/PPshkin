@@ -1,0 +1,25 @@
+- name: Render the environment file for {{ app_release_tag }}
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ app_dir }}/.env"
+    mode: "0600"
+  no_log: true
+
+- name: Pull images for {{ app_release_tag }}
+  ansible.builtin.command:
+    cmd: docker compose -f compose.prod.yaml pull --quiet
+    chdir: "{{ app_dir }}"
+  when: app_pull_images | bool
+  changed_when: true
+
+- name: Start services for {{ app_release_tag }}
+  ansible.builtin.command:
+    cmd: docker compose -f compose.prod.yaml up --detach --wait --wait-timeout {{ app_wait_timeout }} --remove-orphans
+    chdir: "{{ app_dir }}"
+  changed_when: true
+
+- name: Record the running release {{ app_release_tag }}
+  ansible.builtin.copy:
+    dest: "{{ app_dir }}/release"
+    content: "{{ app_release_tag }}\n"
+    mode: "0644"

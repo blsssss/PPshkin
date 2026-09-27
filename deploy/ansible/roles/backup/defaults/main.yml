@@ -1,0 +1,4 @@
+backup_app_dir: /opt/ppshkin
+backup_retention_days: 7
+backup_hour: "3"
+backup_minute: "30"

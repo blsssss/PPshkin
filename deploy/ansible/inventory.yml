@@ -1,0 +1,6 @@
+all:
+  hosts:
+    production:
+      ansible_host: hackathon.easymythic.dev
+      ansible_user: deploy
+      app_domain: hackathon.easymythic.dev

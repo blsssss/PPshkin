@@ -1,0 +1,71 @@
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Коммит main, образы которого выкатить (sha)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://hackathon.easymythic.dev
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - id: release
+        run: echo "tag=sha-$(git rev-parse HEAD | cut -c1-7)" >> "$GITHUB_OUTPUT"
+      - name: install Ansible
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --quiet --requirement deploy/ansible/requirements.txt
+          echo "$RUNNER_TEMP/ansible/bin" >> "$GITHUB_PATH"
+      - name: SSH key and pinned host key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Ansible deploys ${{ steps.release.outputs.tag }}
+        run: ansible-playbook -i deploy/ansible/inventory.yml deploy/ansible/site.yml -e "app_image_tag=$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          ANSIBLE_PIPELINING: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_BOT_USERNAME: ${{ vars.MAX_BOT_USERNAME }}
+          MAX_WEBHOOK_SECRET: ${{ secrets.MAX_WEBHOOK_SECRET }}
+          MINI_APP_ENABLED: ${{ vars.MINI_APP_ENABLED }}
+          PROACTIVE_OFFERS: ${{ vars.PROACTIVE_OFFERS }}
+          CHADGPT_API_KEY: ${{ secrets.CHADGPT_API_KEY }}
+          DEMO_MODE: ${{ vars.DEMO_MODE }}
+          DEMO_GUEST_TOKEN: ${{ secrets.DEMO_GUEST_TOKEN }}
+          DEMO_VENUE_TOKEN: ${{ secrets.DEMO_VENUE_TOKEN }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+      - name: https://hackathon.easymythic.dev/ready answers 200
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors https://hackathon.easymythic.dev/ready

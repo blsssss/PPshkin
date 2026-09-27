@@ -1,0 +1,7 @@
+base_deploy_user: deploy
+base_app_dir: /opt/ppshkin
+base_open_ports:
+  - { port: "22", proto: tcp }
+  - { port: "80", proto: tcp }
+  - { port: "443", proto: tcp }
+  - { port: "443", proto: udp }
