@@ -89,6 +89,7 @@ export const VENUE_ERROR_TEXTS = {
   deal_exists: 'На эту позицию уже есть горящее предложение',
   deal_price_not_lower: 'Цена со скидкой должна быть ниже обычной',
   deal_window_invalid: 'Время окончания должно быть в ближайшие 24 часа',
+  deal_ends_after_closing: 'Время окончания позже закрытия заведения, выберите срок заново',
   menu_item_unavailable: 'Позиция скрыта от гостей, включите её в кабинете',
   menu_item_not_found: 'Позиция уже удалена, обновите список',
   deal_not_found: 'Позиция уже удалена, обновите список',
@@ -155,8 +156,6 @@ export const QUANTITY_PROMPT = `Напишите, сколько порций п
 export const QUANTITY_INVALID = `Нужно целое число от 1 до ${DEAL_QUANTITY_LIMIT}, например 7.`;
 export const DISCOUNT_QUESTION = 'Какая скидка?';
 export const UNTIL_QUESTION = 'До скольки продаём?';
-export const VENUE_CLOSED_WARNING =
-  'Заведение сейчас закрыто по часам работы: гости не смогут забронировать до открытия.';
 export const DEAL_CANCELLED = 'Хорошо, ничего не публикую.';
 
 const NO_BOOKINGS = 'Активных броней нет.';
@@ -352,6 +351,11 @@ export function pricePrompt(maxRub: number): string {
 
 export function priceInvalid(maxRub: number): string {
   return `Нужно целое число от 1 до ${maxRub}: цена со скидкой ниже обычной.`;
+}
+
+export function dealsPausedText(open: boolean, opensToday: boolean, opensAt: string): string {
+  const reason = open ? 'До закрытия меньше 15 минут' : 'Заведение сейчас закрыто';
+  return `${reason}, горящее можно выставить ${opensToday ? 'сегодня' : 'завтра'} с ${opensAt}.`;
 }
 
 export function untilClosingOption(closesAt: string): string {

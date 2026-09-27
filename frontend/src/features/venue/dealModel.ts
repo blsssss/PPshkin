@@ -1,5 +1,6 @@
 import type { Schemas } from '../../api/client.ts';
 import { formatPrice } from '../../shared/format.ts';
+import { isOpenNow } from '../../shared/openNow.ts';
 import { fromZonedInput, toZonedInput } from '../../shared/zonedTime.ts';
 import type { Venue } from './model.ts';
 
@@ -10,6 +11,13 @@ export const QUANTITIES = [1, 3, 5, 10] as const;
 export const MAX_QUANTITY = 100;
 const DAY_MS = 24 * 60 * 60_000;
 const HOUR_MS = 60 * 60_000;
+const CLOSING_MARGIN_MS = 15 * 60_000;
+
+type OpeningHours = Pick<Venue, 'opensAt' | 'closesAt' | 'timezone'>;
+
+export interface SaleWindow {
+  closing: Date | null;
+}
 
 export const DEAL_STATUS_LABELS: Record<Deal['status'], string> = {
   active: 'Продаётся',
@@ -48,7 +56,7 @@ function nextLocalTime(time: string, timeZone: string, now: Date): Date | null {
   return venueTimeToInstant(nextDay(today), time, timeZone);
 }
 
-function closingTime(venue: Pick<Venue, 'opensAt' | 'closesAt' | 'timezone'>, now: Date): Date | null {
+function closingTime(venue: OpeningHours, now: Date): Date | null {
   if (venue.opensAt === venue.closesAt) return null;
   return nextLocalTime(venue.closesAt, venue.timezone, now);
 }
@@ -56,11 +64,7 @@ function closingTime(venue: Pick<Venue, 'opensAt' | 'closesAt' | 'timezone'>, no
 export type EndChoice =
   { kind: 'hours'; hours: 1 | 2 } | { kind: 'closing' } | { kind: 'time'; time: string };
 
-export function resolveEnd(
-  choice: EndChoice,
-  venue: Pick<Venue, 'opensAt' | 'closesAt' | 'timezone'>,
-  now: Date,
-): Date | null {
+export function resolveEnd(choice: EndChoice, venue: OpeningHours, now: Date): Date | null {
   switch (choice.kind) {
     case 'hours':
       return new Date(now.getTime() + choice.hours * HOUR_MS);
@@ -74,6 +78,35 @@ export function resolveEnd(
 export function withinWindow(endsAt: Date, now: Date): boolean {
   const delta = endsAt.getTime() - now.getTime();
   return delta > 0 && delta <= DAY_MS;
+}
+
+export function saleWindow(venue: OpeningHours, now: Date): SaleWindow | null {
+  if (!isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, now)) return null;
+  const closing = closingTime(venue, now);
+  if (closing !== null && closing.getTime() - now.getTime() < CLOSING_MARGIN_MS) return null;
+  return { closing };
+}
+
+export function endsBeforeClosing(endsAt: Date, window: SaleWindow): boolean {
+  return window.closing === null || endsAt.getTime() <= window.closing.getTime();
+}
+
+export function fittingHours(window: SaleWindow, now: Date): (1 | 2)[] {
+  return ([1, 2] as const).filter((hours) =>
+    endsBeforeClosing(new Date(now.getTime() + hours * HOUR_MS), window),
+  );
+}
+
+export function defaultEnd(window: SaleWindow | null, now: Date): EndChoice {
+  const longest = window === null ? 2 : fittingHours(window, now).at(-1);
+  return longest === undefined ? { kind: 'closing' } : { kind: 'hours', hours: longest };
+}
+
+export function salePausedText(venue: OpeningHours, now: Date): string {
+  const open = isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, now);
+  const opensToday = toZonedInput(now, venue.timezone).slice(11, 16) < venue.opensAt;
+  const reason = open ? 'До закрытия меньше 15 минут' : 'Заведение сейчас закрыто';
+  return `${reason}, горящее можно выставить ${opensToday ? 'сегодня' : 'завтра'} с ${venue.opensAt}.`;
 }
 
 export function venueClock(iso: string, timeZone: string): string {

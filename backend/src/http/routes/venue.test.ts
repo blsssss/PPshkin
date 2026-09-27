@@ -695,6 +695,7 @@ describe('deal routes', () => {
       unprocessable('menu_item_unavailable', 'x'),
       unprocessable('deal_price_not_lower', 'x'),
       unprocessable('deal_window_invalid', 'x'),
+      unprocessable('deal_ends_after_closing', 'x'),
     ];
     const create = vi.fn<DealsService['create']>();
     for (const failure of failures) create.mockRejectedValueOnce(failure);
@@ -717,7 +718,8 @@ describe('deal routes', () => {
       .fn<DealsService['update']>()
       .mockResolvedValueOnce({ ...dealView, deal: { ...sampleDeal, quantityLeft: 0 }, status: 'sold_out' })
       .mockRejectedValueOnce(conflict('deal_finished', 'over'))
-      .mockRejectedValueOnce(unprocessable('deal_quantity_invalid', 'too many'));
+      .mockRejectedValueOnce(unprocessable('deal_quantity_invalid', 'too many'))
+      .mockRejectedValueOnce(unprocessable('deal_ends_after_closing', 'after closing'));
     app = await buildTestApp({ services: { deals: dealsStub({ update }) } });
     const url = '/api/v1/venue/deals/21';
     const path = '/api/v1/venue/deals/{id}';
@@ -744,6 +746,16 @@ describe('deal routes', () => {
     const tooMany = await app.inject({ method: 'PATCH', url, headers: owner, payload: { quantityLeft: 50 } });
     expect(tooMany.statusCode).toBe(422);
     expectContract(tooMany, 'PATCH', path);
+
+    const afterClosing = await app.inject({
+      method: 'PATCH',
+      url,
+      headers: owner,
+      payload: { endsAt: '2026-09-25T19:30:00Z' },
+    });
+    expect(afterClosing.statusCode).toBe(422);
+    expectContract(afterClosing, 'PATCH', path);
+    expect(afterClosing.json()).toMatchObject({ code: 'deal_ends_after_closing' });
 
     for (const payload of [{}, { quantityLeft: -1 }, { endsAt: 'soon' }]) {
       const invalid = await app.inject({ method: 'PATCH', url, headers: owner, payload });
