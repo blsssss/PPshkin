@@ -345,6 +345,28 @@ describe('deals and opening hours', () => {
   });
 });
 
+describe('deals after the closing', () => {
+  it('counts a deal as ended once the venue closes, even before its end time', async () => {
+    clock.set('2026-09-25T18:48:00Z');
+    const late = await seedDeal(pool, item, {
+      startsAt: clock.now(),
+      endsAt: new Date('2026-09-25T19:50:00Z'),
+    });
+    expect((await service.list(OWNER, 'active')).map((view) => view.deal.id)).toEqual([late.id]);
+
+    clock.set('2026-09-25T19:05:00Z');
+    expect(await service.list(OWNER, 'active')).toEqual([]);
+    expect(await service.list(OWNER, 'finished')).toMatchObject([{ status: 'ended', deal: { id: late.id } }]);
+    await expect(service.update(OWNER, late.id, { quantityLeft: 1 })).rejects.toMatchObject({
+      status: 409,
+      code: 'deal_finished',
+    });
+
+    clock.set('2026-09-26T06:00:00Z');
+    expect((await service.create(OWNER, input({ endsAt: inHours(1) }))).status).toBe('active');
+  });
+});
+
 describe('listing deals', () => {
   it('lists live deals by end time and finished deals of the last 7 days newest first', async () => {
     const other = await seedMenuItem(pool, venue.id, { name: 'Круассан', priceRub: 150 });

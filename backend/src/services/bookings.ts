@@ -8,6 +8,7 @@ import {
   normalizeBookingCode,
   qrPayload,
 } from '../domain/bookings.ts';
+import { dealOverAt } from '../domain/deals.ts';
 import type { Booking, Deal, MenuItem, Venue } from '../domain/models.ts';
 import type { BookingNotice, Notifier } from '../ports/notifier.ts';
 import * as bookings from '../repositories/bookings.ts';
@@ -81,8 +82,8 @@ const bookingNotFound = () => notFound('booking_not_found', 'Booking not found')
 const bookingExpired = () => conflict('booking_expired', 'The booking has expired, the portion is released');
 const bookingNotActive = () => conflict('booking_not_active', 'The booking is already redeemed or cancelled');
 
-function dealRunning(deal: Deal, now: Date): boolean {
-  return deal.cancelledAt === null && deal.startsAt <= now && deal.endsAt > now;
+function dealRunning(deal: Deal, venue: Venue, now: Date): boolean {
+  return deal.cancelledAt === null && deal.startsAt <= now && dealOverAt(deal, venue) > now;
 }
 
 async function lockBookableItem(
@@ -100,10 +101,16 @@ async function lockBookableItem(
   return { item, venue };
 }
 
-async function lockBookableDeal(db: Queryable, item: MenuItem, dealId: number, now: Date): Promise<Deal> {
+async function lockBookableDeal(
+  db: Queryable,
+  item: MenuItem,
+  venue: Venue,
+  dealId: number,
+  now: Date,
+): Promise<Deal> {
   const deal = await deals.lockInVenue(db, item.venueId, dealId);
   if (deal?.menuItemId !== item.id) throw notFound('deal_not_found', 'Deal not found');
-  if (!dealRunning(deal, now)) {
+  if (!dealRunning(deal, venue, now)) {
     throw conflict('deal_not_active', 'The deal is cancelled, over or has not started yet');
   }
   return deal;
@@ -161,10 +168,11 @@ export function createBookingsService({
   ): Promise<BookingView> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
     const { item, venue } = await lockBookableItem(client, input.menuItemId, userId);
+    const deal =
+      input.dealId === undefined ? null : await lockBookableDeal(client, item, venue, input.dealId, now);
     if (!isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone)) {
       throw conflict('venue_closed', 'The venue is closed now');
     }
-    const deal = input.dealId === undefined ? null : await lockBookableDeal(client, item, input.dealId, now);
     const activeItems = await bookings.listActiveItemIds(client, userId);
     if (activeItems.includes(item.id)) {
       throw conflict('booking_exists', 'You already have an active booking of this item');

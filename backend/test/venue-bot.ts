@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { normalizeBookingCode } from '../src/domain/bookings.ts';
+import { dealOverAt } from '../src/domain/deals.ts';
 import { menuNameKey } from '../src/domain/menu-imports.ts';
 import type { Booking, Deal, MenuImport, MenuItem, ParsedMenuItem, Venue } from '../src/domain/models.ts';
 import type { VenueAnalytics } from '../src/services/analytics.ts';
@@ -97,11 +98,17 @@ export function venueFake(clock: Clock) {
   const dealView = (deal: Deal): DealView => {
     const item = state.items.find((candidate) => candidate.id === deal.menuItemId);
     if (!item) throw new Error(`Deal ${deal.id} has no menu item`);
-    return { deal: { ...deal }, item: { ...item }, status: dealStatus(deal, clock.now()) };
+    return {
+      deal: { ...deal },
+      item: { ...item },
+      status: dealStatus(deal, state.venue ?? sampleVenue, clock.now()),
+    };
   };
 
   const isLive = (deal: Deal) =>
-    deal.cancelledAt === null && deal.quantityLeft > 0 && deal.endsAt > clock.now();
+    deal.cancelledAt === null &&
+    deal.quantityLeft > 0 &&
+    dealOverAt(deal, state.venue ?? sampleVenue) > clock.now();
 
   const bookingView = (booking: Booking): BookingView => {
     const item = state.items.find((candidate) => candidate.id === booking.menuItemId);

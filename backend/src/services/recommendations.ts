@@ -106,7 +106,7 @@ function toRecommendedOffer(
     offerId: offer.id,
     item,
     venue,
-    deal: deal ? { deal, item, status: dealStatus(deal, now) } : null,
+    deal: deal ? { deal, item, status: dealStatus(deal, venue, now) } : null,
     score: recommendation.score,
     distanceM: recommendation.distanceM,
     priceRub: recommendation.priceRub,
