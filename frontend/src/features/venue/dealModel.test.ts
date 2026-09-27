@@ -6,7 +6,11 @@ import {
   discountedPrice,
   formatRate,
   normalizeBookingCode,
+  defaultEnd,
+  endsBeforeClosing,
   resolveEnd,
+  saleWindow,
+  salePausedText,
   validDealPrice,
   venueTimeToInstant,
   withinWindow,
@@ -67,6 +71,68 @@ describe('end time', () => {
     expect(withinWindow(new Date('2026-09-27T12:00:00.000Z'), now)).toBe(true);
     expect(withinWindow(new Date('2026-09-27T12:00:01.000Z'), now)).toBe(false);
     expect(withinWindow(now, now)).toBe(false);
+  });
+});
+
+describe('sale window', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('sells until the closing while the venue is open', () => {
+    expect(saleWindow(VENUE, at('2026-09-26T12:00:00.000Z'))).toEqual({
+      closing: at('2026-09-26T19:00:00.000Z'),
+    });
+    expect(
+      saleWindow({ ...VENUE, opensAt: '18:00', closesAt: '02:00' }, at('2026-09-26T20:00:00.000Z')),
+    ).toEqual({
+      closing: at('2026-09-26T23:00:00.000Z'),
+    });
+    expect(
+      saleWindow({ ...VENUE, opensAt: '00:00', closesAt: '00:00' }, at('2026-09-26T21:30:00.000Z')),
+    ).toEqual({
+      closing: null,
+    });
+  });
+
+  it('does not sell while closed or less than 15 minutes before the closing', () => {
+    expect(saleWindow(VENUE, at('2026-09-26T18:45:00.000Z'))).not.toBeNull();
+    expect(saleWindow(VENUE, at('2026-09-26T18:50:00.000Z'))).toBeNull();
+    expect(saleWindow(VENUE, at('2026-09-26T19:30:00.000Z'))).toBeNull();
+    expect(saleWindow(VENUE, at('2026-09-26T04:00:00.000Z'))).toBeNull();
+  });
+
+  it('keeps the end no later than the closing', () => {
+    const window = { closing: at('2026-09-26T19:00:00.000Z') };
+    expect(endsBeforeClosing(at('2026-09-26T19:00:00.000Z'), window)).toBe(true);
+    expect(endsBeforeClosing(at('2026-09-26T19:00:01.000Z'), window)).toBe(false);
+    expect(endsBeforeClosing(at('2026-09-27T12:00:00.000Z'), { closing: null })).toBe(true);
+  });
+
+  it('picks the longest quick option that fits before the closing', () => {
+    const closing = at('2026-09-26T19:00:00.000Z');
+    expect(defaultEnd({ closing }, at('2026-09-26T12:00:00.000Z'))).toEqual({ kind: 'hours', hours: 2 });
+    expect(defaultEnd({ closing }, at('2026-09-26T17:30:00.000Z'))).toEqual({ kind: 'hours', hours: 1 });
+    expect(defaultEnd({ closing }, at('2026-09-26T18:20:00.000Z'))).toEqual({ kind: 'closing' });
+    expect(defaultEnd({ closing: null }, at('2026-09-26T18:20:00.000Z'))).toEqual({
+      kind: 'hours',
+      hours: 2,
+    });
+  });
+
+  it.each([
+    [
+      '2026-09-26T18:50:00.000Z',
+      VENUE,
+      'До закрытия меньше 15 минут, горящее можно выставить завтра с 08:00.',
+    ],
+    ['2026-09-26T19:30:00.000Z', VENUE, 'Заведение сейчас закрыто, горящее можно выставить завтра с 08:00.'],
+    ['2026-09-26T04:00:00.000Z', VENUE, 'Заведение сейчас закрыто, горящее можно выставить сегодня с 08:00.'],
+    [
+      '2026-09-26T22:50:00.000Z',
+      { ...VENUE, opensAt: '18:00', closesAt: '02:00' },
+      'До закрытия меньше 15 минут, горящее можно выставить сегодня с 18:00.',
+    ],
+  ])('explains when a deal can start at %s', (now, venue, text) => {
+    expect(salePausedText(venue, at(now))).toBe(text);
   });
 });
 

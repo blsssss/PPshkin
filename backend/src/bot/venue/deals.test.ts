@@ -396,12 +396,9 @@ describe('hot deal wizard', () => {
     expect(chat.states.peek(OWNER_ID).flow).toMatchObject({ step: 'confirm', draft: { endsAt } });
   });
 
-  it.each([
-    ['is open round the clock', '2026-09-26T09:00:00Z', { opensAt: '00:00', closesAt: '00:00' }],
-    ['closes in ten minutes', '2026-09-26T18:50:00Z', {}],
-  ])('does not offer closing time when the venue %s', async (_case, now, hours) => {
-    const chat = venueChat({ now });
-    chat.fake.seedVenue(hours);
+  it('does not offer closing time when the venue is open round the clock', async () => {
+    const chat = venueChat({ now: '2026-09-26T21:30:00Z' });
+    chat.fake.seedVenue({ opensAt: '00:00', closesAt: '00:00' });
     putWizard(chat, 'until', chosen(chat.fake.seedItem(), { quantity: 5, priceRub: 120 }));
 
     const [reply] = sent(await chat.send('до закрытия'));
@@ -410,24 +407,99 @@ describe('hot deal wizard', () => {
     expect(answers(await chat.press('vn:dl:until:close', reply?.messageId))[0]?.notification).toBe(
       'Кнопка устарела',
     );
+    await chat.press('vn:dl:until:120', reply?.messageId);
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({
+      step: 'confirm',
+      draft: { endsAt: '2026-09-26T23:30:00.000Z' },
+    });
   });
 
-  it('warns that guests cannot book while the venue is closed', async () => {
-    const chat = venueChat({ now: '2026-09-26T04:00:00Z' });
+  it.each([
+    ['an hour and a half', '2026-09-26T17:30:00Z', ['vn:dl:until:60', 'vn:dl:until:close']],
+    ['40 minutes', '2026-09-26T18:20:00Z', ['vn:dl:until:close']],
+  ])('offers only the durations that end before the closing in %s', async (_case, now, offered) => {
+    const chat = venueChat({ now });
     chat.fake.seedVenue();
     putWizard(chat, 'discount', chosen(chat.fake.seedItem(), { quantity: 3 }));
 
     const [reply] = answers(await chat.press('vn:dl:disc:50', WIZARD));
 
-    expect(reply?.message?.text).toBe(
-      [
-        'Заведение сейчас закрыто по часам работы: гости не смогут забронировать до открытия.',
-        '',
-        'Эклер: 100 ₽ вместо 200 ₽ (-50%), 3 шт.',
-        'До скольки продаём?',
-      ].join('\n'),
-    );
+    expect(reply?.message?.text).toBe('Эклер: 100 ₽ вместо 200 ₽ (-50%), 3 шт.\nДо скольки продаём?');
+    expect(payloads(reply?.message)).toEqual([...offered, 'vn:dl:cancel']);
     expect(labels(reply?.message)).toContain('До закрытия, 22:00');
+    expect(answers(await chat.press('vn:dl:until:120', WIZARD))[0]?.notification).toBe('Кнопка устарела');
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({ step: 'until' });
+  });
+
+  it('does not offer any end time ten minutes before the closing', async () => {
+    const chat = venueChat({ now: '2026-09-26T18:50:00Z' });
+    chat.fake.seedVenue();
+    putWizard(chat, 'until', chosen(chat.fake.seedItem(), { quantity: 5, priceRub: 120 }));
+
+    const [reply] = sent(await chat.send('до закрытия'));
+
+    expect(reply).toMatchObject({
+      text: 'До закрытия меньше 15 минут, горящее можно выставить завтра с 08:00.',
+      buttons: [[DEALS]],
+    });
+    expect(chat.states.peek(OWNER_ID).flow).toBeNull();
+    for (const payload of ['vn:dl:until:60', 'vn:dl:until:120', 'vn:dl:until:close']) {
+      expect(answers(await chat.press(payload, WIZARD))[0]?.message?.text).toBe(
+        'Мастер устарел, начните заново',
+      );
+    }
+    expect(chat.states.peek(OWNER_ID).flow).toBeNull();
+    expect(chat.fake.services.deals.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'ten minutes before the closing',
+      '2026-09-26T18:50:00Z',
+      {},
+      'До закрытия меньше 15 минут, горящее можно выставить завтра с 08:00.',
+    ],
+    [
+      'after the closing',
+      '2026-09-26T19:30:00Z',
+      {},
+      'Заведение сейчас закрыто, горящее можно выставить завтра с 08:00.',
+    ],
+    [
+      'before the opening',
+      '2026-09-26T04:00:00Z',
+      {},
+      'Заведение сейчас закрыто, горящее можно выставить сегодня с 08:00.',
+    ],
+    [
+      'ten minutes before a closing after midnight',
+      '2026-09-26T22:50:00Z',
+      { opensAt: '18:00', closesAt: '02:00' },
+      'До закрытия меньше 15 минут, горящее можно выставить сегодня с 18:00.',
+    ],
+  ])('explains that a deal cannot start %s', async (_case, now, hours, text) => {
+    const chat = venueChat({ now });
+    chat.fake.seedVenue(hours);
+    chat.fake.seedItem();
+
+    const [reply] = answers(await chat.press('vn:dl:new', 'mid.deals'));
+
+    expect(reply?.message).toMatchObject({ text, buttons: [[DEALS]] });
+    expect(chat.states.peek(OWNER_ID).flow).toBeNull();
+  });
+
+  it('stops the wizard when the venue closes meanwhile', async () => {
+    const chat = venueChat({ now: '2026-09-26T19:30:00Z' });
+    chat.fake.seedVenue();
+    putWizard(chat, 'discount', chosen(chat.fake.seedItem(), { quantity: 3 }));
+
+    const [reply] = answers(await chat.press('vn:dl:disc:50', WIZARD));
+
+    expect(reply?.message).toMatchObject({
+      text: 'Заведение сейчас закрыто, горящее можно выставить завтра с 08:00.',
+      buttons: [[DEALS]],
+    });
+    expect(chat.states.peek(OWNER_ID).flow).toBeNull();
   });
 
   it('explains an existing deal on the item', async () => {
@@ -479,6 +551,21 @@ describe('hot deal wizard', () => {
     expect(chat.states.peek(OWNER_ID).flow).not.toMatchObject({
       draft: { endsAt: expect.any(String) as unknown },
     });
+  });
+
+  it('asks for the end time again when the deal would end after the closing', async () => {
+    const chat = ownerChat();
+    atConfirm(chat, chat.fake.seedItem());
+    vi.mocked(chat.fake.services.deals.create).mockRejectedValueOnce(
+      unprocessable('deal_ends_after_closing', 'After closing'),
+    );
+
+    const [reply] = sent(await chat.press('vn:dl:ok', WIZARD));
+
+    expect(reply?.text).toBe(
+      'Время окончания позже закрытия заведения, выберите срок заново\n\nЭклер: 120 ₽ вместо 200 ₽ (-40%), 5 шт.\nДо скольки продаём?',
+    );
+    expect(chat.states.peek(OWNER_ID).flow).toMatchObject({ step: 'until' });
   });
 
   it.each([

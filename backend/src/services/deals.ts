@@ -1,9 +1,10 @@
 import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
-import type { Deal, MenuItem } from '../domain/models.ts';
+import type { Deal, MenuItem, Venue } from '../domain/models.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../shared/errors.ts';
+import { isOpenAt, nextClosingAt } from '../shared/time.ts';
 import { lockMenuItem } from './menu.ts';
 import { requireOwnedVenue } from './venues.ts';
 
@@ -76,6 +77,20 @@ function assertWindow(endsAt: Date, now: Date, startsAt: Date = now): void {
   }
 }
 
+function assertBeforeClosing(venue: Venue, endsAt: Date, from: Date): void {
+  const closing = nextClosingAt(venue.opensAt, venue.closesAt, from, venue.timezone);
+  if (!closing) return;
+  if (!isOpenAt(venue.opensAt, venue.closesAt, from, venue.timezone)) {
+    throw unprocessable(
+      'deal_ends_after_closing',
+      'The venue is closed, publish the deal during its opening hours',
+    );
+  }
+  if (endsAt > closing) {
+    throw unprocessable('deal_ends_after_closing', 'The deal must end no later than the venue closes');
+  }
+}
+
 function assertSellable(item: MenuItem, priceRub: number): void {
   if (!item.isAvailable) {
     throw unprocessable('menu_item_unavailable', 'The item is hidden from guests, make it available first');
@@ -111,6 +126,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
         assertSellable(item, input.priceRub);
         const now = clock.now();
         assertWindow(input.endsAt, now);
+        assertBeforeClosing(venue, input.endsAt, now);
         if (await deals.findLiveForItem(client, item.id, now)) throw dealExists();
         const deal = await deals.insert(
           client,
@@ -146,7 +162,10 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
             `Quantity left cannot exceed the ${deal.quantityTotal} portions of the deal`,
           );
         }
-        if (patch.endsAt) assertWindow(patch.endsAt, now, deal.startsAt);
+        if (patch.endsAt) {
+          assertWindow(patch.endsAt, now, deal.startsAt);
+          assertBeforeClosing(venue, patch.endsAt, deal.startsAt > now ? deal.startsAt : now);
+        }
         if (quantityLeft > 0) {
           if (deal.quantityLeft === 0) assertSellable(item, deal.priceRub);
           const live = await deals.findLiveForItem(client, item.id, now);

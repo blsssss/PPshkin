@@ -154,12 +154,60 @@ describe('deal form', () => {
     expect(screen.getByRole('button', { name: 'Поделиться' })).toBeTruthy();
   });
 
-  it('disables discounts that do not lower the price and warns about a closed venue', async () => {
+  it('disables discounts that do not lower the price and does not publish in a closed venue', async () => {
     await start({ ...VENUE, opensAt: '18:00', closesAt: '23:00' });
     await renderApp('/venue/deals/new?itemId=2');
-    expect(await screen.findByText(/Заведение сейчас закрыто/)).toBeTruthy();
+    expect(
+      await screen.findByText('Заведение сейчас закрыто, горящее можно выставить сегодня с 18:00.'),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: /^-50%, 1/ }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: /^-20%, 2/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: '1 час' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Опубликовать' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('offers only end times before the closing', async () => {
+    vi.setSystemTime(new Date('2026-09-26T18:20:00.000Z'));
+    await start();
+    server.on('POST', '/api/v1/venue/deals', (call) => json(deal({ ...(call.body as object), id: 5 }), 201));
+    await renderApp('/venue/deals/new?itemId=1');
+    expect(await screen.findByRole('button', { name: 'До закрытия' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '1 час' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '2 часа' })).toBeNull();
+    expect(screen.getByText(/^Чизкейк: 133.₽ вместо 190.₽ \(-30%\), 5 шт\., до 22:00$/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Другое время' }));
+    fireEvent.change(screen.getByLabelText('Время окончания'), { target: { value: '22:30' } });
+    expect(screen.getByText('Время окончания должно быть не позже закрытия в 22:00')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Опубликовать' }).hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Время окончания'), { target: { value: '21:50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Опубликовать' }));
+    expect(await screen.findByText('Горящая позиция опубликована')).toBeTruthy();
+    expect(server.callsTo('POST', '/api/v1/venue/deals')[0]?.body).toMatchObject({
+      endsAt: '2026-09-26T18:50:00.000Z',
+    });
+  });
+
+  it('explains that a deal cannot start ten minutes before the closing', async () => {
+    vi.setSystemTime(new Date('2026-09-26T18:50:00.000Z'));
+    await start();
+    await renderApp('/venue/deals/new?itemId=1');
+    expect(
+      await screen.findByText('До закрытия меньше 15 минут, горящее можно выставить завтра с 08:00.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'До закрытия' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Опубликовать' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('explains a deal that the server finds ending after the closing', async () => {
+    await start();
+    server.on('POST', '/api/v1/venue/deals', () => problem(422, 'deal_ends_after_closing'));
+    await renderApp('/venue/deals/new?itemId=1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Опубликовать' }));
+    expect(
+      await screen.findByText('Время окончания позже закрытия заведения, выберите срок до закрытия'),
+    ).toBeTruthy();
   });
 
   it('hides "До закрытия" for a round the clock venue and explains an existing deal', async () => {
@@ -374,6 +422,16 @@ describe('review fixes', () => {
         'endsAt',
       ]);
     });
+  });
+
+  it('changes the end time of a deal only within the opening hours', async () => {
+    vi.setSystemTime(new Date('2026-09-26T17:30:00.000Z'));
+    await start();
+    server.on('GET', '/api/v1/venue/deals', () => json({ items: [deal()] }));
+    await renderApp('/venue/deals/3');
+    expect(await screen.findByRole('button', { name: '1 час' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '2 часа' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'До закрытия' })).toBeTruthy();
   });
 
   it('leaves a prefilled form without asking when nothing changed', async () => {

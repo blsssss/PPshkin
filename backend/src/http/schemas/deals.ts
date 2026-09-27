@@ -29,7 +29,9 @@ export const DealListSchema = z.object({ items: z.array(DealSchema) });
 
 const DealEnd = z.iso
   .datetime({ offset: true })
-  .describe('Окончание акции, ISO 8601: позже текущего момента и не позже чем через 24 часа');
+  .describe(
+    'Окончание акции, ISO 8601: позже текущего момента, не позже чем через 24 часа и не позже ближайшего закрытия заведения (у круглосуточного заведения ограничения по закрытию нет)',
+  );
 
 export const DealBody = z.object({
   menuItemId: z.number().int().positive(),
