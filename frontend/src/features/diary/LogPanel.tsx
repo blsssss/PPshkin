@@ -9,9 +9,11 @@ import { ConfirmSheet } from '../../shared/ui/ConfirmSheet.tsx';
 import { Notice } from '../../shared/ui/Notice.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
 import { UNAVAILABLE_TEXTS } from './logging.ts';
-import { useRefreshDiary, type Meal, type MealCandidate } from './queries.ts';
+import { useRefreshDiary, type Meal, type MealCandidate, type MealLogResult } from './queries.ts';
 import type { LoggerState } from './useMealLogger.ts';
 import styles from './Diary.module.css';
+
+type LoggedResult = Extract<MealLogResult, { status: 'logged' }>;
 
 function macros(meal: {
   proteinG: number | null;
@@ -23,13 +25,11 @@ function macros(meal: {
   return `Б ${value(meal.proteinG)} г, Ж ${value(meal.fatG)} г, У ${value(meal.carbsG)} г`;
 }
 
-function LoggedMeal({ meal, date }: { meal: Meal; date: string }) {
+function LoggedMeal({ meal, date, onRemoved }: { meal: Meal; date: string; onRemoved: () => void }) {
   const navigate = useNavigate();
   const toast = useToast();
   const refresh = useRefreshDiary();
   const [confirm, setConfirm] = useState(false);
-  const [removed, setRemoved] = useState(false);
-  if (removed) return null;
   const details = macros(meal);
   return (
     <li className={styles.logged}>
@@ -78,12 +78,56 @@ function LoggedMeal({ meal, date }: { meal: Meal; date: string }) {
             toast.show(userMessage(result), { tone: 'error' });
             return;
           }
-          setRemoved(true);
+          onRemoved();
           toast.show(gone ? 'Запись уже удалена' : 'Запись удалена');
           await refresh();
         }}
       />
     </li>
+  );
+}
+
+function LoggedMeals({ result, onClose }: { result: LoggedResult; onClose: () => void }) {
+  const navigate = useNavigate();
+  const [removed, setRemoved] = useState<number[]>([]);
+  const meals = result.meals.filter((meal) => !removed.includes(meal.id));
+  const remove = (id: number) => {
+    const left = meals.filter((meal) => meal.id !== id);
+    if (left.length === 0) onClose();
+    else setRemoved([...removed, id]);
+  };
+  return (
+    <>
+      <h2 className={styles.panelTitle}>Записали</h2>
+      <ul className={styles.loggedList}>
+        {meals.map((meal) => (
+          <LoggedMeal
+            key={meal.id}
+            meal={meal}
+            date={result.day.date}
+            onRemoved={() => {
+              remove(meal.id);
+            }}
+          />
+        ))}
+      </ul>
+      <p className={styles.muted}>Как оценили: {result.basis}</p>
+      <div className={styles.panelActions}>
+        <Button size="medium" stretched onClick={onClose}>
+          Верно
+        </Button>
+        <Button
+          size="medium"
+          variant="secondary"
+          stretched
+          onClick={() => {
+            void navigate('/eat');
+          }}
+        >
+          Что поесть сейчас?
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -102,7 +146,6 @@ export function LogPanel({
   onRetry: () => void;
   onCandidate: (candidate: MealCandidate | null) => void;
 }) {
-  const navigate = useNavigate();
   if (state.kind === 'idle') return null;
 
   if (state.kind === 'working') {
@@ -133,7 +176,7 @@ export function LogPanel({
       <section className={styles.panel} aria-live="polite">
         <Notice tone="error">{state.message}</Notice>
         <div className={styles.panelActions}>
-          {!state.lost && state.source === 'photo' && (
+          {state.retryable && (
             <Button size="medium" stretched onClick={onRetry}>
               Повторить
             </Button>
@@ -156,32 +199,7 @@ export function LogPanel({
 
   return (
     <section className={styles.panel} aria-live="polite">
-      {result.status === 'logged' && (
-        <>
-          <h2 className={styles.panelTitle}>Записали</h2>
-          <ul className={styles.loggedList}>
-            {result.meals.map((meal) => (
-              <LoggedMeal key={meal.id} meal={meal} date={result.day.date} />
-            ))}
-          </ul>
-          <p className={styles.muted}>Как оценили: {result.basis}</p>
-          <div className={styles.panelActions}>
-            <Button size="medium" stretched onClick={onClose}>
-              Верно
-            </Button>
-            <Button
-              size="medium"
-              variant="secondary"
-              stretched
-              onClick={() => {
-                void navigate('/eat');
-              }}
-            >
-              Что поесть сейчас?
-            </Button>
-          </div>
-        </>
-      )}
+      {result.status === 'logged' && <LoggedMeals result={result} onClose={onClose} />}
       {result.status === 'uncertain' && (
         <>
           <h2 className={styles.panelTitle}>Не уверены, что это. Выберите подходящее</h2>
@@ -213,34 +231,56 @@ export function LogPanel({
       )}
       {result.status === 'not_food' && (
         <>
-          <h2 className={styles.panelTitle}>На фото не нашли еду</h2>
+          <h2 className={styles.panelTitle}>
+            {state.source === 'photo' ? 'На фото не нашли еду' : 'Похоже, это не еда'}
+          </h2>
           <p className={styles.muted}>{result.basis}</p>
-          <div className={styles.panelActions}>
-            <Button size="medium" stretched onClick={onPhotoAgain}>
-              Сфотографировать ещё раз
-            </Button>
-            <Button size="medium" variant="secondary" stretched onClick={onDescribe}>
-              Описать словами
-            </Button>
-          </div>
+          {state.source === 'photo' ? (
+            <div className={styles.panelActions}>
+              <Button size="medium" stretched onClick={onPhotoAgain}>
+                Сфотографировать ещё раз
+              </Button>
+              <Button size="medium" variant="secondary" stretched onClick={onDescribe}>
+                Описать словами
+              </Button>
+            </div>
+          ) : (
+            <div className={styles.panelActions}>
+              <Button size="medium" stretched onClick={onDescribe}>
+                Описать словами
+              </Button>
+              <Button size="medium" variant="secondary" stretched onClick={manual}>
+                Ввести вручную
+              </Button>
+            </div>
+          )}
         </>
       )}
       {result.status === 'unavailable' && (
         <>
-          <Notice tone="error">{UNAVAILABLE_TEXTS[result.reason]}</Notice>
-          <div className={styles.panelActions}>
-            <Button size="medium" stretched onClick={onDescribe}>
-              Описать словами
-            </Button>
-            <Button size="medium" variant="secondary" stretched onClick={manual}>
-              Ввести вручную
-            </Button>
-            {state.source === 'photo' && (
+          <Notice tone="error">{UNAVAILABLE_TEXTS[state.source][result.reason]}</Notice>
+          {state.source === 'photo' ? (
+            <div className={styles.panelActions}>
+              <Button size="medium" stretched onClick={onDescribe}>
+                Описать словами
+              </Button>
+              <Button size="medium" variant="secondary" stretched onClick={manual}>
+                Ввести вручную
+              </Button>
               <Button size="medium" variant="secondary" stretched onClick={onRetry}>
                 Повторить
               </Button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className={styles.panelActions}>
+              <Button size="medium" stretched onClick={manual}>
+                Ввести вручную
+              </Button>
+              <Button size="medium" variant="secondary" stretched onClick={onDescribe}>
+                Описать словами
+              </Button>
+            </div>
+          )}
         </>
       )}
     </section>

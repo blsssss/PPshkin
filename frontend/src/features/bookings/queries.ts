@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { unwrap } from '../../api/client.ts';
+import { isApiError } from '../../api/errors.ts';
 import { api } from '../../api/index.ts';
 import type { Booking } from './model.ts';
 
@@ -17,10 +18,19 @@ function listKey(status: 'active' | 'history') {
 
 const LIST_POLL_MS = 60_000;
 
+async function fetchBookings(status: 'active' | 'history'): Promise<Booking[]> {
+  return unwrap(await api.GET('/api/v1/bookings', { params: { query: { status } } })).items;
+}
+
+async function activeBookingOf(menuItemId: number): Promise<Booking | undefined> {
+  const active = await fetchBookings('active');
+  return active.find((booking) => booking.item.id === menuItemId);
+}
+
 export function useBookings(status: 'active' | 'history') {
   const query = useQuery({
     queryKey: listKey(status),
-    queryFn: async () => unwrap(await api.GET('/api/v1/bookings', { params: { query: { status } } })).items,
+    queryFn: () => fetchBookings(status),
     refetchInterval: (current) => {
       const items = current.state.data;
       if (status !== 'active' || items === undefined || items.length === 0) return false;
@@ -113,8 +123,16 @@ export function useBookingQr(id: number, enabled: boolean) {
 export function useCreateBooking() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { menuItemId: number; dealId?: number; offerId?: number }) =>
-      unwrap(await api.POST('/api/v1/bookings', { body })),
+    mutationFn: async (body: { menuItemId: number; dealId?: number; offerId?: number }) => {
+      try {
+        return unwrap(await api.POST('/api/v1/bookings', { body }));
+      } catch (error) {
+        if (!isApiError(error, 'booking_exists')) throw error;
+        const existing = await activeBookingOf(body.menuItemId).catch(() => undefined);
+        if (existing === undefined) throw error;
+        return existing;
+      }
+    },
     onSuccess: (booking: Booking) => {
       queryClient.setQueryData(bookingKey(booking.id), booking);
       void queryClient.invalidateQueries({ queryKey: [...BOOKINGS_KEY, 'list'] });

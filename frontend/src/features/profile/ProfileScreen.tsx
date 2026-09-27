@@ -227,6 +227,7 @@ function SettingsForm({ profile, children }: { profile: UserProfile; children: R
 }
 
 function LocationSection({ profile }: { profile: UserProfile }) {
+  const online = useOnline();
   const geo = useGeolocation();
   const save = useSaveLocation();
   const { refetch } = useProfile();
@@ -298,7 +299,7 @@ function LocationSection({ profile }: { profile: UserProfile }) {
           variant="secondary"
           stretched
           loading={geo.status === 'requesting' || (save.isPending && save.variables !== null)}
-          disabled={save.isPending && save.variables === null}
+          disabled={!online || (save.isPending && save.variables === null)}
           onClick={() => {
             void refresh();
           }}
@@ -311,7 +312,7 @@ function LocationSection({ profile }: { profile: UserProfile }) {
             variant="secondary"
             stretched
             loading={save.isPending && save.variables === null}
-            disabled={geo.status === 'requesting' || save.isPending}
+            disabled={!online || geo.status === 'requesting' || save.isPending}
             onClick={() => {
               save.mutate(null, {
                 onSuccess: () => {

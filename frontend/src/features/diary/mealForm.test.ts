@@ -5,6 +5,7 @@ import {
   formFromCandidate,
   formFromMeal,
   mapFieldErrors,
+  sameMeal,
   toCreateInput,
   toPatchInput,
   validateMeal,
@@ -121,6 +122,26 @@ describe('edit', () => {
       fatG: '5,5',
       tags: ['coffee'],
     });
+  });
+
+  it('recognises the saved copy of a new manual meal', () => {
+    const entry = validateMeal(form({ proteinG: '12,5' }), NOW, TZ).meal!;
+    const saved: Meal = {
+      ...MEAL,
+      title: 'Борщ',
+      kcalMin: 250,
+      kcalMax: 250,
+      kcal: 250,
+      proteinG: 12.5,
+      carbsG: null,
+      tags: [],
+      source: 'manual',
+      confidence: null,
+      eatenAt: entry.eatenAt,
+    };
+    expect(sameMeal(entry, saved)).toBe(true);
+    expect(sameMeal(entry, { ...saved, kcalMax: 300 })).toBe(false);
+    expect(sameMeal(entry, { ...saved, source: 'text' })).toBe(false);
   });
 
   it('maps server field errors onto the form', () => {

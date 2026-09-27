@@ -90,11 +90,28 @@ describe('useBackNavigation', () => {
     expect(router.state.location.pathname).toBe('/home');
   });
 
+  it('closes a sheet with the MAX back button and keeps the button for the screen', async () => {
+    const webApp = fakeWebApp({ platform: 'android' });
+    const { router } = renderAt(['/list/5']);
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть' }));
+    act(() => {
+      webApp.BackButton.press();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(router.state.location.pathname).toBe('/list/5');
+    expect(webApp.BackButton.visible).toBe(true);
+    await act(async () => {
+      webApp.BackButton.press();
+      await Promise.resolve();
+    });
+    expect(router.state.location.pathname).toBe('/list');
+  });
+
   it('drives the MAX back button and lets it go on unmount', async () => {
     const webApp = fakeWebApp({ platform: 'android' });
     const { router, unmount } = renderAt(['/list/5']);
     expect(webApp.BackButton.show).toHaveBeenCalled();
-    const handler = webApp.BackButton.onClick.mock.calls[0]?.[0] as (() => void) | undefined;
+    const handler = webApp.BackButton.onClick.mock.calls[0]?.[0];
     await act(async () => {
       handler?.();
       await Promise.resolve();

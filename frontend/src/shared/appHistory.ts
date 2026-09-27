@@ -31,6 +31,14 @@ export function hasAppHistory(): boolean {
   return entries.length > 1;
 }
 
+export function useResetHistory(): (target: string) => void {
+  const navigate = useNavigate();
+  return (target) => {
+    entries.length = 0;
+    void navigate(target, { replace: true });
+  };
+}
+
 export function useLeave(): (target: string) => void {
   const navigate = useNavigate();
   return (target) => {

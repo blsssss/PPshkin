@@ -1,5 +1,5 @@
 import { Button, Textarea } from '@maxhub/max-ui';
-import { useId, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useId, type ChangeEvent, type ReactNode } from 'react';
 import { useOnline } from '../../shared/useOnline.ts';
 import { BottomSheet } from '../../shared/ui/BottomSheet.tsx';
 import styles from './Diary.module.css';
@@ -50,14 +50,17 @@ export function PhotoSheet({
 
 export function TextSheet({
   open,
+  text,
+  onChange,
   onClose,
   onSubmit,
 }: {
   open: boolean;
+  text: string;
+  onChange: (text: string) => void;
   onClose: () => void;
   onSubmit: (description: string) => void;
 }) {
-  const [text, setText] = useState('');
   const online = useOnline();
   const fieldId = useId();
   const trimmed = text.trim();
@@ -72,7 +75,7 @@ export function TextSheet({
         maxLength={MAX_DESCRIPTION}
         placeholder="Например: борщ и кусок чёрного хлеба"
         onChange={(event) => {
-          setText(event.target.value);
+          onChange(event.target.value);
         }}
       />
       <p className={styles.counter} aria-live="polite">
@@ -84,7 +87,6 @@ export function TextSheet({
         disabled={trimmed.length === 0 || !online}
         onClick={() => {
           onSubmit(trimmed);
-          setText('');
         }}
       >
         Записать

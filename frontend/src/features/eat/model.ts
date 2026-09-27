@@ -1,6 +1,7 @@
 import type { Schemas } from '../../api/client.ts';
 import { formatLocalTime, formatPrice, NBSP } from '../../shared/format.ts';
 import type { GeoPoint } from '../../shared/geo/useGeolocation.ts';
+import { isOpenNow } from '../../shared/openNow.ts';
 import { MEAL_SLOT_LABELS, VENUE_CATEGORY_LABELS } from '../../shared/vocabulary.ts';
 
 export type Venue = Schemas['Venue'];
@@ -81,6 +82,14 @@ export function timeLeft(endsAt: string, now: Date): string | null {
   const rest = minutes % 60;
   if (hours === 0) return `ещё ${rest}${NBSP}мин`;
   return rest === 0 ? `ещё ${hours}${NBSP}ч` : `ещё ${hours}${NBSP}ч ${rest}${NBSP}мин`;
+}
+
+export function isOfferActive(offer: Pick<RecommendationItem, 'venue' | 'deal'>, now: Date): boolean {
+  const { venue, deal } = offer;
+  return (
+    isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, now) &&
+    (deal === null || now.getTime() < new Date(deal.endsAt).getTime())
+  );
 }
 
 export function bookingLink(params: {

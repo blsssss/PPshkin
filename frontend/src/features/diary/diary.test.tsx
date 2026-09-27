@@ -31,6 +31,23 @@ function meal(patch: Partial<Meal>): Meal {
   };
 }
 
+function manualMeal(body: unknown): Meal {
+  const { title, kcal, eatenAt } = body as { title: string; kcal: number; eatenAt: string };
+  return meal({
+    id: 9,
+    title,
+    kcal,
+    kcalMin: kcal,
+    kcalMax: kcal,
+    proteinG: null,
+    fatG: null,
+    carbsG: null,
+    source: 'manual',
+    confidence: null,
+    eatenAt,
+  });
+}
+
 function day(date: string, meals: Meal[] = []): DiaryDay {
   const kcal = meals.reduce((sum, item) => sum + item.kcal, 0);
   return {
@@ -306,6 +323,27 @@ describe('photo', () => {
     });
   });
 
+  it('does not send a photo again when the retry finds it in the diary', async () => {
+    await start();
+    server.on('POST', '/api/v1/diary/meals/photo', () => {
+      days[TODAY] = day(TODAY, [...days[TODAY]!.meals, meal({ id: 3, title: 'Борщ' })]);
+      throw new TypeError('Failed to fetch');
+    });
+    await renderApp('/diary');
+    await screen.findByText('Сырники');
+    server.on('GET', '/api/v1/diary/today', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Сфотографировать еду' }));
+    chooseFile();
+    const retry = await screen.findByRole('button', { name: 'Повторить' }, { timeout: 3000 });
+    server.on('GET', '/api/v1/diary/today', () => json(days[TODAY]));
+    fireEvent.click(retry);
+    expect(await screen.findByText(/Не дождались ответа/)).toBeTruthy();
+    expect(await screen.findByText('Борщ')).toBeTruthy();
+    expect(server.callsTo('POST', '/api/v1/diary/meals/photo')).toHaveLength(1);
+  });
+
   it('shows the countdown on 429', async () => {
     await start();
     server.on('POST', '/api/v1/diary/meals/photo', () =>
@@ -395,6 +433,139 @@ describe('text', () => {
       description: 'сырники и капучино',
     });
   });
+
+  it('offers manual entry first when a description is not recognised', async () => {
+    await start();
+    server.reply('POST', '/api/v1/diary/meals/text', { status: 'unavailable', reason: 'disabled' });
+    const { router } = await renderApp('/diary');
+    fireEvent.click(await screen.findByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'эчпочмак' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    const text = await screen.findByText('Не удалось распознать описание. Введите блюдо вручную');
+    const panel = text.closest('section')!;
+    const manual = within(panel).getByRole('button', { name: 'Ввести вручную' });
+    expect(within(panel).getAllByRole('button')[0]).toBe(manual);
+    fireEvent.click(manual);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/diary/meals/new');
+    });
+  });
+
+  it('asks to describe the meal again when the text is not food', async () => {
+    await start();
+    server.reply('POST', '/api/v1/diary/meals/text', { status: 'not_food', basis: 'В описании нет блюда' });
+    await renderApp('/diary');
+    fireEvent.click(await screen.findByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'клавиатура' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    const title = await screen.findByText('Похоже, это не еда');
+    const panel = title.closest('section')!;
+    expect(within(panel).queryByRole('button', { name: 'Сфотографировать ещё раз' })).toBeNull();
+    expect(within(panel).getByRole('button', { name: 'Ввести вручную' })).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Описать словами' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Что вы съели').value).toBe('клавиатура');
+  });
+
+  it('closes the logged panel once all its meals are deleted', async () => {
+    await start();
+    server.reply('POST', '/api/v1/diary/meals/text', {
+      status: 'logged',
+      meals: [meal({ id: 3, title: 'Борщ' }), meal({ id: 4, title: 'Хлеб' })],
+      basis: 'По справочнику',
+      day: days[TODAY],
+    });
+    server.on('DELETE', '/api/v1/diary/meals/{id}', () => new Response(null, { status: 204 }));
+    await renderApp('/diary');
+    fireEvent.click(await screen.findByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'борщ и хлеб' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    await screen.findByText('Записали');
+    for (const title of ['Борщ', 'Хлеб']) {
+      const item = screen.getByText(title).closest('li')!;
+      fireEvent.click(within(item).getByRole('button', { name: 'Удалить' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Удалить' }));
+      await waitFor(() => {
+        expect(screen.queryByText(title)).toBeNull();
+      });
+    }
+    expect(screen.queryByText('Записали')).toBeNull();
+    expect(screen.queryByText('Как оценили: По справочнику')).toBeNull();
+  });
+
+  it('keeps the description and offers a retry when the network drops', async () => {
+    await start();
+    server.on('POST', '/api/v1/diary/meals/text', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await renderApp('/diary');
+    await screen.findByText('Сырники');
+    server.on('GET', '/api/v1/diary/today', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'борщ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    const text = await screen.findByText('Нет соединения с сервером', {}, { timeout: 3000 });
+    const panel = text.closest('section')!;
+    expect(screen.queryByText(/Проверили дневник/)).toBeNull();
+    expect(within(panel).getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Описать словами' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Что вы съели').value).toBe('борщ');
+  });
+
+  it('retries a description and clears it once logged', async () => {
+    await start();
+    server.on('POST', '/api/v1/diary/meals/text', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await renderApp('/diary');
+    await screen.findByText('Сырники');
+    server.on('GET', '/api/v1/diary/today', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'борщ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    const retry = await screen.findByRole('button', { name: 'Повторить' }, { timeout: 3000 });
+    server.on('GET', '/api/v1/diary/today', () => json(days[TODAY]));
+    server.reply('POST', '/api/v1/diary/meals/text', {
+      status: 'logged',
+      meals: [meal({ id: 3, title: 'Борщ' })],
+      basis: 'По справочнику',
+      day: days[TODAY],
+    });
+    fireEvent.click(retry);
+    expect(await screen.findByText('Записали')).toBeTruthy();
+    expect(server.callsTo('POST', '/api/v1/diary/meals/text').map((call) => call.body)).toEqual([
+      { description: 'борщ' },
+      { description: 'борщ' },
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Описать словами' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Что вы съели').value).toBe('');
+  });
+
+  it('does not send a description again when the retry finds it in the diary', async () => {
+    await start();
+    server.on('POST', '/api/v1/diary/meals/text', () => {
+      days[TODAY] = day(TODAY, [...days[TODAY]!.meals, meal({ id: 3, title: 'Борщ', source: 'text' })]);
+      throw new TypeError('Failed to fetch');
+    });
+    await renderApp('/diary');
+    await screen.findByText('Сырники');
+    server.on('GET', '/api/v1/diary/today', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Описать словами' }));
+    fireEvent.change(screen.getByLabelText('Что вы съели'), { target: { value: 'борщ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Записать' }));
+    const retry = await screen.findByRole('button', { name: 'Повторить' }, { timeout: 3000 });
+    server.on('GET', '/api/v1/diary/today', () => json(days[TODAY]));
+    fireEvent.click(retry);
+    expect(await screen.findByText(/Не дождались ответа/)).toBeTruthy();
+    expect(await screen.findByText('Борщ')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull();
+    expect(server.callsTo('POST', '/api/v1/diary/meals/text')).toHaveLength(1);
+  });
 });
 
 describe('manual entry', () => {
@@ -420,6 +591,52 @@ describe('manual entry', () => {
       kcalMin: 300,
       kcalMax: 360,
     });
+  });
+
+  it('finds a meal that was saved before the response was lost', async () => {
+    await start();
+    let saved: Meal[] = [];
+    server.on('POST', '/api/v1/diary/meals', (call) => {
+      saved = [manualMeal(call.body)];
+      throw new TypeError('Failed to fetch');
+    });
+    server.on('GET', '/api/v1/diary/days/{date}', (call) =>
+      json(day(call.path.split('/').pop() ?? '', saved)),
+    );
+    const { router } = await renderApp('/diary/meals/new');
+    fireEvent.change(await screen.findByLabelText('Название'), { target: { value: 'Омлет' } });
+    fireEvent.change(screen.getByLabelText('Калорийность, ккал'), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить запись' }));
+    expect(await screen.findByText('Запись добавлена')).toBeTruthy();
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/diary');
+    });
+    expect(server.callsTo('POST', '/api/v1/diary/meals')).toHaveLength(1);
+  });
+
+  it('checks the diary before adding again after a lost response', async () => {
+    await start();
+    let saved: Meal[] = [];
+    server.on('POST', '/api/v1/diary/meals', (call) => {
+      saved = [manualMeal(call.body)];
+      throw new TypeError('Failed to fetch');
+    });
+    server.on('GET', '/api/v1/diary/days/{date}', () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const { router } = await renderApp('/diary/meals/new');
+    fireEvent.change(await screen.findByLabelText('Название'), { target: { value: 'Омлет' } });
+    fireEvent.change(screen.getByLabelText('Калорийность, ккал'), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить запись' }));
+    expect(await screen.findByText('Нет соединения с сервером', {}, { timeout: 3000 })).toBeTruthy();
+    server.on('GET', '/api/v1/diary/days/{date}', (call) =>
+      json(day(call.path.split('/').pop() ?? '', saved)),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить запись' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/diary');
+    });
+    expect(server.callsTo('POST', '/api/v1/diary/meals')).toHaveLength(1);
   });
 
   it('shows the 422 at the time field', async () => {

@@ -53,7 +53,7 @@ export const CREATE_ERRORS: Record<string, { actions: readonly CreateAction[]; t
     actions: ['bookings'],
     text: 'У вас уже 3 активные брони. Отмените одну или дождитесь её окончания',
   },
-  booking_exists: { actions: ['bookings'], text: 'Эта горящая позиция уже забронирована вами' },
+  booking_exists: { actions: ['bookings'], text: 'Эта позиция уже забронирована вами' },
   venue_closed: { actions: ['venue', 'eat'], text: 'Заведение сейчас закрыто, бронь недоступна' },
   deal_not_active: { actions: ['refresh', 'eat'], text: 'Горящая позиция закончилась' },
   deal_sold_out: { actions: ['refresh', 'eat'], text: 'Горящая позиция закончилась' },

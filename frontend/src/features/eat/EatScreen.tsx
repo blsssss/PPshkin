@@ -1,6 +1,6 @@
 import { Button } from '@maxhub/max-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { isApiError } from '../../api/errors.ts';
 import { api } from '../../api/index.ts';
@@ -11,9 +11,11 @@ import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import { ScreenState } from '../../shared/ui/ScreenState.tsx';
 import { Skeleton } from '../../shared/ui/Skeleton.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
+import { useNow } from '../../shared/useNow.ts';
 import { useInsights } from '../diary/queries.ts';
 import {
   demoCenterUsed,
+  isOfferActive,
   recommendationHeader,
   type RecommendationItem,
   type Recommendations,
@@ -69,6 +71,48 @@ function StatusState({ data, locator }: { data: Recommendations; locator: Locato
   );
 }
 
+function RecommendationList({
+  items,
+  fetching,
+  onDecline,
+  onShowOthers,
+}: {
+  items: readonly RecommendationItem[];
+  fetching: boolean;
+  onDecline: (item: RecommendationItem, reason: DeclineReason) => void;
+  onShowOthers: () => void;
+}) {
+  const now = new Date(useNow());
+  const active = items.filter((item) => isOfferActive(item, now));
+  if (active.length === 0) {
+    return (
+      <ScreenState
+        status="empty"
+        title={items.length === 0 ? 'Вы посмотрели всю подборку' : 'Предложения из подборки уже закончились'}
+        action={{ label: 'Показать другие', onClick: onShowOthers, loading: fetching }}
+      />
+    );
+  }
+  return (
+    <div className={styles.cards}>
+      {active.map((item, index) => (
+        <RecommendationCard
+          key={item.offerId}
+          item={item}
+          expanded={index === 0}
+          now={now}
+          onDecline={(reason) => {
+            onDecline(item, reason);
+          }}
+        />
+      ))}
+      <Button size="large" variant="secondary" stretched loading={fetching} onClick={onShowOthers}>
+        Показать другие
+      </Button>
+    </div>
+  );
+}
+
 export function EatScreen() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -79,7 +123,7 @@ export function EatScreen() {
   const recommendations = useRecommendations(requestPoint);
   const insights = useInsights();
   const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
-  const now = new Date();
+  const shownDishes = useRef(new Set<number>());
 
   const decline = (item: RecommendationItem, reason: DeclineReason) => {
     const key = recommendationsKey(requestPoint);
@@ -126,9 +170,17 @@ export function EatScreen() {
   };
 
   const showOthers = () => {
+    for (const item of recommendations.data?.items ?? []) shownDishes.current.add(item.item.id);
     void recommendations.refetch().then((result) => {
-      if (result.isSuccess) setHidden(new Set());
-      else toast.show(userMessage(result.error), { tone: 'error' });
+      if (!result.isSuccess) {
+        toast.show(userMessage(result.error), { tone: 'error' });
+        return;
+      }
+      setHidden(new Set());
+      const { status, items } = result.data;
+      if (status === 'ok' && items.every((item) => shownDishes.current.has(item.item.id))) {
+        toast.show('Больше вариантов рядом сейчас нет. Загляните позже');
+      }
     });
   };
 
@@ -171,35 +223,13 @@ export function EatScreen() {
           )}
           {data.status !== 'ok' ? (
             <StatusState data={data} locator={source === 'none' ? locator : null} />
-          ) : visible.length === 0 ? (
-            <ScreenState
-              status="empty"
-              title="Вы посмотрели всю подборку"
-              action={{ label: 'Показать другие', onClick: showOthers, loading: recommendations.isFetching }}
-            />
           ) : (
-            <div className={styles.cards}>
-              {visible.map((item, index) => (
-                <RecommendationCard
-                  key={item.offerId}
-                  item={item}
-                  expanded={index === 0}
-                  now={now}
-                  onDecline={(reason) => {
-                    decline(item, reason);
-                  }}
-                />
-              ))}
-              <Button
-                size="large"
-                variant="secondary"
-                stretched
-                loading={recommendations.isFetching}
-                onClick={showOthers}
-              >
-                Показать другие
-              </Button>
-            </div>
+            <RecommendationList
+              items={visible}
+              fetching={recommendations.isFetching}
+              onDecline={decline}
+              onShowOthers={showOthers}
+            />
           )}
           <Link to="/deals" className={styles.footerLink}>
             Все горящие позиции рядом

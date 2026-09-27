@@ -110,7 +110,7 @@ function macroValue(text: string): number | null | string {
   return value;
 }
 
-interface ValidMeal {
+export interface ValidMeal {
   title: string;
   kcalMin: number;
   kcalMax: number;
@@ -227,6 +227,10 @@ export function toPatchInput(meal: ValidMeal, original: Meal): MealPatchInput {
     patch.eatenAt = meal.eatenAt;
   }
   return patch;
+}
+
+export function sameMeal(meal: ValidMeal, saved: Meal): boolean {
+  return saved.source === 'manual' && Object.keys(toPatchInput(meal, saved)).length === 0;
 }
 
 const FIELD_ALIASES: Record<string, MealField> = { kcal: 'kcal', kcalMin: 'kcalMin', kcalMax: 'kcalMax' };

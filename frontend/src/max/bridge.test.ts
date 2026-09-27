@@ -210,6 +210,32 @@ describe('inside MAX', () => {
     expect(webApp.BackButton.hide).toHaveBeenCalled();
   });
 
+  it('gives the system back button to the latest handler and hides it after the last one', () => {
+    const webApp = fakeWebApp({ platform: 'android' });
+    const screenBack = vi.fn();
+    const sheetBack = vi.fn();
+    const page = renderHook(() => {
+      useBackButton(screenBack);
+    });
+    const sheet = renderHook(() => {
+      useBackButton(sheetBack);
+    });
+    webApp.BackButton.press();
+    expect(sheetBack).toHaveBeenCalledTimes(1);
+    expect(screenBack).not.toHaveBeenCalled();
+
+    sheet.unmount();
+    expect(webApp.BackButton.visible).toBe(true);
+    webApp.BackButton.press();
+    expect(screenBack).toHaveBeenCalledTimes(1);
+    expect(sheetBack).toHaveBeenCalledTimes(1);
+
+    page.unmount();
+    expect(webApp.BackButton.visible).toBe(false);
+    expect(webApp.BackButton.onClick).toHaveBeenCalledTimes(1);
+    expect(webApp.BackButton.offClick).toHaveBeenCalledTimes(1);
+  });
+
   it('reports the system back button only on phones', () => {
     fakeWebApp({ platform: 'ios' });
     expect(hasSystemBackButton()).toBe(true);

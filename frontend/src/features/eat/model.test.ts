@@ -5,6 +5,7 @@ import {
   bookingLink,
   dealShareText,
   hoursText,
+  isOfferActive,
   readRadius,
   recommendationHeader,
   resolveSearchPoint,
@@ -100,6 +101,13 @@ describe('texts and links', () => {
     expect(timeLeft('2026-09-26T18:00:00.000Z', new Date('2026-09-26T17:15:00.000Z'))).toBe('ещё 45 мин');
     expect(timeLeft('2026-09-26T18:00:00.000Z', new Date('2026-09-26T15:00:00.000Z'))).toBeNull();
     expect(timeLeft('2026-09-26T18:00:00.000Z', new Date('2026-09-26T18:01:00.000Z'))).toBeNull();
+  });
+
+  it('keeps an offer active only while the venue is open and the deal lasts', () => {
+    expect(isOfferActive({ venue: VENUE, deal: DEAL }, new Date('2026-09-26T17:59:59.000Z'))).toBe(true);
+    expect(isOfferActive({ venue: VENUE, deal: DEAL }, new Date('2026-09-26T18:00:00.000Z'))).toBe(false);
+    expect(isOfferActive({ venue: VENUE, deal: null }, new Date('2026-09-26T18:59:00.000Z'))).toBe(true);
+    expect(isOfferActive({ venue: VENUE, deal: null }, new Date('2026-09-26T19:00:00.000Z'))).toBe(false);
   });
 
   it('builds booking links with and without a deal and an offer', () => {

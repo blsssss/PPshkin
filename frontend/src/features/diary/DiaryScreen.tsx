@@ -208,7 +208,7 @@ export function DiaryScreen() {
               setPhotoOpen(true);
             }}
             onRetry={() => {
-              void logger.retryPhoto();
+              void logger.retry();
             }}
             onCandidate={manual}
           />
@@ -317,6 +317,8 @@ export function DiaryScreen() {
       />
       <TextSheet
         open={textOpen}
+        text={logger.description}
+        onChange={logger.setDescription}
         onClose={() => {
           setTextOpen(false);
           closeAdd();

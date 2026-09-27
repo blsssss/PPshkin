@@ -1,15 +1,10 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderApp } from '../../../test/app.tsx';
+import { renderApp, setOnline } from '../../../test/app.tsx';
 import { json, TEST_USER } from '../../../test/http.ts';
 
 vi.mock('../../api/index.ts', async () => (await import('../../../test/apiModule.ts')).apiModule);
 const { server, startSession } = await import('../../../test/apiModule.ts');
-
-function setOnline(value: boolean) {
-  Object.defineProperty(navigator, 'onLine', { configurable: true, value });
-  window.dispatchEvent(new Event(value ? 'online' : 'offline'));
-}
 
 afterEach(() => {
   setOnline(true);
@@ -37,5 +32,30 @@ describe('offline', () => {
     });
     expect(screen.queryByText('Нет соединения с интернетом, отправьте, когда сеть появится')).toBeNull();
     expect(screen.getByRole('button', { name: 'шоколад' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('blocks the location buttons while offline', async () => {
+    const user = {
+      ...TEST_USER,
+      location: { lat: 55.79, lon: 49.12 },
+      locationUpdatedAt: new Date().toISOString(),
+    };
+    await startSession({ user });
+    server.on('GET', '/api/v1/me', () => json(user));
+    await renderApp('/profile');
+    const location = await screen.findByRole('region', { name: 'Местоположение' });
+    const refresh = within(location).getByRole('button', { name: 'Обновить' });
+    const remove = within(location).getByRole('button', { name: 'Удалить' });
+    act(() => {
+      setOnline(false);
+    });
+    expect(refresh.hasAttribute('disabled')).toBe(true);
+    expect(remove.hasAttribute('disabled')).toBe(true);
+
+    act(() => {
+      setOnline(true);
+    });
+    expect(refresh.hasAttribute('disabled')).toBe(false);
+    expect(remove.hasAttribute('disabled')).toBe(false);
   });
 });

@@ -1,16 +1,15 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ComponentType, ReactNode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createQueryClient } from '../src/app/Root.tsx';
 import { ToastProvider } from '../src/shared/ui/Toast.tsx';
 
-export function testQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: 'always', staleTime: 30_000 },
-      mutations: { retry: false },
-    },
-  });
+export const testQueryClient = createQueryClient;
+
+export function setOnline(value: boolean) {
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value });
+  window.dispatchEvent(new Event(value ? 'online' : 'offline'));
 }
 
 export async function renderApp(

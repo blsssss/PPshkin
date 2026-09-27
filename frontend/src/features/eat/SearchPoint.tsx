@@ -60,7 +60,13 @@ export function SearchPointBar({
       <div className={styles.pointRow}>
         <span className={styles.pointText}>{demoCenter ? DEMO_CENTER_TEXT : LINES[source]}</span>
         {source !== 'device' && (
-          <Button size="small" variant="secondary" loading={locator.requesting} onClick={locator.locate}>
+          <Button
+            size="small"
+            variant="secondary"
+            className={styles.pointAction}
+            loading={locator.requesting}
+            onClick={locator.locate}
+          >
             {source === 'saved' ? 'Уточнить' : 'Указать'}
           </Button>
         )}

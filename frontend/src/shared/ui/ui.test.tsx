@@ -154,6 +154,18 @@ describe('ConfirmSheet', () => {
     expect(screen.getByText('closed')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('closes on the MAX back button on a screen without its own back', () => {
+    const webApp = fakeWebApp({ platform: 'android' });
+    render(<ConfirmHarness onConfirm={() => Promise.resolve()} />);
+    expect(webApp.BackButton.visible).toBe(true);
+    act(() => {
+      webApp.BackButton.press();
+    });
+    expect(screen.getByText('closed')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(webApp.BackButton.visible).toBe(false);
+  });
 });
 
 describe('SegmentedControl', () => {

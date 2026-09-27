@@ -373,10 +373,10 @@ describe('time zone and links', () => {
     expect(screen.getByRole('heading', { name: 'Дневник' })).toBeTruthy();
   });
 
-  it('opens the startapp link after the whole onboarding', async () => {
+  async function onboardByLink(startParam: string) {
     Object.defineProperty(navigator, 'geolocation', { configurable: true, value: undefined });
-    await start(NEW_USER, 'venue_7');
-    const { router } = await renderApp('/');
+    await start(NEW_USER, startParam);
+    const view = await renderApp('/');
     fireEvent.click(await screen.findByRole('button', { name: 'Начать' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Даю согласие' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Нет, спасибо' }));
@@ -384,8 +384,25 @@ describe('time zone and links', () => {
     await screen.findByRole('button', { name: 'Перейти в чат с ботом' });
     fireEvent.click(screen.getByRole('button', { name: 'Пропустить' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Продолжить' }));
+    return view;
+  }
+
+  it('opens the startapp link after the whole onboarding', async () => {
+    const { router } = await onboardByLink('venue_7');
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/venues/7');
     });
+  });
+
+  it('goes back from the linked venue to the catalog instead of the onboarding steps', async () => {
+    const { router } = await onboardByLink('venue_7');
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/venues/7');
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/eat');
+    });
+    expect(await screen.findByRole('heading', { name: 'Что поесть' })).toBeTruthy();
   });
 });
