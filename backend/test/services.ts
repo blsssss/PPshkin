@@ -16,6 +16,16 @@ const notStubbed = (method: string) => () => Promise.reject(new Error(`${method}
 export function fakeServices(overrides: Partial<Services> = {}): Services {
   return {
     health: { databaseReachable: () => Promise.resolve(true) },
+    metrics: {
+      snapshot: () =>
+        Promise.resolve({
+          users: 3,
+          mealsLastDay: 5,
+          activeDeals: 2,
+          bookings: { redeemed: 4 },
+          offers: { shown: 7 },
+        }),
+    },
     auth: {
       signInWithMax: notStubbed('auth.signInWithMax'),
       resolveBearer: (token) => Promise.resolve(TEST_TOKENS[token] ?? null),

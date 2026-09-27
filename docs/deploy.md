@@ -8,6 +8,7 @@
 
 | Путь | Куда |
 |---|---|
+| `/grafana`, `/grafana/*` | `grafana:3000` (дашборд мониторинга, раздел 11) |
 | `/api/*`, `/docs`, `/docs/*`, `/health`, `/ready`, `/max/webhook` | `backend:3000` |
 | всё остальное | `frontend:8080` (статические файлы мини-приложения) |
 
@@ -112,6 +113,7 @@ rm deploy_key known_hosts
 | `POSTGRES_PASSWORD` | `openssl rand -hex 24` |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `MAX_WEBHOOK_SECRET` | `openssl rand -hex 32` (подходит под `^[A-Za-z0-9_-]{5,256}$`) |
+| `GRAFANA_ADMIN_PASSWORD` | `openssl rand -hex 16`, пароль пользователя `admin` в Grafana |
 
 Секреты репозитория, их же читают живые проверки ([smoke.md](smoke.md)):
 
@@ -120,6 +122,7 @@ rm deploy_key known_hosts
 | `MAX_BOT_TOKEN` | токен бота от организаторов |
 | `CHADGPT_API_KEY` | ключ ChadGPT |
 | `DEMO_GUEST_TOKEN`, `DEMO_VENUE_TOKEN` | `openssl rand -hex 24`, на период проверки хакатона |
+| `ALERT_BOT_TOKEN`, `ALERT_CHAT_ID` | токен Telegram-бота для алертов и id чата команды, раздел 11 |
 
 Переменные репозитория (Settings, Secrets and variables, Actions, вкладка Variables):
 
@@ -139,6 +142,7 @@ rm deploy_key known_hosts
 openssl rand -hex 24 | gh secret set POSTGRES_PASSWORD --env production
 openssl rand -hex 32 | gh secret set SESSION_SECRET --env production
 openssl rand -hex 32 | gh secret set MAX_WEBHOOK_SECRET --env production
+openssl rand -hex 16 | gh secret set GRAFANA_ADMIN_PASSWORD --env production
 openssl rand -hex 24 | gh secret set DEMO_GUEST_TOKEN
 openssl rand -hex 24 | gh secret set DEMO_VENUE_TOKEN
 ```
@@ -146,7 +150,7 @@ openssl rand -hex 24 | gh secret set DEMO_VENUE_TOKEN
 Правила:
 
 - `SESSION_SECRET` и `POSTGRES_PASSWORD` после первого выката не меняйте: смена `SESSION_SECRET` разлогинит всех пользователей, а пароль базы записан в её томе при создании.
-- Без `ACME_EMAIL`, `POSTGRES_PASSWORD` или `SESSION_SECRET` плейбук останавливается до обращения к серверу и называет недостающую переменную. Без `MAX_BOT_TOKEN` и `MAX_WEBHOOK_SECRET` backend в режиме `webhook` не запускается, выкат откатывается, имя переменной видно в логе контейнера. Демо-токены из локального `compose.yaml` (с префиксом `local-demo-`) в режиме `webhook` отклоняются.
+- Без `ACME_EMAIL`, `POSTGRES_PASSWORD`, `SESSION_SECRET`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_BOT_TOKEN` или `ALERT_CHAT_ID` плейбук останавливается до обращения к серверу и называет недостающую переменную. Без `MAX_BOT_TOKEN` и `MAX_WEBHOOK_SECRET` backend в режиме `webhook` не запускается, выкат откатывается, имя переменной видно в логе контейнера. Демо-токены из локального `compose.yaml` (с префиксом `local-demo-`) в режиме `webhook` отклоняются.
 - Чтобы применить изменённый секрет или переменную, запустите выкат текущего коммита `main` (раздел 9). `MAX_BOT_USERNAME` и `DEMO_MODE` ещё и зашиты в образ мини-приложения, после их изменения сначала запустите workflow `publish` (Actions, publish, Run workflow): он пересоберёт образы и сам выкатит их.
 
 ## 5. Выкат
@@ -257,7 +261,45 @@ docker compose -f compose.prod.yaml exec -T db psql -U ppshkin -d ppshkin_restor
 docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore_check
 ```
 
-## 11. Эксплуатация
+## 11. Мониторинг и алерты
+
+Рядом с сервисом в `compose.prod.yaml` работают Prometheus, Alertmanager, Grafana, node-exporter и blackbox-exporter. Конфигурация лежит в [deploy/monitoring](../deploy/monitoring), `prometheus.yml` и `alertmanager.yml` роль `app` собирает из шаблонов с доменом и секретами. Наружу через Caddy открыта только Grafana, остальные сервисы доступны только внутри сети Docker.
+
+Что собирается:
+
+| Источник | Метрики |
+|---|---|
+| backend, `/metrics` | время ответа по шаблону маршрута и коду (`http_request_duration_seconds`), метрики Node (память, event loop, GC), продуктовые показатели: пользователи без демо-учёток, записи дневника за сутки, живые горящие позиции, брони и предложения по статусам |
+| blackbox-exporter | ответ `https://<домен>/ready` снаружи через Caddy и срок действия сертификата |
+| node-exporter | CPU, память, диск и сеть сервера |
+
+`/metrics` не маршрутизируется Caddy и снаружи недоступен, это проверяет CI. Сырые пути в метки не попадают: неизвестные адреса считаются как `unmatched`.
+
+Дашборд «ППшкин» открывается по адресу `https://<домен>/grafana/` без входа, с правами только на просмотр: доступность и сертификат, запросы, ошибки 5xx и задержка, распознавание фото и меню, webhook MAX, брони и предложения, ресурсы сервера, сработавшие алерты. Дашборд и источники данных описаны файлами в репозитории и в интерфейсе не редактируются. Администратор входит как `admin` с паролем из `GRAFANA_ADMIN_PASSWORD`; прочитать пароль на сервере: `grep GRAFANA_ADMIN_PASSWORD /opt/ppshkin/.env`.
+
+Алерты описаны в [deploy/monitoring/rules.yml](../deploy/monitoring/rules.yml), Alertmanager отправляет их в чат команды в Telegram и сообщает о восстановлении:
+
+| Алерт | Условие |
+|---|---|
+| `TargetDown` | цель мониторинга не отвечает 2 минуты |
+| `SiteUnavailable` | `https://<домен>/ready` не отвечает 200 2 минуты |
+| `CertificateExpiresSoon` | сертификат истекает меньше чем через 14 дней |
+| `HighErrorRate` | больше 5% ответов 5xx за 5 минут при заметном трафике |
+| `SlowResponses` | 95-й перцентиль API без распознавания больше 2 секунд 10 минут |
+| `DiskAlmostFull`, `MemoryHigh`, `CpuHigh` | диск больше 85%, память больше 90%, CPU больше 90% |
+
+Правила покрыты юнит-тестами `promtool test rules` ([deploy/monitoring/rules.test.yml](../deploy/monitoring/rules.test.yml)), их запускает CI.
+
+Мониторинг на том же сервере не сообщит о падении самого сервера, поэтому [uptime.yml](../.github/workflows/uptime.yml) каждые 10 минут проверяет `https://<домен>/ready` из GitHub Actions и после трёх неудачных попыток пишет в тот же чат.
+
+Бот для алертов создаётся в Telegram через @BotFather и добавляется в чат команды. Id чата виден в `getUpdates` бота после любого сообщения в чате с упоминанием бота. Токен и id сохраняются секретами репозитория:
+
+```bash
+gh secret set ALERT_BOT_TOKEN
+gh secret set ALERT_CHAT_ID
+```
+
+## 12. Эксплуатация
 
 ```bash
 cd /opt/ppshkin

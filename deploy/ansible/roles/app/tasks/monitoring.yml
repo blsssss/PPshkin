@@ -1,0 +1,22 @@
+- name: Install the monitoring configuration
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/deploy/monitoring/"
+    dest: "{{ app_dir }}/monitoring/"
+    mode: "0644"
+    directory_mode: "0755"
+  notify: Restart monitoring
+
+- name: Render the Prometheus configuration
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ app_dir }}/monitoring/prometheus.yml"
+    mode: "0644"
+  notify: Restart monitoring
+
+- name: Render the Alertmanager configuration
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ app_dir }}/monitoring/alertmanager.yml"
+    mode: "0644"
+  no_log: true
+  notify: Restart monitoring

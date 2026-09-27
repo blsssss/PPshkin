@@ -1,0 +1,33 @@
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: https://hackathon.easymythic.dev/ready answers 200 from outside the server
+        run: curl --fail --silent --show-error --max-time 20 --retry 3 --retry-delay 20 --retry-all-errors https://hackathon.easymythic.dev/ready
+      - name: alert the team chat
+        if: failure()
+        env:
+          ALERT_BOT_TOKEN: ${{ secrets.ALERT_BOT_TOKEN }}
+          ALERT_CHAT_ID: ${{ secrets.ALERT_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          curl --fail --silent --show-error --output /dev/null
+          "https://api.telegram.org/bot${ALERT_BOT_TOKEN}/sendMessage"
+          --data-urlencode "chat_id=${ALERT_CHAT_ID}"
+          --data-urlencode "text=🔴 ППшкин недоступен снаружи: https://hackathon.easymythic.dev/ready не отвечает 200 три попытки подряд. Проверка GitHub Actions: ${RUN_URL}"

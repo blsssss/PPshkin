@@ -36,6 +36,9 @@
     mode: "0644"
   notify: Restart Caddy
 
+- name: Install monitoring
+  ansible.builtin.include_tasks: monitoring.yml
+
 - name: Read the running release
   ansible.builtin.slurp:
     src: "{{ app_dir }}/release"

@@ -180,6 +180,7 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 | `FRONTEND_PORT` | нет | `8080` | порт мини-приложения на машине (только `compose.yaml`) |
 | `DOMAIN` | в `compose.prod.yaml` да | нет | домен сервиса для Caddy и `PUBLIC_BASE_URL` |
 | `ACME_EMAIL` | в `compose.prod.yaml` да | нет | почта для уведомлений Let's Encrypt |
+| `GRAFANA_ADMIN_PASSWORD` | в `compose.prod.yaml` да | нет | пароль пользователя `admin` в Grafana мониторинга продакшена |
 | `IMAGE_TAG` | нет | `latest` | тег образов `ghcr.io/blsssss/ppshkin-backend` и `ghcr.io/blsssss/ppshkin-frontend`, например `sha-<7 символов коммита>` |
 | `NODE_EXTRA_CA_CERTS` | задан в `backend/Dockerfile` | `/app/certs/russian_trusted_root_ca.pem` | корневой сертификат Минцифры для `platform-api2.max.ru`; при запуске бота из исходников задайте `NODE_EXTRA_CA_CERTS=certs/russian_trusted_root_ca.pem` из каталога `backend` |
 
@@ -580,7 +581,7 @@ docker compose up -d --wait
 
 ## Развёртывание
 
-Продакшен работает на сервере в России из `compose.prod.yaml`: Caddy с Let's Encrypt, образы backend и мини-приложения из GHCR, PostgreSQL на томе Docker, бот в режиме webhook. Каждый push в `main` выкатывается автоматически: GitHub Actions собирает образы с тегом коммита, Ansible из [deploy/ansible](deploy/ansible) собирает `.env` из секретов окружения `production`, делает копию базы, поднимает сервисы и при неудаче возвращает предыдущую версию. Настройка сервера, секреты, webhook, регистрация мини-приложения, заморозка версии, откат и резервные копии: [docs/deploy.md](docs/deploy.md).
+Продакшен работает на сервере в России из `compose.prod.yaml`: Caddy с Let's Encrypt, образы backend и мини-приложения из GHCR, PostgreSQL на томе Docker, бот в режиме webhook. Каждый push в `main` выкатывается автоматически: GitHub Actions собирает образы с тегом коммита, Ansible из [deploy/ansible](deploy/ansible) собирает `.env` из секретов окружения `production`, делает копию базы, поднимает сервисы и при неудаче возвращает предыдущую версию. Мониторинг: Prometheus, Alertmanager с алертами в чат команды и публичный дашборд Grafana `https://hackathon.easymythic.dev/grafana/` с метриками API, продукта и сервера. Настройка сервера, секреты, webhook, регистрация мини-приложения, заморозка версии, откат, резервные копии и мониторинг: [docs/deploy.md](docs/deploy.md).
 
 ## Разработка
 

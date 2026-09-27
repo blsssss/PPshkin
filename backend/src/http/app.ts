@@ -9,6 +9,7 @@ import type { Services } from '../services/index.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import { tooManyRequests } from '../shared/errors.ts';
 import { rateLimitKey, registerAuthentication } from './auth.ts';
+import { registerMetrics } from './metrics.ts';
 import { registerOpenApi } from './openapi.ts';
 import { registerProblemHandlers } from './problem.ts';
 import { apiRoutes } from './routes/index.ts';
@@ -80,10 +81,12 @@ export async function buildApp({ config, services, logger, maxWebhook }: AppOpti
   });
   await registerUploads(app);
   await registerOpenApi(app);
+  const probeLogLevel = quietestLevel(config.LOG_LEVEL, 'warn');
+  registerMetrics(app, services.metrics, probeLogLevel);
 
   await app.register(systemRoutes, {
     health: services.health,
-    probeLogLevel: quietestLevel(config.LOG_LEVEL, 'warn'),
+    probeLogLevel,
   });
   await app.register(apiRoutes, { prefix: '/api/v1', services });
   if (maxWebhook) await app.register(maxWebhookRoutes, maxWebhook);

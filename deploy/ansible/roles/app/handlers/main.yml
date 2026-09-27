@@ -3,3 +3,9 @@
     cmd: docker compose -f compose.prod.yaml restart caddy
     chdir: "{{ app_dir }}"
   changed_when: true
+
+- name: Restart monitoring
+  ansible.builtin.command:
+    cmd: docker compose -f compose.prod.yaml restart prometheus alertmanager blackbox grafana
+    chdir: "{{ app_dir }}"
+  changed_when: true
