@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderApp } from '../../../test/app.tsx';
+import { renderApp, setOnline } from '../../../test/app.tsx';
 import { json, problem } from '../../../test/http.ts';
 import { fakeWebApp } from '../../../test/webapp.ts';
 import type { Schemas } from '../../api/client.ts';
@@ -100,6 +100,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  setOnline(true);
 });
 
 describe('model', () => {
@@ -157,6 +158,47 @@ describe('confirmation', () => {
     expect(webApp.HapticFeedback.notificationOccurred).toHaveBeenCalledWith('success');
   });
 
+  it('books once on a double tap and opens the booking', async () => {
+    await start();
+    server.on('POST', '/api/v1/bookings', () =>
+      server.callsTo('POST', '/api/v1/bookings').length === 1
+        ? json(current, 201)
+        : problem(409, 'booking_exists'),
+    );
+    const { router } = await renderApp('/bookings/new?venueId=900001&menuItemId=31');
+    const book = await screen.findByRole('button', { name: 'Забронировать' });
+    act(() => {
+      book.click();
+      book.click();
+    });
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/bookings/5');
+    });
+    expect(server.callsTo('POST', '/api/v1/bookings')).toHaveLength(1);
+  });
+
+  it('opens the active booking of the item when it is already booked', async () => {
+    await start();
+    server.on('POST', '/api/v1/bookings', () => problem(409, 'booking_exists'));
+    const { router } = await renderApp('/bookings/new?venueId=900001&menuItemId=31');
+    fireEvent.click(await screen.findByRole('button', { name: 'Забронировать' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/bookings/5');
+    });
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(await screen.findByText('K7M 2QX')).toBeTruthy();
+  });
+
+  it('says the item is already booked when its booking is not in the list', async () => {
+    await start();
+    current = booking({ status: 'expired' });
+    server.on('POST', '/api/v1/bookings', () => problem(409, 'booking_exists'));
+    await renderApp('/bookings/new?venueId=900001&menuItemId=31');
+    fireEvent.click(await screen.findByRole('button', { name: 'Забронировать' }));
+    const notice = (await screen.findByText('Эта позиция уже забронирована вами')).closest('[role]');
+    expect(within(notice as HTMLElement).getByRole('button', { name: 'Мои брони' })).toBeTruthy();
+  });
+
   it('books at the menu price without a deal or offer', async () => {
     await start();
     server.on('POST', '/api/v1/bookings', () => json(current, 201));
@@ -188,7 +230,6 @@ describe('confirmation', () => {
       'У вас уже 3 активные брони. Отмените одну или дождитесь её окончания',
       ['Мои брони'],
     ],
-    [409, 'booking_exists', 'Эта горящая позиция уже забронирована вами', ['Мои брони']],
     [409, 'venue_closed', 'Заведение сейчас закрыто, бронь недоступна', ['К заведению', 'Что поесть']],
     [409, 'deal_not_active', 'Горящая позиция закончилась', ['Обновить', 'Что поесть']],
     [409, 'deal_sold_out', 'Горящая позиция закончилась', ['Обновить', 'Что поесть']],
@@ -301,6 +342,31 @@ describe('booking', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Отменить бронь' }));
     expect(await screen.findByText('Бронь отменена', { selector: 'h2' })).toBeTruthy();
     expect(server.callsTo('POST', '/api/v1/bookings/5/cancel')).toHaveLength(1);
+  });
+
+  it('fails a cancel at once without network and never sends it later', async () => {
+    await start();
+    server.on('POST', '/api/v1/bookings/{id}/cancel', () => Promise.reject(new TypeError('Failed to fetch')));
+    await renderApp('/bookings/5');
+    fireEvent.click(await screen.findByRole('button', { name: 'Отменить бронь' }));
+    const sheet = await screen.findByRole('dialog');
+    act(() => {
+      setOnline(false);
+    });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Отменить бронь' }));
+    expect(await screen.findByText('Нет соединения с сервером')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    act(() => {
+      setOnline(true);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(server.callsTo('POST', '/api/v1/bookings/5/cancel')).toHaveLength(1);
+    expect(screen.getByText('K7M 2QX')).toBeTruthy();
   });
 
   it('refetches when the booking is no longer active', async () => {
@@ -438,6 +504,30 @@ describe('resilience', () => {
       expect(router.state.location.search).toBe('');
     });
     expect(screen.getByRole('navigation', { name: 'Разделы' })).toBeTruthy();
+  });
+
+  it('leaves the booking with one back after the QR closes itself', async () => {
+    const webApp = fakeWebApp({ platform: 'web' });
+    await start();
+    const { router } = await renderApp('/bookings');
+    fireEvent.click(await screen.findByRole('button', { name: /Чизкейк Нью-Йорк/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Показать сотруднику' }));
+    await screen.findByRole('dialog', { name: 'QR для сотрудника' });
+
+    current = booking({ status: 'redeemed', resolvedAt: '2026-09-26T10:01:00.000Z' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(await screen.findByText('Готово! Бронь получена, блюдо записано в дневник')).toBeTruthy();
+    await waitFor(() => {
+      expect(router.state.location.search).toBe('');
+    });
+    expect(webApp.restoreScreenBrightness).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/bookings');
+    });
   });
 
   it('refreshes the active list when a booking expires', async () => {

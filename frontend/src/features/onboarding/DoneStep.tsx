@@ -1,7 +1,7 @@
 import { Button } from '@maxhub/max-ui';
-import { useNavigate } from 'react-router';
 import { session } from '../../api/index.ts';
 import { useProfile } from '../../api/profile.ts';
+import { useResetHistory } from '../../shared/appHistory.ts';
 import { formatKcal } from '../../shared/format.ts';
 import { ActionBar } from '../../shared/ui/ActionBar.tsx';
 import { GOAL_LABELS } from '../../shared/vocabulary.ts';
@@ -9,7 +9,7 @@ import { OnboardingStep } from './OnboardingStep.tsx';
 import styles from './Onboarding.module.css';
 
 export function DoneStep() {
-  const navigate = useNavigate();
+  const finish = useResetHistory();
   const profile = useProfile().data;
   const pendingLink = session.pendingStartParam() !== null;
 
@@ -39,7 +39,7 @@ export function DoneStep() {
             size="large"
             stretched
             onClick={() => {
-              void navigate('/', { replace: true });
+              finish('/');
             }}
           >
             Продолжить
@@ -50,7 +50,7 @@ export function DoneStep() {
               size="large"
               stretched
               onClick={() => {
-                void navigate('/diary?add=1', { replace: true });
+                finish('/diary?add=1');
               }}
             >
               Записать первый приём пищи
@@ -60,7 +60,7 @@ export function DoneStep() {
               stretched
               variant="secondary"
               onClick={() => {
-                void navigate('/eat', { replace: true });
+                finish('/eat');
               }}
             >
               Посмотреть, что поесть рядом

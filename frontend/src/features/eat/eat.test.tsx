@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderApp } from '../../../test/app.tsx';
 import { json, problem, TEST_USER } from '../../../test/http.ts';
 import type { UserProfile } from '../../api/client.ts';
@@ -9,6 +9,9 @@ import type { Deal, MenuItem, RecommendationItem, Venue } from './model.ts';
 
 vi.mock('../../api/index.ts', async () => (await import('../../../test/apiModule.ts')).apiModule);
 const { server, startSession } = await import('../../../test/apiModule.ts');
+
+const NOW = new Date('2026-09-26T12:00:00.000Z');
+const NO_MORE_DISHES = 'Больше вариантов рядом сейчас нет. Загляните позже';
 
 const VENUE: Venue = {
   id: 900001,
@@ -52,6 +55,10 @@ const DEAL: Deal = {
   status: 'active',
 };
 
+function dish(id: number): MenuItem {
+  return { ...ITEM, id: ITEM.id + id, name: `Блюдо ${id}` };
+}
+
 function recommendation(offerId: number, patch: Partial<RecommendationItem> = {}): RecommendationItem {
   return {
     offerId,
@@ -60,7 +67,7 @@ function recommendation(offerId: number, patch: Partial<RecommendationItem> = {}
     calculations: ['2000 - 1150 = 850 ккал'],
     assumptions: ['Калорийность приблизительная, это не медицинская рекомендация'],
     score: 0.8,
-    item: { ...ITEM, id: ITEM.id + offerId, name: `Блюдо ${offerId}` },
+    item: dish(offerId),
     venue: VENUE,
     deal: null,
     distanceM: 450,
@@ -91,8 +98,20 @@ async function start(user: UserProfile = TEST_USER) {
   server.reply('GET', '/api/v1/venues/{id}', { venue: VENUE, openNow: true, menu: [ITEM], deals: [DEAL] });
 }
 
+async function moveClockTo(time: string) {
+  vi.setSystemTime(new Date(time));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+}
+
 beforeEach(() => {
   localStorage.clear();
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('recommendations', () => {
@@ -149,6 +168,30 @@ describe('recommendations', () => {
     });
   });
 
+  it('says so when "Показать другие" brings only dishes already shown on the screen', async () => {
+    await start();
+    await renderApp('/eat');
+    await screen.findByRole('article', { name: 'Блюдо 1' });
+
+    server.reply(
+      'GET',
+      '/api/v1/recommendations',
+      recommendations([recommendation(3), recommendation(4, { item: dish(1) })]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Показать другие' }));
+    expect(await screen.findByRole('article', { name: 'Блюдо 3' })).toBeTruthy();
+    expect(screen.queryByText(NO_MORE_DISHES)).toBeNull();
+
+    server.reply(
+      'GET',
+      '/api/v1/recommendations',
+      recommendations([recommendation(5, { item: dish(2) }), recommendation(6, { item: dish(3) })]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Показать другие' }));
+    expect(await screen.findByText(NO_MORE_DISHES)).toBeTruthy();
+    expect(screen.getByRole('article', { name: 'Блюдо 2' })).toBeTruthy();
+  });
+
   it('sends the device point only when the device gave one', async () => {
     await start({ ...TEST_USER, location: { lat: 55.79, lon: 49.12 } });
     await renderApp('/eat');
@@ -164,6 +207,17 @@ describe('recommendations', () => {
       );
     });
     expect(screen.getByText('Рядом с вами')).toBeTruthy();
+  });
+
+  it('keeps the whole "Уточнить" button next to the note about central Kazan', async () => {
+    await start({ ...TEST_USER, location: { lat: 55.7558, lon: 37.6173 } });
+    server.reply('GET', '/api/v1/recommendations', {
+      ...recommendations([recommendation(1)]),
+      demoCenterUsed: true,
+    });
+    await renderApp('/eat');
+    expect(await screen.findByText(/^Вы далеко от Казани/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Уточнить' }).className).toMatch(/pointAction/);
   });
 
   it('declines, removes the card and restores it on error', async () => {
@@ -252,6 +306,34 @@ describe('recommendations', () => {
     expect(router.state.location.pathname + router.state.location.search).toBe(
       `/bookings/new?venueId=900001&menuItemId=${ITEM.id + 1}&dealId=55&offerId=1`,
     );
+  });
+
+  it('counts the deal down and drops cards once the deal ends or the venue closes', async () => {
+    vi.setSystemTime(new Date('2026-09-26T18:30:30.000Z'));
+    await start();
+    server.reply(
+      'GET',
+      '/api/v1/recommendations',
+      recommendations([
+        recommendation(1, { deal: { ...DEAL, endsAt: '2026-09-26T18:45:00.000Z' }, priceRub: 170 }),
+        recommendation(2),
+      ]),
+    );
+    await renderApp('/eat');
+    const withDeal = await screen.findByRole('article', { name: 'Блюдо 1' });
+    expect(within(withDeal).getByText(/ещё 14.мин/)).toBeTruthy();
+
+    await moveClockTo('2026-09-26T18:40:30.000Z');
+    expect(within(withDeal).getByText(/ещё 4.мин/)).toBeTruthy();
+
+    await moveClockTo('2026-09-26T18:45:30.000Z');
+    expect(screen.queryByRole('article', { name: 'Блюдо 1' })).toBeNull();
+    expect(screen.getByRole('article', { name: 'Блюдо 2' })).toBeTruthy();
+
+    await moveClockTo('2026-09-26T19:00:40.000Z');
+    expect(screen.queryByRole('article', { name: 'Блюдо 2' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Забронировать' })).toBeNull();
+    expect(screen.getByText('Предложения из подборки уже закончились')).toBeTruthy();
   });
 });
 

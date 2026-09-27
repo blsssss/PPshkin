@@ -28,15 +28,18 @@ export function useToday() {
   });
 }
 
+export async function fetchDay(date: string | null): Promise<DiaryDay> {
+  return date === null
+    ? unwrap(await api.GET('/api/v1/diary/today'))
+    : unwrap(await api.GET('/api/v1/diary/days/{date}', { params: { path: { date } } }));
+}
+
 export function useDiaryDay(date: string | null) {
   const client = useQueryClient();
   return useQuery({
     queryKey: date === null ? TODAY_KEY : dayKey(date),
     queryFn: async () => {
-      const day =
-        date === null
-          ? unwrap(await api.GET('/api/v1/diary/today'))
-          : unwrap(await api.GET('/api/v1/diary/days/{date}', { params: { path: { date } } }));
+      const day = await fetchDay(date);
       client.setQueryData(dayKey(day.date), day);
       return day;
     },
@@ -68,6 +71,11 @@ async function refreshDiary(client: QueryClient, day?: DiaryDay): Promise<void> 
     client.invalidateQueries({ queryKey: day === undefined ? DIARY_KEY : ['diary', 'summary'] }),
     client.invalidateQueries({ queryKey: INSIGHTS_KEY }),
   ]);
+}
+
+export function useCachedToday(): () => DiaryDay | undefined {
+  const client = useQueryClient();
+  return useCallback(() => client.getQueryData<DiaryDay>(TODAY_KEY), [client]);
 }
 
 export function useRefreshDiary(): (day?: DiaryDay) => Promise<void> {

@@ -1,6 +1,6 @@
 import { Button } from '@maxhub/max-ui';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { unwrap } from '../../api/client.ts';
 import { ApiError, isApiError } from '../../api/errors.ts';
@@ -89,6 +89,7 @@ function Unavailable({ text, venueId }: { text: string; venueId: number | null }
 function Confirm({ params }: { params: NewBookingParams }) {
   const navigate = useNavigate();
   const create = useCreateBooking();
+  const submitted = useRef(false);
   const online = useOnline();
   const [failure, setFailure] = useState<{ text: string; actions: readonly CreateAction[] } | null>(null);
   const details = useQuery({
@@ -149,7 +150,8 @@ function Confirm({ params }: { params: NewBookingParams }) {
   };
 
   const submit = () => {
-    if (create.isPending) return;
+    if (submitted.current) return;
+    submitted.current = true;
     setFailure(null);
     create.mutate(
       {
@@ -163,6 +165,7 @@ function Confirm({ params }: { params: NewBookingParams }) {
           void navigate(`/bookings/${String(booking.id)}`, { replace: true });
         },
         onError: (error) => {
+          submitted.current = false;
           haptic.error();
           const known = error instanceof ApiError ? CREATE_ERRORS[error.code] : undefined;
           setFailure(known ?? { text: userMessage(error), actions: [] });
@@ -448,6 +451,12 @@ export function BookingScreen() {
   const fullscreen = wantsQr && data?.status === 'active';
   const status = data?.status;
   const previous = useRef(status);
+  const qrInApp = (location.state as { qrInApp?: boolean } | null)?.qrInApp === true;
+
+  const closeQr = useCallback(() => {
+    if (qrInApp) void navigate(-1);
+    else setParams({}, { replace: true });
+  }, [qrInApp, navigate, setParams]);
 
   useEffect(() => {
     if (previous.current === 'active' && status === 'redeemed') haptic.success();
@@ -455,13 +464,8 @@ export function BookingScreen() {
   }, [status]);
 
   useEffect(() => {
-    if (wantsQr && status !== undefined && status !== 'active') setParams({}, { replace: true });
-  }, [wantsQr, status, setParams]);
-
-  const closeQr = () => {
-    if ((location.state as { qrInApp?: boolean } | null)?.qrInApp === true) void navigate(-1);
-    else setParams({}, { replace: true });
-  };
+    if (wantsQr && status !== undefined && status !== 'active') closeQr();
+  }, [wantsQr, status, closeQr]);
   const notFound = !valid || (data === undefined && isApiError(booking.error, 'booking_not_found'));
 
   return (

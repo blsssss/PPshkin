@@ -6,11 +6,11 @@ import { ErrorBoundary } from '../shared/ui/ErrorBoundary.tsx';
 import { PortalRoot } from '../shared/ui/PortalRoot.tsx';
 import { ToastProvider } from '../shared/ui/Toast.tsx';
 
-function createQueryClient(): QueryClient {
+export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: 'always', staleTime: 30_000 },
-      mutations: { retry: false },
+      mutations: { retry: false, networkMode: 'always' },
     },
   });
 }

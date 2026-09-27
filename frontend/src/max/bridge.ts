@@ -228,6 +228,12 @@ export function useClosingConfirmation(active: boolean): void {
   }, [active]);
 }
 
+const backHandlers: (() => void)[] = [];
+
+function callLatestBackHandler(): void {
+  backHandlers.at(-1)?.();
+}
+
 export function useBackButton(onBack: () => void): void {
   const handlerRef = useRef(onBack);
 
@@ -241,15 +247,20 @@ export function useBackButton(onBack: () => void): void {
     const handler = () => {
       handlerRef.current();
     };
-    attempt(() => {
-      backButton.onClick(handler);
-    });
-    attempt(() => {
-      backButton.show();
-    });
-    return () => {
+    if (backHandlers.length === 0) {
       attempt(() => {
-        backButton.offClick(handler);
+        backButton.onClick(callLatestBackHandler);
+      });
+      attempt(() => {
+        backButton.show();
+      });
+    }
+    backHandlers.push(handler);
+    return () => {
+      backHandlers.splice(backHandlers.indexOf(handler), 1);
+      if (backHandlers.length > 0) return;
+      attempt(() => {
+        backButton.offClick(callLatestBackHandler);
       });
       attempt(() => {
         backButton.hide();

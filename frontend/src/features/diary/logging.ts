@@ -1,17 +1,37 @@
 import { unwrap } from '../../api/client.ts';
+import { isApiError, NETWORK_ERROR, TIMEOUT_ERROR } from '../../api/errors.ts';
 import { api } from '../../api/index.ts';
 import type { MealLogResult } from './queries.ts';
 
+export type LogSource = 'photo' | 'text';
+
 type UnavailableReason = Extract<MealLogResult, { status: 'unavailable' }>['reason'];
 
-export const UNAVAILABLE_TEXTS: Record<UnavailableReason, string> = {
-  disabled: 'Распознавание фото сейчас выключено. Опишите блюдо словами или введите вручную',
-  timeout: 'Не успели распознать фото. Попробуйте ещё раз или опишите блюдо словами',
-  provider_error: 'Сервис распознавания не ответил. Попробуйте позже или введите блюдо вручную',
-  invalid_response: 'Сервис распознавания не ответил. Попробуйте позже или введите блюдо вручную',
-  quota_exceeded: 'Сервис распознавания не ответил. Попробуйте позже или введите блюдо вручную',
-  unsupported_image: 'Не удалось прочитать изображение. Пришлите фото в JPEG или PNG',
+const RECOGNITION_FAILED = 'Сервис распознавания не ответил. Попробуйте позже или введите блюдо вручную';
+const DESCRIPTION_NOT_RECOGNISED = 'Не удалось распознать описание. Введите блюдо вручную';
+
+export const UNAVAILABLE_TEXTS: Record<LogSource, Record<UnavailableReason, string>> = {
+  photo: {
+    disabled: 'Распознавание фото сейчас выключено. Опишите блюдо словами или введите вручную',
+    timeout: 'Не успели распознать фото. Попробуйте ещё раз или опишите блюдо словами',
+    provider_error: RECOGNITION_FAILED,
+    invalid_response: RECOGNITION_FAILED,
+    quota_exceeded: RECOGNITION_FAILED,
+    unsupported_image: 'Не удалось прочитать изображение. Пришлите фото в JPEG или PNG',
+  },
+  text: {
+    disabled: DESCRIPTION_NOT_RECOGNISED,
+    timeout: 'Не успели распознать описание. Попробуйте ещё раз или введите блюдо вручную',
+    provider_error: RECOGNITION_FAILED,
+    invalid_response: RECOGNITION_FAILED,
+    quota_exceeded: RECOGNITION_FAILED,
+    unsupported_image: DESCRIPTION_NOT_RECOGNISED,
+  },
 };
+
+export function isLostResponse(error: unknown): boolean {
+  return isApiError(error, TIMEOUT_ERROR) || isApiError(error, NETWORK_ERROR);
+}
 
 export async function logPhoto(file: File): Promise<MealLogResult> {
   return unwrap(

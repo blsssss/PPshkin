@@ -1,8 +1,14 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useBackButton } from '../../max/bridge.ts';
 import { usePortalTarget } from './PortalRoot.tsx';
-import { registerSheet } from './sheetStack.ts';
+import { closeTopSheet, registerSheet } from './sheetStack.ts';
 import styles from './BottomSheet.module.css';
+
+function SheetBackButton() {
+  useBackButton(closeTopSheet);
+  return null;
+}
 
 export function BottomSheet({
   open,
@@ -49,6 +55,7 @@ export function BottomSheet({
 
   return createPortal(
     <div className={styles.layer}>
+      <SheetBackButton />
       <div className={styles.backdrop} onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}

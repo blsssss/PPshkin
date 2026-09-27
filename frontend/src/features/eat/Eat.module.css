@@ -20,6 +20,10 @@
   line-height: 1.4;
 }
 
+.pointAction {
+  flex-shrink: 0;
+}
+
 .inlineLink {
   display: block;
   min-height: 44px;

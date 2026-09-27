@@ -1,5 +1,5 @@
 import { Button, Switch } from '@maxhub/max-ui';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { unwrap } from '../../api/client.ts';
 import { isApiError } from '../../api/errors.ts';
@@ -20,20 +20,24 @@ import { Skeleton } from '../../shared/ui/Skeleton.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
 import { useProfile } from '../../api/profile.ts';
 import { TAG_LABELS, type Tag } from '../../shared/vocabulary.ts';
+import { zonedDate } from '../../shared/zonedTime.ts';
 import { isIsoDate } from './dates.ts';
+import { isLostResponse } from './logging.ts';
 import {
   emptyForm,
   formFromCandidate,
   formFromMeal,
   mapFieldErrors,
   MAX_MEAL_TAGS,
+  sameMeal,
   toCreateInput,
   toPatchInput,
   validateMeal,
   type MealField,
   type MealFormState,
+  type ValidMeal,
 } from './mealForm.ts';
-import { useDiaryDay, useRefreshDiary, type Meal, type MealCandidate } from './queries.ts';
+import { fetchDay, useDiaryDay, useRefreshDiary, type Meal, type MealCandidate } from './queries.ts';
 import styles from './Diary.module.css';
 import { useLeave } from '../../shared/appHistory.ts';
 
@@ -70,6 +74,7 @@ function MealForm({
   const back = date === null ? '/diary' : `/diary/${date}`;
 
   const { prompt, release } = useUnsavedChanges(dirty);
+  const responseLost = useRef(false);
 
   const update = (patch: Partial<MealFormState>) => {
     setForm((current) => ({ ...current, ...patch }));
@@ -81,6 +86,22 @@ function MealForm({
     leaveTo(back);
   };
 
+  const isSaved = async (entry: ValidMeal): Promise<boolean> => {
+    const day = await fetchDay(zonedDate(new Date(entry.eatenAt), timeZone));
+    return day.meals.some((saved) => sameMeal(entry, saved));
+  };
+
+  const create = async (entry: ValidMeal) => {
+    if (responseLost.current && (await isSaved(entry))) return;
+    try {
+      unwrap(await api.POST('/api/v1/diary/meals', { body: toCreateInput(entry) }));
+    } catch (error) {
+      if (!isLostResponse(error)) throw error;
+      responseLost.current = true;
+      if (!(await isSaved(entry))) throw error;
+    }
+  };
+
   const save = async () => {
     if (saving) return;
     const result = validateMeal(form, new Date(), timeZone, meal?.eatenAt);
@@ -90,7 +111,7 @@ function MealForm({
     setSaving(true);
     try {
       if (meal === null) {
-        unwrap(await api.POST('/api/v1/diary/meals', { body: toCreateInput(result.meal) }));
+        await create(result.meal);
         haptic.success();
         toast.show('Запись добавлена');
       } else {
