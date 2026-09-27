@@ -31,7 +31,7 @@ import {
   saveImportDraft,
   type ReviewRow,
 } from './importDraft.ts';
-import type { ItemErrors, ItemField, ItemForm, MenuImport } from './model.ts';
+import type { ItemErrors, ItemField, ItemForm, MenuImport, MenuItem } from './model.ts';
 import { ItemFields } from './MenuScreens.tsx';
 import {
   fetchImport,
@@ -53,7 +53,25 @@ const POLL_MS = 2000;
 const POLL_LIMIT_MS = 3 * 60_000;
 const TEXT_EXAMPLE = 'Капучино 250 мл - 190 р.\nСырники со сметаной 180/30 г 320 руб';
 
+const TOAST_NAMES_LIMIT = 3;
+
 type Mode = 'photo' | 'text';
+
+function namesList(items: readonly MenuItem[]): string {
+  const shown = items.slice(0, TOAST_NAMES_LIMIT).map((item) => item.name);
+  const rest = items.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} и ещё ${String(rest)}` : shown.join(', ');
+}
+
+function appliedText(added: number, duplicates: readonly MenuItem[]): string {
+  if (duplicates.length === 0) {
+    return `Добавлено ${String(added)} ${plural(added, ['позиция', 'позиции', 'позиций'])}`;
+  }
+  if (added === 0) return `Все позиции уже есть в меню: ${namesList(duplicates)}`;
+  const addedPart = `${plural(added, ['Добавлена', 'Добавлено', 'Добавлено'])} ${String(added)} ${plural(added, ['новая позиция', 'новые позиции', 'новых позиций'])}`;
+  const duplicatesPart = `${String(duplicates.length)} уже ${plural(duplicates.length, ['была', 'были', 'были'])} в меню`;
+  return `${addedPart}, ${duplicatesPart}: ${namesList(duplicates)}`;
+}
 
 function importErrorText(error: unknown): string {
   if (error instanceof ApiError && (error.code === 'rate_limited' || error.status === 429)) {
@@ -376,9 +394,7 @@ function ReviewTable({ data, venueId }: { data: MenuImport; venueId: number }) {
         release();
         clearImportDraft(data.id);
         void queryClient.invalidateQueries({ queryKey: MENU_KEY });
-        toast.show(
-          `Добавлено ${String(result.items.length)} ${plural(result.items.length, ['позиция', 'позиции', 'позиций'])}`,
-        );
+        toast.show(appliedText(result.items.length, result.duplicates));
         leave('/venue/menu');
       },
       onError: (error) => {

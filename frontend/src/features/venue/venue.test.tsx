@@ -427,7 +427,7 @@ describe('menu import', () => {
       json(menuImport({ status: 'ready', items: PARSED })),
     );
     server.on('POST', '/api/v1/venue/menu/imports/{id}/apply', () =>
-      json({ items: [item(5), item(6)] }, 201),
+      json({ items: [item(5), item(6)], duplicates: [] }, 201),
     );
     const first = await renderApp('/venue/menu/import/11');
     const row = await waitFor(() => {
@@ -447,6 +447,60 @@ describe('menu import', () => {
     });
     expect(await screen.findByText('Добавлено 2 позиции')).toBeTruthy();
     expect(readImportDraft()).toBeNull();
+  });
+
+  it('names the items that were already on the menu after applying', async () => {
+    await start();
+    server.on('GET', '/api/v1/venue/menu/imports/{id}', () =>
+      json(menuImport({ status: 'ready', items: PARSED })),
+    );
+    server.on('POST', '/api/v1/venue/menu/imports/{id}/apply', () =>
+      json({ items: [item(5)], duplicates: [item(1, { name: 'Капучино' })] }, 201),
+    );
+    const { router } = await renderApp('/venue/menu/import/11');
+    const row = await waitFor(() => {
+      const found = document.getElementById('row-2');
+      if (found === null) throw new Error('row missing');
+      return found;
+    });
+    fireEvent.change(within(row).getByLabelText('Цена, ₽'), { target: { value: '140' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить в меню (2)' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/venue/menu');
+    });
+    expect(await screen.findByText('Добавлена 1 новая позиция, 1 уже была в меню: Капучино')).toBeTruthy();
+  });
+
+  it('says that everything is already on the menu instead of adding nothing', async () => {
+    await start();
+    server.on('GET', '/api/v1/venue/menu/imports/{id}', () =>
+      json(menuImport({ status: 'ready', items: PARSED })),
+    );
+    server.on('POST', '/api/v1/venue/menu/imports/{id}/apply', () =>
+      json(
+        {
+          items: [],
+          duplicates: [
+            item(1, { name: 'Капучино' }),
+            item(2, { name: 'Латте' }),
+            item(3, { name: 'Круассан' }),
+            item(4, { name: 'Морс' }),
+          ],
+        },
+        201,
+      ),
+    );
+    await renderApp('/venue/menu/import/11');
+    const row = await waitFor(() => {
+      const found = document.getElementById('row-2');
+      if (found === null) throw new Error('row missing');
+      return found;
+    });
+    fireEvent.change(within(row).getByLabelText('Цена, ₽'), { target: { value: '140' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить в меню (2)' }));
+    expect(
+      await screen.findByText('Все позиции уже есть в меню: Капучино, Латте, Круассан и ещё 1'),
+    ).toBeTruthy();
   });
 
   it('shows the failure text from the server and forgets the import', async () => {

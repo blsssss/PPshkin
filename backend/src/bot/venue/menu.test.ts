@@ -169,6 +169,41 @@ describe('menu import', () => {
     expect(chat.fake.services.menuImports.apply).toHaveBeenCalledTimes(1);
   });
 
+  it('names the items that were already on the menu instead of adding them again', async () => {
+    const chat = await uploading();
+    chat.fake.seedItem({ name: 'Эклер', category: 'dessert', priceRub: 200, kcal: 330 });
+    chat.fake.state.recognition = {
+      status: 'ready',
+      items: [
+        parsedItem({ kcal: 310 }),
+        parsedItem({ name: 'Морс', category: 'drink', priceRub: 90, kcal: 90 }),
+      ],
+      error: null,
+      afterMs: 0,
+    };
+    await withBackground(chat, chat.send(MENU_TEXT));
+
+    const [reply] = sent(await chat.press(`vn:imp:apply:${chat.fake.state.imports[0]?.id}`));
+
+    expect(reply?.text).toBe('Добавлена 1 новая позиция, 1 уже была в меню: Эклер.');
+    expect(chat.fake.state.items.map((item) => [item.name, item.kcal])).toEqual([
+      ['Эклер', 330],
+      ['Морс', 90],
+    ]);
+  });
+
+  it('says that every item is already on the menu', async () => {
+    const chat = await uploading();
+    chat.fake.seedItem({ name: 'Эклер', category: 'dessert', priceRub: 200, kcal: 330 });
+    chat.fake.state.recognition = { status: 'ready', items: [parsedItem()], error: null, afterMs: 0 };
+    await withBackground(chat, chat.send(MENU_TEXT));
+
+    const [reply] = sent(await chat.press(`vn:imp:apply:${chat.fake.state.imports[0]?.id}`));
+
+    expect(reply?.text).toBe('Все позиции уже есть в меню: Эклер. Новых не добавлено.');
+    expect(chat.fake.state.items).toHaveLength(1);
+  });
+
   it('adds nothing when no item has a price', async () => {
     const chat = await uploading();
     chat.fake.state.recognition = {

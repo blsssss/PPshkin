@@ -304,5 +304,5 @@ export function groupMenu(items: readonly MenuItem[]): { category: MenuCategory;
 }
 
 export function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replaceAll('ё', 'е');
+  return name.replace(/\s+/g, ' ').trim().toLowerCase().replaceAll('ё', 'е');
 }

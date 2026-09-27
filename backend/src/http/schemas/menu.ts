@@ -67,6 +67,17 @@ export const MenuImportSchema = z
 
 export const MenuItemListSchema = z.object({ items: z.array(MenuItemSchema) });
 
+export const AppliedMenuImportSchema = z
+  .object({
+    items: z.array(MenuItemSchema).describe('Новые позиции, добавленные в меню'),
+    duplicates: z
+      .array(MenuItemSchema)
+      .describe(
+        'Позиции, которые уже были в меню: название совпало без учёта регистра, лишних пробелов и ё/е. Повторно не добавлены и не изменены',
+      ),
+  })
+  .meta({ id: 'AppliedMenuImport', description: 'Результат применения импорта меню' });
+
 const Macro = z.number().min(0).max(1000).nullable().describe('Граммы на порцию, округляются до 0,1');
 
 export const MenuItemBody = z.object({

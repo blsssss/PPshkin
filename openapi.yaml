@@ -899,6 +899,26 @@ components:
         - completedAt
       additionalProperties: false
       description: Импорт меню по фото или тексту
+    AppliedMenuImport:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+          description: Новые позиции, добавленные в меню
+        duplicates:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+          description: "Позиции, которые уже были в меню: название совпало без учёта
+            регистра, лишних пробелов и ё/е. Повторно не добавлены и не
+            изменены"
+      required:
+        - items
+        - duplicates
+      additionalProperties: false
+      description: Результат применения импорта меню
     Deal:
       type: object
       properties:
@@ -4151,13 +4171,17 @@ paths:
         - venue
       description: "Добавляет проверенные владельцем позиции одной транзакцией,
         калорийность помечается как оценка (nutritionSource = estimate). Цена
-        обязательна у каждой позиции. Импорт применяется один раз. Коды ошибок:
-        import_not_ready (409, импорт ещё распознаётся или завершился ошибкой),
-        import_already_applied (409, позиции уже в меню, обновите меню),
-        import_not_found (404, импорт принадлежит другому заведению или не
-        существует), venue_not_found (404, заведения ещё нет, предложите создать
-        его через POST /api/v1/venue), validation_failed (400, исправьте поля из
-        errors)."
+        обязательна у каждой позиции. Импорт применяется один раз. Позиция,
+        название которой уже есть в меню (без учёта регистра, лишних пробелов и
+        ё/е), не добавляется повторно и не меняется: она возвращается в
+        duplicates. Повтор позиции внутри одного импорта добавляется один раз.
+        Если все позиции уже есть в меню, items пустой, а импорт всё равно
+        считается применённым. Коды ошибок: import_not_ready (409, импорт ещё
+        распознаётся или завершился ошибкой), import_already_applied (409,
+        позиции уже в меню, обновите меню), import_not_found (404, импорт
+        принадлежит другому заведению или не существует), venue_not_found (404,
+        заведения ещё нет, предложите создать его через POST /api/v1/venue),
+        validation_failed (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -4291,19 +4315,11 @@ paths:
       security: *a3
       responses:
         "201":
-          description: Позиции добавлены в меню
+          description: Новые позиции добавлены в меню
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/MenuItem"
-                required:
-                  - items
-                additionalProperties: false
+                $ref: "#/components/schemas/AppliedMenuImport"
         "400":
           description: Bad Request
           content:
