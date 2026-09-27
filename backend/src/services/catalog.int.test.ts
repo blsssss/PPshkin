@@ -278,6 +278,66 @@ describe('deal card', () => {
   });
 });
 
+describe('deals after the closing', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('treats a deal as over once the venue closes, even before its end time', async () => {
+    const venue = await seedVenue(pool, 1, { name: 'Зерно', location: BAUMANA });
+    const eclair = await seedMenuItem(pool, venue.id, { name: 'Эклер' });
+    const deal = await seedDeal(pool, eclair, {
+      startsAt: at('2026-09-25T18:48:00Z'),
+      endsAt: at('2026-09-25T19:50:00Z'),
+    });
+    clock.set('2026-09-25T18:55:00Z');
+    expect((await catalog.deal(GUEST, deal.id)).deal.status).toBe('active');
+
+    clock.set('2026-09-25T19:05:00Z');
+    await expect(catalog.deal(GUEST, deal.id)).rejects.toMatchObject({ status: 404, code: 'deal_not_found' });
+    expect((await catalog.venue(GUEST, venue.id)).deals).toEqual([]);
+    expect((await catalog.venues(GUEST, near(BAUMANA))).map((card) => card.activeDeals)).toEqual([0]);
+    expect(await deals.listVisible(pool, [venue.id], clock.now())).toEqual([]);
+  });
+
+  it('hides a deal published while the venue was closed', async () => {
+    const venue = await seedVenue(pool, 1, { name: 'Зерно', location: BAUMANA });
+    const eclair = await seedMenuItem(pool, venue.id, { name: 'Эклер' });
+    const deal = await seedDeal(pool, eclair, {
+      startsAt: at('2026-09-25T19:30:00Z'),
+      endsAt: at('2026-09-25T20:30:00Z'),
+    });
+    clock.set('2026-09-25T19:45:00Z');
+    await expect(catalog.deal(GUEST, deal.id)).rejects.toMatchObject({ code: 'deal_not_found' });
+    expect((await catalog.venues(GUEST, near(BAUMANA))).map((card) => card.activeDeals)).toEqual([0]);
+  });
+
+  it('keeps deals past midnight and round the clock until their end', async () => {
+    const bar = await seedVenue(pool, 1, {
+      name: 'Бар',
+      location: BAUMANA,
+      opensAt: '18:00',
+      closesAt: '02:00',
+    });
+    const allDay = await seedVenue(pool, 2, {
+      name: 'Пенка',
+      location: BAUMANA,
+      opensAt: '00:00',
+      closesAt: '00:00',
+    });
+    const late = await seedDeal(pool, await seedMenuItem(pool, bar.id), {
+      startsAt: at('2026-09-25T20:00:00Z'),
+      endsAt: at('2026-09-25T22:30:00Z'),
+    });
+    const night = await seedDeal(pool, await seedMenuItem(pool, allDay.id), {
+      startsAt: at('2026-09-25T20:00:00Z'),
+      endsAt: at('2026-09-26T02:00:00Z'),
+    });
+    clock.set('2026-09-25T22:15:00Z');
+    expect((await catalog.deal(GUEST, late.id)).deal.status).toBe('active');
+    clock.set('2026-09-26T01:00:00Z');
+    expect((await catalog.deal(GUEST, night.id)).deal.status).toBe('active');
+  });
+});
+
 describe('demo mode', () => {
   it('measures from the centre of Kazan when the point is more than 50 km away', async () => {
     await seedDemoVenue(pool, 900001, { name: 'Зерно', location: BAUMANA });

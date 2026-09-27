@@ -19,8 +19,24 @@ const DEAL_COLUMNS = `d.id, d.venue_id, d.menu_item_id, d.price_rub, d.quantity_
 
 const LIVE = 'd.cancelled_at is null and d.quantity_left > 0';
 
+const LOCAL_START = '(d.starts_at at time zone v.timezone)';
+
+const OPEN_AT_START = `(v.opens_at < v.closes_at and ${LOCAL_START}::time >= v.opens_at and ${LOCAL_START}::time < v.closes_at
+    or v.opens_at > v.closes_at and (${LOCAL_START}::time >= v.opens_at or ${LOCAL_START}::time < v.closes_at))`;
+
+const CLOSING_AFTER_START = `((${LOCAL_START}::date + v.closes_at
+    + case when ${LOCAL_START}::time < v.closes_at then interval '0 days' else interval '1 day' end) at time zone v.timezone)`;
+
+const OVER_AT = `case
+    when v.opens_at = v.closes_at then d.ends_at
+    when ${OPEN_AT_START} then least(d.ends_at, ${CLOSING_AFTER_START})
+    else d.starts_at
+  end`;
+
+const WITH_VENUE = 'join venues v on v.id = d.venue_id';
+
 function visibleTo(nowParam: string): string {
-  return `${LIVE} and d.starts_at <= ${nowParam} and d.ends_at > ${nowParam}
+  return `${LIVE} and d.starts_at <= ${nowParam} and ${OVER_AT} > ${nowParam}
     and m.archived_at is null and m.is_available`;
 }
 
@@ -107,7 +123,8 @@ export async function cancelLiveInVenue(
 ): Promise<void> {
   await db.query(
     `update deals as d set cancelled_at = $3
-      where d.venue_id = $1 and d.id = $2 and ${LIVE} and d.ends_at > $3`,
+       from venues v
+      where v.id = d.venue_id and d.venue_id = $1 and d.id = $2 and ${LIVE} and ${OVER_AT} > $3`,
     [venueId, id, now],
   );
 }
@@ -115,7 +132,8 @@ export async function cancelLiveInVenue(
 export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<void> {
   await db.query(
     `update deals as d set cancelled_at = $2
-      where d.menu_item_id = $1 and ${LIVE} and d.ends_at > $2`,
+       from venues v
+      where v.id = d.venue_id and d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2`,
     [menuItemId, now],
   );
 }
@@ -141,8 +159,8 @@ export async function lockInVenue(db: Queryable, venueId: number, id: number): P
 export async function findLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<Deal | null> {
   const row = await maybeOne<DealRow>(
     db,
-    `select ${DEAL_COLUMNS} from deals d
-      where d.menu_item_id = $1 and ${LIVE} and d.ends_at > $2
+    `select ${DEAL_COLUMNS} from deals d ${WITH_VENUE}
+      where d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2
       order by d.id
       limit 1`,
     [menuItemId, now],
@@ -152,8 +170,8 @@ export async function findLiveForItem(db: Queryable, menuItemId: number, now: Da
 
 export async function listLive(db: Queryable, venueId: number, now: Date): Promise<Deal[]> {
   const { rows } = await db.query<DealRow>(
-    `select ${DEAL_COLUMNS} from deals d
-      where d.venue_id = $1 and ${LIVE} and d.ends_at > $2
+    `select ${DEAL_COLUMNS} from deals d ${WITH_VENUE}
+      where d.venue_id = $1 and ${LIVE} and ${OVER_AT} > $2
       order by d.ends_at, d.id`,
     [venueId, now],
   );
@@ -162,9 +180,9 @@ export async function listLive(db: Queryable, venueId: number, now: Date): Promi
 
 export async function listFinished(db: Queryable, venueId: number, now: Date, since: Date): Promise<Deal[]> {
   const { rows } = await db.query<DealRow>(
-    `select ${DEAL_COLUMNS} from deals d
+    `select ${DEAL_COLUMNS} from deals d ${WITH_VENUE}
       where d.venue_id = $1 and d.created_at >= $3
-        and (d.cancelled_at is not null or d.quantity_left = 0 or d.ends_at <= $2)
+        and (d.cancelled_at is not null or d.quantity_left = 0 or ${OVER_AT} <= $2)
       order by d.ends_at desc, d.id desc`,
     [venueId, now, since],
   );
@@ -174,7 +192,7 @@ export async function listFinished(db: Queryable, venueId: number, now: Date, si
 export async function listVisible(db: Queryable, venueIds: readonly number[], now: Date): Promise<Deal[]> {
   if (venueIds.length === 0) return [];
   const { rows } = await db.query<DealRow>(
-    `select ${DEAL_COLUMNS} from deals d
+    `select ${DEAL_COLUMNS} from deals d ${WITH_VENUE}
        join menu_items m on m.id = d.menu_item_id
       where d.venue_id = any($1::bigint[]) and ${visibleTo('$2')}
       order by d.ends_at, d.id`,
@@ -186,7 +204,7 @@ export async function listVisible(db: Queryable, venueIds: readonly number[], no
 export async function findVisible(db: Queryable, id: number, now: Date): Promise<Deal | null> {
   const row = await maybeOne<DealRow>(
     db,
-    `select ${DEAL_COLUMNS} from deals d
+    `select ${DEAL_COLUMNS} from deals d ${WITH_VENUE}
        join menu_items m on m.id = d.menu_item_id
       where d.id = $1 and ${visibleTo('$2')}`,
     [id, now],
@@ -201,7 +219,7 @@ export async function countVisibleByVenue(
 ): Promise<Map<number, number>> {
   if (venueIds.length === 0) return new Map();
   const { rows } = await db.query<{ venue_id: number; deals: number }>(
-    `select d.venue_id, count(*) as deals from deals d
+    `select d.venue_id, count(*) as deals from deals d ${WITH_VENUE}
        join menu_items m on m.id = d.menu_item_id
       where d.venue_id = any($1::bigint[]) and ${visibleTo('$2')}
       group by d.venue_id`,

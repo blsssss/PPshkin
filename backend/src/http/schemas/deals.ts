@@ -17,7 +17,7 @@ export const DealSchema = z
     status: z
       .enum(DEAL_STATUSES)
       .describe(
-        'active - продаётся; scheduled - ещё не началась; sold_out - порции закончились; ended - время вышло; cancelled - снята заведением',
+        'active - продаётся; scheduled - ещё не началась; sold_out - порции закончились; ended - время вышло или заведение закрылось после начала предложения; cancelled - снята заведением',
       ),
   })
   .meta({
