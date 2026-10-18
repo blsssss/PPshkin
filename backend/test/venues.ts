@@ -170,6 +170,7 @@ export async function seedDeal(db: Queryable, item: MenuItem, seed: DealSeed): P
       venueId: item.venueId,
       menuItemId: item.id,
       priceRub: seed.priceRub ?? Math.floor(item.priceRub / 2),
+      listPriceRub: item.priceRub,
       quantity: seed.quantity ?? 5,
       endsAt: seed.endsAt,
     },

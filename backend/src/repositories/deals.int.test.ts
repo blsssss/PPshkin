@@ -27,7 +27,14 @@ describe('deals repository', () => {
   it('starts a deal with the whole quantity left', async () => {
     const deal = await deals.insert(
       pool,
-      { venueId: venue.id, menuItemId: item.id, priceRub: 99, quantity: 4, endsAt: inHours(2) },
+      {
+        venueId: venue.id,
+        menuItemId: item.id,
+        priceRub: 99,
+        listPriceRub: 199,
+        quantity: 4,
+        endsAt: inHours(2),
+      },
       now,
     );
     expect(deal).toEqual({

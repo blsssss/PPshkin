@@ -26,6 +26,7 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
           bookings: { redeemed: 4 },
           offers: { shown: 7 },
           notifications: { pending: 4, oldestDueSeconds: 12.5 },
+          pilot: { newGuests7d: 6, redeemRate7d: 0.75, retentionD7LastCohort: 0.3 },
         }),
     },
     auth: {

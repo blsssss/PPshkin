@@ -56,6 +56,7 @@ export type BookingScope = { userId: number } | { venueId: number } | Record<str
 
 export interface NewBooking {
   userId: number;
+  channel: 'bot' | 'miniapp';
   venueId: number;
   menuItemId: number;
   dealId: number | null;
@@ -84,8 +85,8 @@ export async function insertIfCodeFree(db: Queryable, booking: NewBooking): Prom
     const row = await one<BookingRow>(
       db,
       `insert into bookings as b (user_id, venue_id, menu_item_id, deal_id, offer_id, code, item_name, price_rub,
-                                  kcal, expires_at, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                  kcal, expires_at, created_at, channel)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning ${BOOKING_COLUMNS}`,
       [
         booking.userId,
@@ -99,6 +100,7 @@ export async function insertIfCodeFree(db: Queryable, booking: NewBooking): Prom
         booking.kcal,
         booking.expiresAt,
         booking.createdAt,
+        booking.channel,
       ],
     );
     await db.query('release savepoint booking_code');

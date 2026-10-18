@@ -127,6 +127,7 @@ function insertDeal(
       venueId,
       menuItemId: plan.menuItemId,
       priceRub: plan.priceRub,
+      listPriceRub: null,
       quantity: plan.quantity,
       quantityLeft: Math.max(0, plan.quantity - sold),
       startsAt: plan.window.startsAt,

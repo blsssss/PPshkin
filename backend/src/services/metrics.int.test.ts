@@ -1,10 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
+import { systemClock } from '../shared/clock.ts';
 import { createMetricsService } from './metrics.ts';
 
 const pool = testPool();
-const service = createMetricsService(pool);
+const service = createMetricsService(pool, systemClock);
 
 beforeEach(async () => {
   await resetDatabase(pool);
@@ -23,6 +24,7 @@ describe('metrics service', () => {
       bookings: {},
       offers: {},
       notifications: { pending: 0, oldestDueSeconds: 0 },
+      pilot: { newGuests7d: 0, redeemRate7d: 0, retentionD7LastCohort: 0 },
     });
   });
 
@@ -68,6 +70,7 @@ describe('metrics service', () => {
       bookings: { redeemed: 2, active: 1 },
       offers: {},
       notifications: { pending: 2, oldestDueSeconds: expect.closeTo(600, -1) as unknown },
+      pilot: { newGuests7d: 1, redeemRate7d: 0.6667, retentionD7LastCohort: 0 },
     });
   });
 });

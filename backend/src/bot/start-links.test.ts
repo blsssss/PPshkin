@@ -6,6 +6,7 @@ describe('start links', () => {
     ['v_12', { kind: 'v', value: '12' }],
     ['d_7', { kind: 'd', value: '7' }],
     ['r_K7M2QX', { kind: 'r', value: 'K7M2QX' }],
+    ['c_kfu1', { kind: 'c', value: 'kfu1' }],
     [' v_12 ', { kind: 'v', value: '12' }],
     [`d_${'9'.repeat(32)}`, { kind: 'd', value: '9'.repeat(32) }],
   ])('parses %j', (payload, link) => {

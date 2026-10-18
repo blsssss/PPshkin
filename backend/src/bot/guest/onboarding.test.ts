@@ -199,6 +199,19 @@ describe('onboarding', () => {
     expect(chat.states.peek(GUEST_ID).pendingStart).toBeNull();
   });
 
+  it('treats a campaign link as a plain /start before and after the consent', async () => {
+    const chat = botChat();
+
+    const first = sent(await chat.start('c_kfu1'));
+    expect(first).toHaveLength(2);
+    expect(chat.states.peek(GUEST_ID).pendingStart).toBeNull();
+
+    chat.world.consent('personal_data');
+    expect(texts(await chat.start('c_kfu1'))).toEqual([
+      'С возвращением! Пришлите фото блюда или напишите, что съели.',
+    ]);
+  });
+
   it('continues onboarding when the pending start link fails', async () => {
     const chat = botChat();
     chat.world.services.catalog.venue = () => Promise.reject(new Error('database is down'));

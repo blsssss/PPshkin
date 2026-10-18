@@ -12,6 +12,7 @@ import { expireBookingsJob } from './expire-bookings.ts';
 import { failStaleImportsJob } from './fail-stale-imports.ts';
 import { maxWebhookGuardJob } from './max-webhook-guard.ts';
 import { proactiveOffersJob } from './proactive-offers.ts';
+import { purgeDealImpressionsJob } from './purge-deal-impressions.ts';
 import { purgeNotificationsJob } from './purge-notifications.ts';
 import { purgeProcessedUpdatesJob } from './purge-processed-updates.ts';
 import { refreshDemoDataJob, type DemoDataRefresher } from './refresh-demo-data.ts';
@@ -43,6 +44,7 @@ export function createJobs({
     failStaleImportsJob(services.menuImports),
     purgeProcessedUpdatesJob(db),
     purgeNotificationsJob(db),
+    purgeDealImpressionsJob(db),
     ...(outbox
       ? [deliverNotificationsJob(outbox), bookingRemindersJob(db, outbox), dealEndingRemindersJob(db, outbox)]
       : []),

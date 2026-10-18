@@ -44,13 +44,14 @@ export interface UserIdentity {
   id: number;
   firstName: string | null;
   username: string | null;
+  acquisition?: { source: string; at: Date };
 }
 
 export async function upsert(db: Queryable, identity: UserIdentity): Promise<User> {
   const row = await one<UserRow>(
     db,
-    `insert into users (id, first_name, username)
-     values ($1, $2, $3)
+    `insert into users (id, first_name, username, acquisition, acquired_at)
+     values ($1, $2, $3, $4, $5)
      on conflict (id) do update
        set first_name = coalesce(excluded.first_name, users.first_name),
            username = coalesce(excluded.username, users.username),
@@ -61,7 +62,13 @@ export async function upsert(db: Queryable, identity: UserIdentity): Promise<Use
              else users.updated_at
            end
      returning ${USER_COLUMNS}`,
-    [identity.id, identity.firstName, identity.username],
+    [
+      identity.id,
+      identity.firstName,
+      identity.username,
+      identity.acquisition?.source ?? null,
+      identity.acquisition?.at ?? null,
+    ],
   );
   return mapUser(row);
 }

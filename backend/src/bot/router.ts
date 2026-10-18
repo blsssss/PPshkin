@@ -13,6 +13,7 @@ import { consentRequest, helpMessage, shortHelpMessage } from './messages.ts';
 import { COMMAND_PREFIX, type Registry } from './registry.ts';
 import { isExpired, type ChatState, type ChatStateStore } from './state.ts';
 import { NOTICES } from './texts.ts';
+import { acquisitionOf } from '../domain/acquisition.ts';
 
 export interface RouterOptions {
   db: Queryable;
@@ -257,7 +258,13 @@ export function createRouter(options: RouterOptions): UpdateHandler {
       await states.clear(event.user.id);
       return;
     }
-    const user = await users.upsert(db, event.user);
+    const user = await users.upsert(db, {
+      ...event.user,
+      acquisition: {
+        source: acquisitionOf(event.type === 'started' ? event.payload : null),
+        at: clock.now(),
+      },
+    });
     const session = openSession(event, user, await states.load(user.id));
     try {
       await route(session);

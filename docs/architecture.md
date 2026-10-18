@@ -254,7 +254,7 @@ sequenceDiagram
 
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql) и [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql) и [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql) и [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
@@ -266,6 +266,8 @@ erDiagram
   users ||--o| chat_states : "user_id"
   users ||--o{ notifications : "user_id"
   users ||--o| notification_settings : "user_id"
+  users |o--o{ deal_impressions : "user_id"
+  deals ||--o{ deal_impressions : "deal_id"
   venues |o--o{ venues : "demo_source_id"
   venues ||--o{ menu_items : "venue_id"
   venues ||--o{ menu_imports : "venue_id"
@@ -414,6 +416,13 @@ erDiagram
     text key PK
     timestamptz processed_at
   }
+  deal_impressions {
+    bigint deal_id FK
+    bigint user_id FK
+    date day
+    text source
+    timestamptz created_at
+  }
   notification_settings {
     bigint user_id PK, FK
     text[] disabled_kinds
@@ -446,6 +455,7 @@ erDiagram
 - `venues`: одно заведение на владельца (уникальный индекс по `owner_id`); `demo_source_id` заполняется только у копий демо-заведений (`is_demo`).
 - `deals`, `offers`, `bookings` ссылаются на позицию составным ключом `(venue_id, menu_item_id)`, поэтому позиция другого заведения не может попасть в акцию или бронь.
 - `bookings`: код из алфавита `[A-HJ-NP-Z2-9]{6}` уникален среди активных броней заведения; у гостя одна активная бронь на горящую позицию; `resolved_at` заполнен тогда и только тогда, когда бронь не активна.
+- `deal_impressions`: не больше строки на гостя, акцию и день (уникальный индекс `deal_id, user_id, day`); показы пишутся внутри `GET /deals`, `GET /venues/{id}`, карточки акции и карточек бота, демо-учётки и демо-заведения не пишутся. `users.acquisition` и `users.acquired_at` заполняются один раз при создании пользователя, `bookings.channel` при создании брони, `deals.list_price_rub` при создании акции.
 - `notifications`: одна строка на событие и получателя (уникальный `dedup_key`); `subject` содержит только идентификаторы брони, акции, разбора или отчёта; `kind` проверяется в коде, чтобы новые типы не требовали миграции.
 - При удалении пользователя `consents`, `meals`, `chat_states`, `notifications` и `notification_settings` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
 - `float8` в схеме это `double precision`, `text[]` это массив строк.
@@ -504,6 +514,7 @@ erDiagram
 | `booking_reminders` | каждую минуту, только с ботом | напоминание гостю за 10 минут до конца брони |
 | `deal_ending_reminders` | каждые 5 минут, только с ботом | предупреждение владельцу за 30 минут до конца горящей позиции с остатком |
 | `purge_notifications` | ежедневно в 04:30 по Москве | удаление строк очереди старше 30 дней |
+| `purge_deal_impressions` | ежедневно в 04:40 по Москве | удаление показов горящих позиций старше 90 дней |
 | `max_webhook_guard` | каждые 10 минут, только `BOT_MODE=webhook` | проверка подписки webhook и восстановление, если её нет или в ней не хватает типов обновлений |
 | `refresh_demo_data` | ежедневно в 06:00 по Москве, только `DEMO_MODE=true` | горящие позиции на сегодня, дневник демо-гостя, история аналитики |
 | `proactive_offers` | каждые 15 минут, только `PROACTIVE_OFFERS=true` | подсказки гостям с согласием на персональные предложения; в MVP выключена |

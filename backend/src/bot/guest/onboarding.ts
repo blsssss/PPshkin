@@ -69,7 +69,8 @@ export function createOnboardingModule(kit: BotKit): BotModule {
   }
 
   async function start(ctx: BotContext, args: string): Promise<void> {
-    const link = parseStartLink(args);
+    const parsed = parseStartLink(args);
+    const link = parsed?.kind === 'c' ? null : parsed;
     const { personalData } = await consents.status(ctx.user.id);
     if (personalData.granted) {
       if (!link) await ctx.reply(welcomeBack());

@@ -21,6 +21,8 @@ npm test
 
 `npm run format` приводит код к стилю Prettier.
 
+`npm run pilot:report -- --from YYYY-MM-DD --to YYYY-MM-DD` строит отчёт по метрикам пилота из базы `DATABASE_URL` (определения в `docs/product.md`, раздел 5).
+
 Из каталога `frontend`:
 
 ```bash

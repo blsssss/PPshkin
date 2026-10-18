@@ -50,7 +50,7 @@ export function createServices({
   const bookings = createBookingsService({ pool, clock, consents, notifications });
   return {
     health: createHealthService(pool),
-    metrics: createMetricsService(pool),
+    metrics: createMetricsService(pool, clock),
     auth: createAuthService(
       pool,
       {

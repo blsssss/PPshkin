@@ -147,6 +147,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
             venueId: venue.id,
             menuItemId: item.id,
             priceRub: input.priceRub,
+            listPriceRub: item.priceRub,
             quantity: input.quantity,
             endsAt: input.endsAt,
           },

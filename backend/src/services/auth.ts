@@ -6,6 +6,7 @@ import type { User } from '../domain/models.ts';
 import * as users from '../repositories/users.ts';
 import type { Clock } from '../shared/clock.ts';
 import { unauthorized, unavailable } from '../shared/errors.ts';
+import { acquisitionOf } from '../domain/acquisition.ts';
 
 export interface AuthContext {
   userId: number;
@@ -72,6 +73,7 @@ export function createAuthService(db: Queryable, settings: AuthSettings, clock: 
         id: verified.user.id,
         firstName: verified.user.firstName,
         username: verified.user.username,
+        acquisition: { source: acquisitionOf(verified.startParam), at: clock.now() },
       });
       const session = issueSession(user.id, settings.sessionSecret, settings.sessionTtlSeconds, clock.now());
       return { ...session, user, startParam: verified.startParam };

@@ -1,6 +1,7 @@
 import type { Pool } from '../db/pool.ts';
 import { resolveDemoPoint } from '../demo/location.ts';
 import type { GeoPoint, MenuItem, Venue } from '../domain/models.ts';
+import * as impressions from '../repositories/deal-impressions.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as users from '../repositories/users.ts';
@@ -8,7 +9,7 @@ import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound } from '../shared/errors.ts';
 import { distanceMeters } from '../shared/geo.ts';
-import { isOpenAt } from '../shared/time.ts';
+import { isOpenAt, localDate } from '../shared/time.ts';
 import { dealViews, type DealView } from './deals.ts';
 import { byMenuOrder } from './menu.ts';
 
@@ -147,6 +148,19 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
     return { placed, demoCenterUsed };
   }
 
+  async function remember(
+    userId: number,
+    shown: readonly { dealId: number; venue: Venue }[],
+    source: impressions.ImpressionSource,
+    now: Date,
+  ): Promise<void> {
+    if (userId <= 0) return;
+    const real = shown
+      .filter(({ venue }) => !venue.isDemo)
+      .map(({ dealId, venue }) => ({ dealId, day: localDate(now, venue.timezone) }));
+    await impressions.record(pool, userId, real, source, now);
+  }
+
   return {
     async venues(userId, query) {
       const now = clock.now();
@@ -171,6 +185,12 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
         menuItems.listAvailable(pool, venue.id),
         deals.listVisible(pool, [venue.id], now),
       ]);
+      await remember(
+        userId,
+        visibleDeals.map((deal) => ({ dealId: deal.id, venue })),
+        'venue_card',
+        now,
+      );
       return {
         venue,
         openNow: isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone),
@@ -193,6 +213,12 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
         })
         .sort(bySoonestEnd)
         .slice(0, MAX_RESULTS);
+      await remember(
+        userId,
+        items.map((item) => ({ dealId: item.deal.deal.id, venue: item.venue })),
+        'catalog',
+        now,
+      );
       return { items, demoCenterUsed };
     },
 
@@ -207,6 +233,7 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
       ]);
       if (!venue) throw dealNotFound();
       if (!view) throw new Error(`Deal ${dealId} lost its menu item`);
+      await remember(userId, [{ dealId: found.id, venue }], 'deal_card', now);
       return { deal: view, venue, distanceM: distanceFrom(resolveDemoPoint(point, demoMode).point, venue) };
     },
   };

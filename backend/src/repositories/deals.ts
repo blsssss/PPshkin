@@ -59,6 +59,7 @@ export interface NewDeal {
   venueId: number;
   menuItemId: number;
   priceRub: number;
+  listPriceRub: number | null;
   quantity: number;
   endsAt: Date;
 }
@@ -77,10 +78,10 @@ export async function insert(db: Queryable, deal: NewDeal, now: Date): Promise<D
   const row = await one<DealRow>(
     db,
     `insert into deals as d (venue_id, menu_item_id, price_rub, quantity_total, quantity_left, starts_at, ends_at,
-                             created_at)
-     values ($1, $2, $3, $4, $4, $5, $6, $5)
+                             created_at, list_price_rub)
+     values ($1, $2, $3, $4, $4, $5, $6, $5, $7)
      returning ${DEAL_COLUMNS}`,
-    [deal.venueId, deal.menuItemId, deal.priceRub, deal.quantity, now, deal.endsAt],
+    [deal.venueId, deal.menuItemId, deal.priceRub, deal.quantity, now, deal.endsAt, deal.listPriceRub],
   );
   return mapDeal(row);
 }
@@ -89,8 +90,8 @@ export async function insertScheduled(db: Queryable, deal: ScheduledDeal, create
   const row = await one<DealRow>(
     db,
     `insert into deals as d (venue_id, menu_item_id, price_rub, quantity_total, quantity_left, starts_at, ends_at,
-                             created_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+                             created_at, list_price_rub)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning ${DEAL_COLUMNS}`,
     [
       deal.venueId,
@@ -101,6 +102,7 @@ export async function insertScheduled(db: Queryable, deal: ScheduledDeal, create
       deal.startsAt,
       deal.endsAt,
       createdAt,
+      deal.listPriceRub,
     ],
   );
   return mapDeal(row);

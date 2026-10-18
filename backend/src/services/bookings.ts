@@ -169,6 +169,7 @@ export function createBookingsService({
     client: Queryable,
     userId: number,
     input: BookingInput,
+    channel: BookingChannel,
     now: Date,
   ): Promise<Reservation> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
@@ -200,6 +201,7 @@ export function createBookingsService({
       : null;
     const fields = {
       userId,
+      channel,
       venueId: venue.id,
       menuItemId: item.id,
       dealId: deal?.id ?? null,
@@ -253,7 +255,7 @@ export function createBookingsService({
       await expire({ userId });
       const now = clock.now();
       const view = await withTransaction(pool, async (client) => {
-        const reservation = await reserve(client, userId, input, now);
+        const reservation = await reserve(client, userId, input, channel, now);
         const { booking, venue } = reservation.view;
         await notifications.enqueue(client, { kind: 'venue_booking_created', booking, venue }, now);
         if (channel === 'miniapp') {

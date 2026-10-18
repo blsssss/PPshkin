@@ -37,6 +37,9 @@ export function registerMetrics(
         for (const status of OFFER_STATUSES) snapshots.set(`offer:${status}`, snapshot.offers[status] ?? 0);
         snapshots.set('notifications:pending', snapshot.notifications.pending);
         snapshots.set('notifications:oldest', snapshot.notifications.oldestDueSeconds);
+        snapshots.set('pilot:newGuests', snapshot.pilot.newGuests7d);
+        snapshots.set('pilot:redeemRate', snapshot.pilot.redeemRate7d);
+        snapshots.set('pilot:retention', snapshot.pilot.retentionD7LastCohort);
       })
       .finally(() => {
         pending = null;
@@ -109,6 +112,35 @@ export function registerMetrics(
       this.set(snapshots.get('notifications:oldest') ?? 0);
     },
   });
+
+  const pilotGauges = [
+    [
+      'ppshkin_new_guests_7d',
+      'Guests with their first redeemed booking at a venue during the last 7 days',
+      'pilot:newGuests',
+    ],
+    [
+      'ppshkin_redeem_rate_7d',
+      'Share of bookings created during the last 7 days that were redeemed',
+      'pilot:redeemRate',
+    ],
+    [
+      'ppshkin_retention_d7_last_cohort',
+      'Share of the last weekly cohort of new diary users who wrote in the diary again on day 7',
+      'pilot:retention',
+    ],
+  ] as const;
+  for (const [name, help, key] of pilotGauges) {
+    new Gauge({
+      name,
+      help,
+      registers: [registry],
+      async collect() {
+        await refresh();
+        this.set(snapshots.get(key) ?? 0);
+      },
+    });
+  }
 
   app.addHook('onResponse', async (request, reply) => {
     const route = request.routeOptions.url;

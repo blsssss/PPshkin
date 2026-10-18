@@ -1,4 +1,8 @@
 import type { Queryable } from '../db/pool.ts';
+import { ratio } from '../domain/pilot-metrics.ts';
+import * as pilot from '../repositories/pilot-metrics.ts';
+import type { Clock } from '../shared/clock.ts';
+import { addDays, localDate } from '../shared/time.ts';
 
 export interface DomainSnapshot {
   users: number;
@@ -7,6 +11,7 @@ export interface DomainSnapshot {
   bookings: Record<string, number>;
   offers: Record<string, number>;
   notifications: { pending: number; oldestDueSeconds: number };
+  pilot: { newGuests7d: number; redeemRate7d: number; retentionD7LastCohort: number };
 }
 
 export interface MetricsService {
@@ -20,7 +25,34 @@ async function countByStatus(db: Queryable, table: 'bookings' | 'offers'): Promi
   return Object.fromEntries(result.rows.map((row) => [row.status, row.total]));
 }
 
-export function createMetricsService(db: Queryable): MetricsService {
+const PILOT_TIME_ZONE = 'Europe/Moscow';
+
+async function pilotSnapshot(db: Queryable, now: Date): Promise<DomainSnapshot['pilot']> {
+  const today = localDate(now, PILOT_TIME_ZONE);
+  const week = { from: addDays(today, -6), to: today, venueId: null };
+  const [guests, outcomes, cohorts] = await Promise.all([
+    pilot.guestCounts(db, week),
+    pilot.bookingOutcomes(db, week),
+    pilot.retentionD7(db, { from: addDays(today, -13), to: addDays(today, -7) }, now),
+  ]);
+  const total = <T>(values: Iterable<T>, pick: (value: T) => number) =>
+    [...values].reduce((sum, value) => sum + pick(value), 0);
+  return {
+    newGuests7d: total(guests.values(), (venue) => venue.newGuests),
+    redeemRate7d:
+      ratio(
+        total(outcomes.values(), (venue) => venue.redeemed),
+        total(outcomes.values(), (venue) => venue.created),
+      ).value ?? 0,
+    retentionD7LastCohort:
+      ratio(
+        total(cohorts, (cohort) => cohort.retained),
+        total(cohorts, (cohort) => cohort.cohort),
+      ).value ?? 0,
+  };
+}
+
+export function createMetricsService(db: Queryable, clock: Clock): MetricsService {
   return {
     async snapshot() {
       const totals = await db.query<{ users: number; meals_last_day: number; active_deals: number }>(
@@ -47,6 +79,7 @@ export function createMetricsService(db: Queryable): MetricsService {
           pending: queue.rows[0]?.pending ?? 0,
           oldestDueSeconds: queue.rows[0]?.oldest_due_seconds ?? 0,
         },
+        pilot: await pilotSnapshot(db, clock.now()),
       };
     },
   };

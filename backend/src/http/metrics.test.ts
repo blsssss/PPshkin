@@ -34,6 +34,9 @@ describe('GET /metrics', () => {
     expect(response.body).toContain('ppshkin_offers{status="shown"} 7\n');
     expect(response.body).toContain('ppshkin_notifications_pending 4\n');
     expect(response.body).toContain('ppshkin_notifications_oldest_pending_seconds 12.5\n');
+    expect(response.body).toContain('ppshkin_new_guests_7d 6\n');
+    expect(response.body).toContain('ppshkin_redeem_rate_7d 0.75\n');
+    expect(response.body).toContain('ppshkin_retention_d7_last_cohort 0.3\n');
   });
 
   it('counts delivered and failed notifications and the delivery delay', async () => {

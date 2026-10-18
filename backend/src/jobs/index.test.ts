@@ -27,6 +27,7 @@ describe('createJobs', () => {
       fail_stale_imports: { everyMs: 300_000 },
       purge_processed_updates: { everyMs: 3_600_000 },
       purge_notifications: { dailyAt: '04:30', timeZone: 'Europe/Moscow' },
+      purge_deal_impressions: { dailyAt: '04:40', timeZone: 'Europe/Moscow' },
     });
   });
 
