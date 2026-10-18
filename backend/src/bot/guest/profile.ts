@@ -46,6 +46,7 @@ export function renderProfile({ user, consents }: Profile): OutgoingMessage {
           : callback(BUTTONS.offersOn, payload('pf', 'ad', 'on')),
       ],
       [locationRequest(user.location ? BUTTONS.updateLocation : BUTTONS.sendLocation)],
+      [callback(BUTTONS.notifications, payload('nt', 'ls'))],
       ...(user.dislikedTags.length > 0
         ? [[callback(BUTTONS.resetDisliked, payload('pf', 'tags', 'reset'))]]
         : []),

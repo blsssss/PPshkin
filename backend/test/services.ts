@@ -113,6 +113,10 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       claimVenue: notStubbed('demo.claimVenue'),
       fillDiary: notStubbed('demo.fillDiary'),
     },
+    notificationSettings: {
+      get: notStubbed('notificationSettings.get'),
+      update: notStubbed('notificationSettings.update'),
+    },
     ...overrides,
   };
 }

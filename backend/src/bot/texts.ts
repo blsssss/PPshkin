@@ -55,6 +55,9 @@ export const BUTTONS = {
   offersOff: 'Предложения: выключить',
   resetDisliked: 'Сбросить список «Не предлагать»',
   deleteAccount: 'Удалить аккаунт',
+  notifications: 'Уведомления',
+  configure: 'Настроить',
+  back: 'Назад',
   confirmDelete: 'Да, удалить',
   route: 'Маршрут',
   venueInApp: 'Меню и все предложения',
@@ -364,6 +367,24 @@ export function profileText(facts: ProfileFacts): string {
     `Местоположение: ${facts.locationUpdated ? `обновлено ${facts.locationUpdated}` : 'не указано'}`,
     ...(facts.disliked.length > 0 ? [`Не предлагать: ${facts.disliked.join(', ')}`] : []),
   ].join('\n');
+}
+
+export const NOTIFICATION_TURNED_OFF =
+  'Больше не пришлю такие сообщения. Включить снова: /profile, «Уведомления».';
+
+export function notificationsText(quietHours: { from: string; until: string } | null): string {
+  return [
+    bold('Уведомления'),
+    `Тихие часы: ${quietHours ? `${quietHours.from}-${quietHours.until}` : 'выключены'}`,
+    ...(quietHours
+      ? ['В тихие часы сообщения о бронях приходят без звука, итоги дня после их окончания.']
+      : []),
+    'Нажмите на тип, чтобы включить или выключить его.',
+  ].join('\n');
+}
+
+export function notificationToggle(label: string, enabled: boolean): string {
+  return `${label}: ${enabled ? 'вкл' : 'выкл'}`;
 }
 
 export const DELETE_QUESTION =

@@ -8,6 +8,7 @@ import { createBookingsModule } from './guest/bookings.ts';
 import { createMealsModule } from './guest/meals.ts';
 import { createOffersModule } from './guest/offers.ts';
 import { createOnboardingModule } from './guest/onboarding.ts';
+import { createNotificationsModule } from './guest/notifications.ts';
 import { createProfileModule } from './guest/profile.ts';
 import { createVenuesModule } from './guest/venues.ts';
 import { createRegistry } from './registry.ts';
@@ -32,6 +33,7 @@ const GUEST_MODULES = [
   createOffersModule,
   createBookingsModule,
   createProfileModule,
+  createNotificationsModule,
   createVenuesModule,
 ];
 

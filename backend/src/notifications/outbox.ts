@@ -7,8 +7,10 @@ import {
   dedupKey,
   isLiveDeal,
   isNotifiableUser,
+  isKindEnabled,
   isNotificationKind,
   notificationTarget,
+  planDelivery,
   retryAt,
   SENDING_TIMEOUT_MS,
   type NotificationEvent,
@@ -23,6 +25,7 @@ import * as bookings from '../repositories/bookings.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
+import * as settings from '../repositories/notification-settings.ts';
 import * as notifications from '../repositories/notifications.ts';
 import * as venues from '../repositories/venues.ts';
 import type { DiaryDay } from '../services/diary.ts';
@@ -240,7 +243,12 @@ export function createOutbox({
       return;
     }
     try {
-      const composed = await compose(row.kind, row.subject, now, live.username);
+      const recipient = await settings.findRecipient(pool, row.userId);
+      const disabled =
+        recipient !== null && isNotificationKind(row.kind) && !isKindEnabled(row.kind, recipient.preferences);
+      const composed = disabled
+        ? skip('the user turned this kind off')
+        : await compose(row.kind, row.subject, now, live.username);
       if ('skip' in composed) {
         await notifications.finish(pool, row.id, 'skipped', composed.skip);
         stats?.finished(row.kind, 'skipped');
@@ -311,12 +319,21 @@ export function createOutbox({
           : await venueRecipients(db, event.venue, target.audience.permission);
       for (const userId of recipients) {
         if (!isNotifiableUser(userId)) continue;
+        const recipient = await settings.findRecipient(db, userId);
+        if (!recipient) continue;
+        const plan = planDelivery(event.kind, recipient.preferences, {
+          now,
+          timeZone: recipient.timezone,
+          expiresAt: target.expiresAt,
+        });
+        if (!plan.queue) continue;
         await notifications.insert(db, {
           userId,
           kind: event.kind,
           dedupKey: dedupKey(event.kind, target.subjectKey, userId),
           subject: target.subject,
-          sendAfter: now,
+          silent: plan.silent,
+          sendAfter: plan.sendAfter,
           expiresAt: target.expiresAt,
           createdAt: now,
         });

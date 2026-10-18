@@ -38,7 +38,7 @@ interface Session {
 }
 
 const OPEN_COMMANDS = new Set(['start', 'help', 'delete']);
-const OPEN_CALLBACKS = ['cs:pd', 'ac', `${COMMAND_PREFIX}:help`];
+const OPEN_CALLBACKS = ['cs:pd', 'ac', 'nt', `${COMMAND_PREFIX}:help`];
 const COMMAND = /^\/([a-z_]+)(?:@\S+)?(?:\s+([\s\S]*))?$/i;
 const RETIRED_KEYBOARDS_LIMIT = 10_000;
 

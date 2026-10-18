@@ -1,7 +1,8 @@
+import { addDays, atLocalTime, localDate, localParts, minutesOfDay } from '../shared/time.ts';
 import { dealOverAt } from './deals.ts';
 import type { Booking, Deal, MenuImport, Venue } from './models.ts';
 
-const NOTIFICATION_KINDS = [
+export const NOTIFICATION_KINDS = [
   'booking_confirmed',
   'booking_reminder',
   'booking_redeemed',
@@ -173,4 +174,172 @@ export function needsDealEndingReminder(deal: Deal, venue: Venue, now: Date): bo
 export function dealRestockedOn(deal: Deal, venue: Venue, releasedAt: Date): boolean {
   const cancelledBefore = deal.cancelledAt !== null && deal.cancelledAt <= releasedAt;
   return !cancelledBefore && dealOverAt(deal, venue) > releasedAt;
+}
+
+export const QUIET_FROM_HOUR = 22;
+export const QUIET_UNTIL_HOUR = 9;
+export const QUIET_STEP_MINUTES = 30;
+export const SETTINGS_KINDS_LIMIT = 20;
+
+export interface QuietHours {
+  from: string;
+  until: string;
+}
+
+export interface NotificationPreferences {
+  disabledKinds: readonly NotificationKind[];
+  quietHours: QuietHours | null;
+}
+
+export type NotificationAudienceKind = 'guest' | 'venue';
+
+export interface KindDescription {
+  label: string;
+  hint: string;
+  audience: NotificationAudienceKind;
+  editable: boolean;
+  urgent: boolean;
+}
+
+function clock(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`;
+}
+
+export const DEFAULT_QUIET_HOURS: QuietHours = {
+  from: clock(QUIET_FROM_HOUR),
+  until: clock(QUIET_UNTIL_HOUR),
+};
+
+export const DEFAULT_PREFERENCES: NotificationPreferences = {
+  disabledKinds: [],
+  quietHours: DEFAULT_QUIET_HOURS,
+};
+
+export const NOTIFICATION_KIND_DESCRIPTIONS: Record<NotificationKind, KindDescription> = {
+  booking_confirmed: {
+    label: 'Бронь подтверждена',
+    hint: 'Код и QR в чат, если бронировали в мини-приложении',
+    audience: 'guest',
+    editable: true,
+    urgent: true,
+  },
+  booking_reminder: {
+    label: 'Напоминание о брони',
+    hint: 'За 10 минут до конца брони',
+    audience: 'guest',
+    editable: true,
+    urgent: true,
+  },
+  booking_redeemed: {
+    label: 'Бронь получена',
+    hint: 'Что записано в дневник и сколько осталось на сегодня',
+    audience: 'guest',
+    editable: true,
+    urgent: true,
+  },
+  booking_expired: {
+    label: 'Бронь истекла',
+    hint: 'Если не успели забрать',
+    audience: 'guest',
+    editable: true,
+    urgent: true,
+  },
+  venue_booking_created: {
+    label: 'Новая бронь',
+    hint: 'Код, позиция и срок',
+    audience: 'venue',
+    editable: true,
+    urgent: true,
+  },
+  venue_booking_cancelled: {
+    label: 'Гость отменил бронь',
+    hint: 'Порция возвращается в продажу',
+    audience: 'venue',
+    editable: true,
+    urgent: true,
+  },
+  venue_booking_expired: {
+    label: 'Гость не пришёл',
+    hint: 'Бронь истекла, порция вернулась в продажу',
+    audience: 'venue',
+    editable: true,
+    urgent: true,
+  },
+  venue_deal_sold_out: {
+    label: 'Позиция забронирована целиком',
+    hint: 'Все порции горящей позиции забронированы',
+    audience: 'venue',
+    editable: true,
+    urgent: true,
+  },
+  venue_deal_ending: {
+    label: 'Горящая позиция скоро закончится',
+    hint: 'За 30 минут, если остались порции',
+    audience: 'venue',
+    editable: true,
+    urgent: true,
+  },
+  venue_report_ready: {
+    label: 'Итоги дня и недели',
+    hint: 'Закрытие дня и отчёт за неделю',
+    audience: 'venue',
+    editable: true,
+    urgent: false,
+  },
+  menu_import_done: {
+    label: 'Разбор меню',
+    hint: 'Приходит всегда после загрузки меню',
+    audience: 'venue',
+    editable: false,
+    urgent: true,
+  },
+};
+
+export function settingsKinds(hasVenue: boolean): NotificationKind[] {
+  return NOTIFICATION_KINDS.filter(
+    (kind) => hasVenue || NOTIFICATION_KIND_DESCRIPTIONS[kind].audience === 'guest',
+  );
+}
+
+export function isQuietClock(value: string): boolean {
+  const minutes = minutesOfDay(value);
+  return minutes !== null && minutes % QUIET_STEP_MINUTES === 0;
+}
+
+export function isQuietAt(quietHours: QuietHours | null, now: Date, timeZone: string): boolean {
+  if (quietHours === null) return false;
+  const from = minutesOfDay(quietHours.from);
+  const until = minutesOfDay(quietHours.until);
+  if (from === null || until === null || from === until) return false;
+  const { hour, minute } = localParts(now, timeZone);
+  const current = hour * 60 + minute;
+  return from < until ? current >= from && current < until : current >= from || current < until;
+}
+
+export function quietHoursEndAt(quietHours: QuietHours, now: Date, timeZone: string): Date {
+  const until = minutesOfDay(quietHours.until) ?? 0;
+  const today = localDate(now, timeZone);
+  const sameDay = atLocalTime(today, until, timeZone);
+  return sameDay > now ? sameDay : atLocalTime(addDays(today, 1), until, timeZone);
+}
+
+export function isKindEnabled(kind: NotificationKind, preferences: NotificationPreferences): boolean {
+  return !NOTIFICATION_KIND_DESCRIPTIONS[kind].editable || !preferences.disabledKinds.includes(kind);
+}
+
+export type DeliveryPlan = { queue: false } | { queue: true; silent: boolean; sendAfter: Date };
+
+export function planDelivery(
+  kind: NotificationKind,
+  preferences: NotificationPreferences,
+  context: { now: Date; timeZone: string; expiresAt: Date },
+): DeliveryPlan {
+  if (!isKindEnabled(kind, preferences)) return { queue: false };
+  const { now, timeZone, expiresAt } = context;
+  if (preferences.quietHours === null || !isQuietAt(preferences.quietHours, now, timeZone)) {
+    return { queue: true, silent: false, sendAfter: now };
+  }
+  if (NOTIFICATION_KIND_DESCRIPTIONS[kind].urgent) return { queue: true, silent: true, sendAfter: now };
+  const end = quietHoursEndAt(preferences.quietHours, now, timeZone);
+  return { queue: true, silent: false, sendAfter: end < expiresAt ? end : expiresAt };
 }

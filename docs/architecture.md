@@ -250,9 +250,11 @@ sequenceDiagram
 
 В строке хранятся только идентификаторы, текст собирается при отправке по свежим данным. Перед отправкой проверяется актуальность: подтверждение и напоминание уходят только для активной брони, предупреждение о конце акции только для живой акции с остатком, иначе строка получает `skipped`. Статусы строки: `pending`, `sending`, `sent`, `skipped`, `unreachable` (пользователь заблокировал бота), `failed`, `expired`. Транспорт сам повторяет 429, 5xx и сетевые ошибки; если ошибка осталась, строка возвращается в очередь через 1, 5 и 15 минут, после 4-й попытки получает `failed`. Срок жизни: подтверждение и напоминание до конца брони, остальные события брони 2 часа, события акции до её конца, разбор меню и отчёт 24 часа. Получатели событий заведения вычисляются при постановке функцией `venueRecipients`, каждому своя строка. Проактивные предложения в очередь не входят и отправляются напрямую.
 
+Настройки получателя (`notification_settings`, `GET` и `PATCH /api/v1/me/notifications`, экран «Уведомления» в `/profile` бота) применяются при постановке: выключенный тип не ставится, а выключенный после постановки получает `skipped` при отправке. Разбор меню выключить нельзя. Тихие часы по умолчанию 22:00-09:00 в часовом поясе пользователя: срочные сообщения (брони, акции, разбор меню) уходят с `notify: false` и MAX не присылает push, итоги дня переносятся на конец тихих часов, но не позже срока жизни строки. Проактивные предложения тоже учитывают тихие часы пользователя.
+
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql) и [0004_notifications.sql](../backend/migrations/0004_notifications.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql) и [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
@@ -263,6 +265,7 @@ erDiagram
   users |o--o{ bookings : "user_id"
   users ||--o| chat_states : "user_id"
   users ||--o{ notifications : "user_id"
+  users ||--o| notification_settings : "user_id"
   venues |o--o{ venues : "demo_source_id"
   venues ||--o{ menu_items : "venue_id"
   venues ||--o{ menu_imports : "venue_id"
@@ -411,6 +414,13 @@ erDiagram
     text key PK
     timestamptz processed_at
   }
+  notification_settings {
+    bigint user_id PK, FK
+    text[] disabled_kinds
+    time quiet_from
+    time quiet_until
+    timestamptz updated_at
+  }
   notifications {
     bigint id PK
     bigint user_id FK
@@ -437,7 +447,7 @@ erDiagram
 - `deals`, `offers`, `bookings` ссылаются на позицию составным ключом `(venue_id, menu_item_id)`, поэтому позиция другого заведения не может попасть в акцию или бронь.
 - `bookings`: код из алфавита `[A-HJ-NP-Z2-9]{6}` уникален среди активных броней заведения; у гостя одна активная бронь на горящую позицию; `resolved_at` заполнен тогда и только тогда, когда бронь не активна.
 - `notifications`: одна строка на событие и получателя (уникальный `dedup_key`); `subject` содержит только идентификаторы брони, акции, разбора или отчёта; `kind` проверяется в коде, чтобы новые типы не требовали миграции.
-- При удалении пользователя `consents`, `meals`, `chat_states` и `notifications` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
+- При удалении пользователя `consents`, `meals`, `chat_states`, `notifications` и `notification_settings` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
 - `float8` в схеме это `double precision`, `text[]` это массив строк.
 
 ## 8. Формат ошибок

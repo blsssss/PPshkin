@@ -1,10 +1,12 @@
 import type { Queryable } from '../db/pool.ts';
 import { CONSENT_DOCUMENTS } from '../domain/consents.ts';
+import { isQuietAt } from '../domain/notifications.ts';
 import type { BehaviorProfile } from '../domain/nutrition/profile.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
 import { createDelivery } from '../notifications/delivery.ts';
 import { proactiveOfferMessage } from '../notifications/texts.ts';
 import type { Messenger } from '../ports/messenger.ts';
+import * as notificationSettings from '../repositories/notification-settings.ts';
 import {
   discardUnsentOffer,
   findProactiveCandidates,
@@ -26,8 +28,6 @@ interface ProactiveOffersDependencies {
 const JOB_NAME = 'proactive_offers';
 const PAGE_SIZE = 50;
 const MIN_SCORE = 0.5;
-const QUIET_FROM_HOUR = 22;
-const QUIET_UNTIL_HOUR = 9;
 const SWEET_TOOTH_MIN_SHARE = 0.4;
 const SNACK_MIN_SHARE = 0.5;
 
@@ -35,10 +35,6 @@ const CURRENT_CONSENT_VERSIONS = {
   personal_data: CONSENT_DOCUMENTS.personal_data.version,
   personalized_offers: CONSENT_DOCUMENTS.personalized_offers.version,
 };
-
-function isQuietHour(hour: number): boolean {
-  return hour >= QUIET_FROM_HOUR || hour < QUIET_UNTIL_HOUR;
-}
 
 function habitualHour({ sweetTooth, slots }: BehaviorProfile): number | null {
   if (sweetTooth.share >= SWEET_TOOTH_MIN_SHARE && sweetTooth.typicalHour !== null) {
@@ -60,8 +56,9 @@ export function proactiveOffersJob({
   const deliver = createDelivery({ messenger, logger });
 
   async function offerTo({ userId, timezone }: ProactiveCandidate, now: Date): Promise<void> {
+    const { preferences } = (await notificationSettings.findRecipient(db, userId)) ?? {};
+    if (!preferences || isQuietAt(preferences.quietHours, now, timezone)) return;
     const { hour } = localParts(now, timezone);
-    if (isQuietHour(hour)) return;
     const { profile } = await insights.get(userId);
     if (profile.readiness !== 'ready' || habitualHour(profile) !== hour) return;
     const result = await recommendations.recommend(userId, { location: null, limit: 1, channel: 'push' });

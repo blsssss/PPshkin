@@ -693,7 +693,7 @@ curl -s -X POST -H "Authorization: Bearer local-demo-guest-token-not-secret" \
 | `docker compose down -v`, затем `docker compose up -d --wait` | удаляется и том `pgdata` | удаляются все; схема и демо-данные создаются заново |
 | `docker compose up -d --build --wait` | пересборка образов после изменения кода | сохраняются |
 
-Миграции (`backend/migrations/0001_init.sql`, `0002_offer_feedback.sql`, `0003_demo_copies.sql`, `0004_notifications.sql`) и демо-данные применяются идемпотентно при каждом старте: уже применённые миграции сверяются по контрольной сумме и не выполняются повторно.
+Миграции (`backend/migrations/0001_init.sql`, `0002_offer_feedback.sql`, `0003_demo_copies.sql`, `0004_notifications.sql`, `0005_notification_settings.sql`) и демо-данные применяются идемпотентно при каждом старте: уже применённые миграции сверяются по контрольной сумме и не выполняются повторно.
 
 ## Сервисы вне Docker
 

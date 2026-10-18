@@ -32,6 +32,7 @@ export interface NewNotification {
   kind: NotificationKind;
   dedupKey: string;
   subject: NotificationSubject;
+  silent: boolean;
   sendAfter: Date;
   expiresAt: Date;
   createdAt: Date;
@@ -68,14 +69,15 @@ function errorText(error: string): string {
 
 export async function insert(db: Queryable, notification: NewNotification): Promise<boolean> {
   const { rowCount } = await db.query(
-    `insert into notifications (user_id, kind, dedup_key, subject, send_after, expires_at, created_at)
-     values ($1, $2, $3, $4::jsonb, $5, $6, $7)
+    `insert into notifications (user_id, kind, dedup_key, subject, silent, send_after, expires_at, created_at)
+     values ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
      on conflict (dedup_key) do nothing`,
     [
       notification.userId,
       notification.kind,
       notification.dedupKey,
       jsonb(notification.subject),
+      notification.silent,
       notification.sendAfter,
       notification.expiresAt,
       notification.createdAt,

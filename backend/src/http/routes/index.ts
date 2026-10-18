@@ -14,7 +14,11 @@ import { venueRoutes } from './venue.ts';
 
 export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (app, { services }) => {
   await app.register(authRoutes, { auth: services.auth, consents: services.consents });
-  await app.register(meRoutes, { profile: services.profile, account: services.account });
+  await app.register(meRoutes, {
+    profile: services.profile,
+    account: services.account,
+    notificationSettings: services.notificationSettings,
+  });
   await app.register(consentsRoutes, { consents: services.consents });
   await app.register(diaryRoutes, { diary: services.diary });
   await app.register(venueRoutes, {

@@ -40,6 +40,7 @@ describe('/profile', () => {
       ],
       [{ type: 'callback', text: 'Предложения: включить', payload: 'pf:ad:on' }],
       [{ type: 'request_geo_location', text: 'Отправить местоположение' }],
+      [{ type: 'callback', text: 'Уведомления', payload: 'nt:ls' }],
       [{ type: 'callback', text: 'Удалить аккаунт', payload: 'ac:del' }],
     ]);
   });
@@ -72,6 +73,7 @@ describe('/profile', () => {
       'Цель',
       'Предложения: выключить',
       'Обновить местоположение',
+      'Уведомления',
       'Сбросить список «Не предлагать»',
       'Удалить аккаунт',
     ]);

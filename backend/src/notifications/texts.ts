@@ -28,6 +28,8 @@ const NOTICE_BUTTONS = {
   bookings: 'Брони',
   deals: 'Горящие позиции',
   showQr: 'Показать QR',
+  remindNoMore: 'Не напоминать',
+  sendNoMore: 'Не присылать',
   cancel: 'Отменить',
   today: 'Дневник за сегодня',
   pickAnother: 'Подобрать другое',
@@ -91,7 +93,10 @@ export function bookingReminderMessage(notice: BookingNotice, now: Date): Outgoi
     [
       `Бронь ${booking.code} действует ещё ${minutes} ${plural(minutes, MINUTE_FORMS)}, до ${expiryTime(notice)}: ${escapeMarkdown(booking.itemName)}, ${place(venue)}.`,
     ],
-    guestBookingButtons(booking),
+    [
+      ...guestBookingButtons(booking),
+      [callback(NOTICE_BUTTONS.remindNoMore, payload('nt', 'off', 'booking_reminder'))],
+    ],
   );
 }
 
@@ -163,7 +168,7 @@ export function dealEndingMessage({ deal, venue, itemName }: DealNotice): Outgoi
     [
       `Горящая позиция «${escapeMarkdown(itemName)}» закончится в ${until}, осталось ${deal.quantityLeft} из ${deal.quantityTotal}. Продлить до закрытия можно в кабинете.`,
     ],
-    [[venueDealsButton()]],
+    [[venueDealsButton()], [callback(NOTICE_BUTTONS.sendNoMore, payload('nt', 'off', 'venue_deal_ending'))]],
   );
 }
 

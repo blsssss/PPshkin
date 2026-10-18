@@ -144,7 +144,10 @@ describe('guest booking messages', () => {
       text: 'Бронь K7MP4X действует ещё 10 минут, до 13:00: Эклер, Кофейня «Зерно», ул. Баумана, 36.',
       format: 'markdown',
       notify: true,
-      buttons: GUEST_BUTTONS,
+      buttons: [
+        ...GUEST_BUTTONS,
+        [{ kind: 'callback', text: 'Не напоминать', payload: 'nt:off:booking_reminder' }],
+      ],
     });
   });
 
@@ -279,7 +282,10 @@ describe('venue deal messages', () => {
       text: 'Горящая позиция «Круассан» закончится в 21:30, осталось 3 из 10. Продлить до закрытия можно в кабинете.',
       format: 'markdown',
       notify: true,
-      buttons: [[{ kind: 'callback', text: 'Горящие позиции', payload: 'vn:deals' }]],
+      buttons: [
+        [{ kind: 'callback', text: 'Горящие позиции', payload: 'vn:deals' }],
+        [{ kind: 'callback', text: 'Не присылать', payload: 'nt:off:venue_deal_ending' }],
+      ],
     });
   });
 

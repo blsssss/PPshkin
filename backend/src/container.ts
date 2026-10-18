@@ -20,6 +20,7 @@ import { createInsightsService } from './services/insights.ts';
 import { createMenuImportsService } from './services/menu-imports.ts';
 import { createMenuService } from './services/menu.ts';
 import { createMetricsService } from './services/metrics.ts';
+import { createNotificationSettingsService } from './services/notification-settings.ts';
 import { createProfileService } from './services/profile.ts';
 import { createRecommendationsService } from './services/recommendations.ts';
 import { createVenuesService } from './services/venues.ts';
@@ -83,5 +84,6 @@ export function createServices({
     bookings,
     analytics: createAnalyticsService({ pool, clock, bookings }),
     demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
+    notificationSettings: createNotificationSettingsService({ pool, clock }),
   };
 }

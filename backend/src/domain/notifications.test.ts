@@ -3,6 +3,14 @@ import { sampleBooking } from '../../test/bookings.ts';
 import { sampleDeal, sampleVenue } from '../../test/venues.ts';
 import type { MenuImport } from './models.ts';
 import {
+  DEFAULT_PREFERENCES,
+  DEFAULT_QUIET_HOURS,
+  isKindEnabled,
+  isQuietAt,
+  isQuietClock,
+  planDelivery,
+  quietHoursEndAt,
+  settingsKinds,
   dealRestockedOn,
   dedupKey,
   isLiveDeal,
@@ -189,5 +197,108 @@ describe('deal checks', () => {
         new Date('2026-09-25T18:00:00Z'),
       ),
     ).toBe(true);
+  });
+});
+
+describe('quiet hours', () => {
+  const moscow = (time: string) => new Date(`2026-09-25T${time}:00+03:00`);
+
+  it.each([
+    ['21:59', false],
+    ['22:00', true],
+    ['03:00', true],
+    ['08:59', true],
+    ['09:00', false],
+  ])('treats %s in Moscow under the default 22:00-09:00 as quiet: %s', (time, quiet) => {
+    expect(isQuietAt(DEFAULT_QUIET_HOURS, moscow(time), 'Europe/Moscow')).toBe(quiet);
+  });
+
+  it('handles an interval inside one day', () => {
+    const lunch = { from: '13:00', until: '15:00' };
+    expect(isQuietAt(lunch, moscow('12:59'), 'Europe/Moscow')).toBe(false);
+    expect(isQuietAt(lunch, moscow('13:00'), 'Europe/Moscow')).toBe(true);
+    expect(isQuietAt(lunch, moscow('14:59'), 'Europe/Moscow')).toBe(true);
+    expect(isQuietAt(lunch, moscow('15:00'), 'Europe/Moscow')).toBe(false);
+  });
+
+  it('is never quiet when the quiet hours are off', () => {
+    expect(isQuietAt(null, moscow('03:00'), 'Europe/Moscow')).toBe(false);
+  });
+
+  it('counts in the time zone of the user', () => {
+    expect(isQuietAt(DEFAULT_QUIET_HOURS, moscow('20:30'), 'Asia/Yekaterinburg')).toBe(true);
+  });
+
+  it('accepts only times on the 30 minute grid', () => {
+    expect(isQuietClock('22:30')).toBe(true);
+    expect(isQuietClock('22:15')).toBe(false);
+    expect(isQuietClock('25:00')).toBe(false);
+  });
+
+  it('finds the end of the quiet hours on the same or the next day', () => {
+    expect(quietHoursEndAt(DEFAULT_QUIET_HOURS, moscow('23:00'), 'Europe/Moscow')).toEqual(
+      new Date('2026-09-26T09:00:00+03:00'),
+    );
+    expect(quietHoursEndAt(DEFAULT_QUIET_HOURS, moscow('03:00'), 'Europe/Moscow')).toEqual(moscow('09:00'));
+  });
+});
+
+describe('planDelivery', () => {
+  const moscow = (time: string) => new Date(`2026-09-25T${time}:00+03:00`);
+  const context = (time: string, expiresAt = new Date('2026-09-27T00:00:00Z')) => ({
+    now: moscow(time),
+    timeZone: 'Europe/Moscow',
+    expiresAt,
+  });
+
+  it('sends right away with sound outside the quiet hours', () => {
+    expect(planDelivery('venue_booking_created', DEFAULT_PREFERENCES, context('12:00'))).toEqual({
+      queue: true,
+      silent: false,
+      sendAfter: moscow('12:00'),
+    });
+  });
+
+  it('sends urgent messages without sound during the quiet hours', () => {
+    expect(planDelivery('booking_reminder', DEFAULT_PREFERENCES, context('23:00'))).toEqual({
+      queue: true,
+      silent: true,
+      sendAfter: moscow('23:00'),
+    });
+  });
+
+  it('moves a report to the end of the quiet hours, but not past its deadline', () => {
+    expect(planDelivery('venue_report_ready', DEFAULT_PREFERENCES, context('03:00'))).toEqual({
+      queue: true,
+      silent: false,
+      sendAfter: moscow('09:00'),
+    });
+    expect(
+      planDelivery('venue_report_ready', DEFAULT_PREFERENCES, context('03:00', moscow('08:00'))),
+    ).toEqual({
+      queue: true,
+      silent: false,
+      sendAfter: moscow('08:00'),
+    });
+  });
+
+  it('does not queue a kind the user turned off, except the menu import result', () => {
+    const preferences = {
+      disabledKinds: ['booking_reminder', 'menu_import_done'] as const,
+      quietHours: null,
+    };
+    expect(planDelivery('booking_reminder', preferences, context('12:00'))).toEqual({ queue: false });
+    expect(planDelivery('menu_import_done', preferences, context('12:00'))).toMatchObject({ queue: true });
+    expect(isKindEnabled('menu_import_done', preferences)).toBe(true);
+  });
+
+  it('lists the venue kinds only for a user with a venue', () => {
+    expect(settingsKinds(false)).toEqual([
+      'booking_confirmed',
+      'booking_reminder',
+      'booking_redeemed',
+      'booking_expired',
+    ]);
+    expect(settingsKinds(true)).toHaveLength(11);
   });
 });

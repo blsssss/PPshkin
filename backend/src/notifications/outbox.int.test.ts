@@ -600,3 +600,59 @@ describe('purge_notifications job', () => {
     expect(await queuedNotifications(pool)).toHaveLength(1);
   });
 });
+
+describe('notification settings', () => {
+  it('does not queue a kind the user turned off and skips one turned off after queueing', async () => {
+    await services.notificationSettings.update(OWNER, {
+      kinds: [{ kind: 'venue_booking_created', enabled: false }],
+    });
+    await services.bookings.create(GUEST, { menuItemId: tart.id }, 'bot');
+    expect(await statusesOf('venue_booking_created')).toEqual([]);
+
+    live = false;
+    await services.notificationSettings.update(OWNER, {
+      kinds: [{ kind: 'venue_booking_created', enabled: true }],
+    });
+    await services.bookings.create(SECOND_GUEST, { menuItemId: tart.id }, 'bot');
+    await services.notificationSettings.update(OWNER, {
+      kinds: [{ kind: 'venue_booking_created', enabled: false }],
+    });
+    await settle();
+    live = true;
+    await outbox.deliverDue(clock.now());
+
+    expect(sendToUser).not.toHaveBeenCalled();
+    expect(await statusesOf('venue_booking_created')).toMatchObject([
+      { status: 'skipped', lastError: 'the user turned this kind off' },
+    ]);
+  });
+
+  it('sends urgent messages without sound during the quiet hours of the recipient', async () => {
+    await services.notificationSettings.update(OWNER, { quietHours: { from: '12:00', until: '13:00' } });
+
+    await services.bookings.create(GUEST, { menuItemId: tart.id }, 'miniapp');
+    await settle();
+
+    expect(sendToUser.mock.calls.map(([userId, message]) => [userId, message.notify])).toEqual([
+      [OWNER, false],
+      [GUEST, true],
+    ]);
+    expect((await queuedNotifications(pool)).map((row) => [row.userId, row.silent])).toEqual([
+      [OWNER, true],
+      [GUEST, false],
+    ]);
+  });
+
+  it('moves a report out of the quiet hours to their end', async () => {
+    clock.set('2026-09-25T23:30:00+03:00');
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue, period: 'day', date: '2026-09-25' },
+      clock.now(),
+    );
+
+    expect(await statusesOf('venue_report_ready')).toMatchObject([
+      { status: 'pending', silent: false, sendAfter: new Date('2026-09-26T09:00:00+03:00') },
+    ]);
+  });
+});

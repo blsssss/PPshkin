@@ -227,6 +227,20 @@ checks:
       - status: 200
         contentType: application/json
         requiredFields: [items]
+  - id: guest-notification-settings
+    title: Настройки уведомлений демо-гостя с тихими часами и типами сообщений
+    method: GET
+    path: /api/v1/me/notifications
+    role: guest
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [timezone, quietHours, kinds]
   - id: venue-profile
     title: Профиль демо-заведения
     method: GET

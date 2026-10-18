@@ -1,9 +1,15 @@
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import type { AccountService } from '../../services/account.ts';
+import type { NotificationSettingsService } from '../../services/notification-settings.ts';
 import type { ProfileService } from '../../services/profile.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
 import { describeErrors, ERROR_NOTES } from '../error-notes.ts';
 import { errorResponses, GeoPointSchema, noContent, success } from '../schemas/common.ts';
+import {
+  NotificationSettingsPatchSchema,
+  NotificationSettingsSchema,
+  toNotificationSettings,
+} from '../schemas/notifications.ts';
 import {
   ProfilePatchSchema,
   toUserLocation,
@@ -15,9 +21,14 @@ import {
 interface MeRoutesOptions {
   profile: ProfileService;
   account: AccountService;
+  notificationSettings: NotificationSettingsService;
 }
 
-export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (app, { profile, account }, done) => {
+export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
+  app,
+  { profile, account, notificationSettings },
+  done,
+) => {
   app.get(
     '/me',
     {
@@ -69,6 +80,56 @@ export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (app, { profi
       const { user, consents } = await profile.update(userId(request), request.body);
       return toUserProfile(user, consents);
     },
+  );
+
+  app.get(
+    '/me/notifications',
+    {
+      preValidation: requireAuth,
+      schema: {
+        operationId: 'getMyNotificationSettings',
+        tags: ['me'],
+        summary: 'Настройки уведомлений',
+        description: [
+          'Какие сообщения бот присылает и тихие часы. Пока пользователь ничего не менял, включено всё, тихие часы 22:00-09:00 в его часовом поясе. Типы заведения (audience venue) возвращаются только пользователю с заведением.',
+          describeErrors(ERROR_NOTES.userNotFound),
+        ].join(' '),
+        security: bearerSecurity,
+        response: {
+          200: success('Настройки уведомлений', NotificationSettingsSchema),
+          ...errorResponses(401, 404),
+        },
+      },
+    },
+    async (request) => toNotificationSettings(await notificationSettings.get(userId(request))),
+  );
+
+  app.patch(
+    '/me/notifications',
+    {
+      preValidation: requireAuth,
+      schema: {
+        operationId: 'updateMyNotificationSettings',
+        tags: ['me'],
+        summary: 'Изменить настройки уведомлений',
+        description: [
+          'Меняет только переданное: включение типов и тихие часы. Время тихих часов кратно 30 минутам, начало и конец не совпадают, null выключает тихие часы. Работает и без согласия на обработку данных, в том числе для демо-учёток.',
+          describeErrors(
+            ERROR_NOTES.validationFailed,
+            ERROR_NOTES.userNotFound,
+            'notification_not_editable (422): этот тип нельзя выключить (разбор меню) или он относится к заведению, которого у пользователя нет; верните переключатель в прежнее положение.',
+          ),
+        ].join(' '),
+        security: bearerSecurity,
+        body: NotificationSettingsPatchSchema,
+        response: {
+          200: success('Обновлённые настройки уведомлений', NotificationSettingsSchema),
+          ...errorResponses(400, 401, 404, 422),
+        },
+      },
+    },
+    async (request) =>
+      toNotificationSettings(await notificationSettings.update(userId(request), request.body)),
   );
 
   app.put(

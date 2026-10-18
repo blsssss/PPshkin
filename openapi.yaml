@@ -359,6 +359,60 @@ components:
         - activity
         - goal
       description: Параметры тела и цель для расчёта ориентира калорийности
+    QuietHoursInput:
+      type: object
+      properties:
+        from:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: Начало тихих часов, ЧЧ:ММ
+        until:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: Конец тихих часов, ЧЧ:ММ
+      required:
+        - from
+        - until
+      description: "Тихие часы в часовом поясе пользователя: сообщения о бронях,
+        акциях и разборе меню приходят без звука, итоги дня переносятся на конец
+        тихих часов"
+    NotificationSettingsPatchInput:
+      type: object
+      properties:
+        quietHours:
+          description: null выключает тихие часы
+          anyOf:
+            - $ref: "#/components/schemas/QuietHoursInput"
+            - type: "null"
+        kinds:
+          minItems: 1
+          maxItems: 20
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - booking_confirmed
+                  - booking_reminder
+                  - booking_redeemed
+                  - booking_expired
+                  - venue_booking_created
+                  - venue_booking_cancelled
+                  - venue_booking_expired
+                  - venue_deal_sold_out
+                  - venue_deal_ending
+                  - menu_import_done
+                  - venue_report_ready
+                description: Тип уведомления
+              enabled:
+                type: boolean
+            required:
+              - kind
+              - enabled
+      description: "Изменение настроек уведомлений: передаются только меняющиеся типы
+        и тихие часы"
     Problem:
       type: object
       properties:
@@ -1819,6 +1873,79 @@ components:
         - maintenanceKcal
       additionalProperties: false
       description: Оценка ориентира калорийности на день. Это не медицинская рекомендация
+    QuietHours:
+      type: object
+      properties:
+        from:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: Начало тихих часов, ЧЧ:ММ
+        until:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: Конец тихих часов, ЧЧ:ММ
+      required:
+        - from
+        - until
+      additionalProperties: false
+      description: "Тихие часы в часовом поясе пользователя: сообщения о бронях,
+        акциях и разборе меню приходят без звука, итоги дня переносятся на конец
+        тихих часов"
+    NotificationSettings:
+      type: object
+      properties:
+        timezone:
+          type: string
+          description: Часовой пояс IANA, в котором считаются тихие часы
+        quietHours:
+          anyOf:
+            - $ref: "#/components/schemas/QuietHours"
+            - type: "null"
+          description: "null: тихие часы выключены"
+        kinds:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - booking_confirmed
+                  - booking_reminder
+                  - booking_redeemed
+                  - booking_expired
+                  - venue_booking_created
+                  - venue_booking_cancelled
+                  - venue_booking_expired
+                  - venue_deal_sold_out
+                  - venue_deal_ending
+                  - menu_import_done
+                  - venue_report_ready
+                description: Тип уведомления
+              audience:
+                type: string
+                enum:
+                  - guest
+                  - venue
+                description: "guest: сообщения гостю, venue: сообщения заведению"
+              enabled:
+                type: boolean
+              editable:
+                type: boolean
+                description: "false: тип нельзя выключить, переключатель неактивен"
+            required:
+              - kind
+              - audience
+              - enabled
+              - editable
+            additionalProperties: false
+      required:
+        - timezone
+        - quietHours
+        - kinds
+      additionalProperties: false
+      description: "Настройки уведомлений: какие сообщения бот присылает и тихие часы.
+        Типы заведения возвращаются только пользователю с заведением"
     RecommendationItem:
       type: object
       properties:
@@ -2359,6 +2486,116 @@ paths:
           headers: *a2
         "403":
           description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/me/notifications:
+    get:
+      operationId: getMyNotificationSettings
+      summary: Настройки уведомлений
+      tags:
+        - me
+      description: "Какие сообщения бот присылает и тихие часы. Пока пользователь
+        ничего не менял, включено всё, тихие часы 22:00-09:00 в его часовом
+        поясе. Типы заведения (audience venue) возвращаются только пользователю
+        с заведением. Коды ошибок: user_not_found (404): аккаунт удалён, войдите
+        заново."
+      security: *a3
+      responses:
+        "200":
+          description: Настройки уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a1
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      operationId: updateMyNotificationSettings
+      summary: Изменить настройки уведомлений
+      tags:
+        - me
+      description: "Меняет только переданное: включение типов и тихие часы. Время
+        тихих часов кратно 30 минутам, начало и конец не совпадают, null
+        выключает тихие часы. Работает и без согласия на обработку данных, в том
+        числе для демо-учёток. Коды ошибок: validation_failed (400): исправьте
+        поля, перечисленные в errors. user_not_found (404): аккаунт удалён,
+        войдите заново. notification_not_editable (422): этот тип нельзя
+        выключить (разбор меню) или он относится к заведению, которого у
+        пользователя нет; верните переключатель в прежнее положение."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSettingsPatchInput"
+      security: *a3
+      responses:
+        "200":
+          description: Обновлённые настройки уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
