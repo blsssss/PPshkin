@@ -269,13 +269,13 @@ docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore
 
 | Источник | Метрики |
 |---|---|
-| backend, `/metrics` | время ответа по шаблону маршрута и коду (`http_request_duration_seconds`), метрики Node (память, event loop, GC), продуктовые показатели: пользователи без демо-учёток, записи дневника за сутки, живые горящие позиции, брони и предложения по статусам |
+| backend, `/metrics` | время ответа по шаблону маршрута и коду (`http_request_duration_seconds`), метрики Node (память, event loop, GC), продуктовые показатели: пользователи без демо-учёток, записи дневника за сутки, живые горящие позиции, брони и предложения по статусам; запуски, длительность и время последнего успеха фоновых задач |
 | blackbox-exporter | ответ `https://<домен>/ready` снаружи через Caddy и срок действия сертификата |
 | node-exporter | CPU, память, диск и сеть сервера |
 
 `/metrics` не маршрутизируется Caddy и снаружи недоступен, это проверяет CI. Сырые пути в метки не попадают: неизвестные адреса считаются как `unmatched`.
 
-Дашборд «ППшкин» открывается по адресу `https://<домен>/grafana/` без входа, с правами только на просмотр: доступность и сертификат, запросы, ошибки 5xx и задержка, распознавание фото и меню, webhook MAX, брони и предложения, ресурсы сервера, сработавшие алерты. Дашборд и источники данных описаны файлами в репозитории и в интерфейсе не редактируются. Администратор входит как `admin` с паролем из `GRAFANA_ADMIN_PASSWORD`; прочитать пароль на сервере: `grep GRAFANA_ADMIN_PASSWORD /opt/ppshkin/.env`.
+Дашборд «ППшкин» открывается по адресу `https://<домен>/grafana/` без входа, с правами только на просмотр: доступность и сертификат, запросы, ошибки 5xx и задержка, распознавание фото и меню, webhook MAX, брони и предложения, SLO и сгорание бюджета ошибок, фоновые задачи, ресурсы сервера, сработавшие алерты. Дашборд и источники данных описаны файлами в репозитории и в интерфейсе не редактируются. Администратор входит как `admin` с паролем из `GRAFANA_ADMIN_PASSWORD`; прочитать пароль на сервере: `grep GRAFANA_ADMIN_PASSWORD /opt/ppshkin/.env`.
 
 Алерты описаны в [deploy/monitoring/rules.yml](../deploy/monitoring/rules.yml), Alertmanager отправляет их в чат команды в Telegram и сообщает о восстановлении:
 
@@ -287,6 +287,39 @@ docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore
 | `HighErrorRate` | больше 5% ответов 5xx за 5 минут при заметном трафике |
 | `SlowResponses` | 95-й перцентиль API без распознавания больше 2 секунд 10 минут |
 | `DiskAlmostFull`, `MemoryHigh`, `CpuHigh` | диск больше 85%, память больше 90%, CPU больше 90% |
+| `AvailabilityBudgetBurnFast`, `BookingsBudgetBurnFast` | бюджет ошибок SLO сгорает в 14,4 раза быстрее нормы и за час, и за 5 минут |
+| `AvailabilityBudgetBurnSlow`, `BookingsBudgetBurnSlow` | бюджет ошибок SLO сгорает в 6 раз быстрее нормы и за 6 часов, и за 30 минут |
+| `JobFailing` | фоновая задача падает 3 запуска подряд |
+| `JobStale` | ни один экземпляр не выполнил задачу успешно: `expire_bookings` 5 минут, `fail_stale_imports` 15 минут, `purge_processed_updates` 3 часа, `deliver_notifications` 2 минуты |
+
+### Целевые уровни (SLO)
+
+| SLO | Цель за 28 дней | Бюджет ошибок | Как считается |
+|---|---|---|---|
+| доступность | 99,5% | 3 ч 22 мин недоступности | доля успешных проверок `https://<домен>/ready` blackbox-exporter (`probe_success`) |
+| бронь и погашение | 99,9% | 1 запрос из 1000 | доля ответов без 5xx у `POST /api/v1/bookings` и `POST /api/v1/venue/bookings/redeem` |
+| скорость API без распознавания | 99% быстрее 800 мс | 1 запрос из 100 | доля запросов быстрее 800 мс среди маршрутов, которые учитывает `SlowResponses` (без распознавания и webhook) |
+
+Доли ошибок за 5 минут, 30 минут, 1 час и 6 часов считают правила записи `slo:availability_errors:ratio_rate*`, `slo:booking_errors:ratio_rate*` и `slo:api_slow:ratio_rate*`, их видно на панелях раздела «SLO» дашборда. Алерты сгорания бюджета заведены для доступности и броней; скорость API, доставка уведомлений и распознавание пока выводятся только панелями, цели для них фиксируются после двух недель пилота. `HighErrorRate` и `SlowResponses` работают параллельно с новыми алертами две недели, затем дублирующие убираются.
+
+Сгорание в 14,4 раза означает, что при таком темпе бюджет на 28 дней кончится меньше чем за 2 дня, в 6 раз - меньше чем за 5 дней. Алерт требует превышения в обоих окнах сразу: длинное окно отсекает короткие всплески, короткое быстро гасит алерт после исправления.
+
+Метрики фоновых задач пишет планировщик backend: `ppshkin_job_runs_total{name, result}` с результатом `ok`, `failed` или `locked` (задачу выполняет другой экземпляр), `ppshkin_job_duration_seconds{name}`, `ppshkin_job_last_success_timestamp_seconds{name}` и `ppshkin_job_consecutive_failures{name}`. Имя задачи лежит в метке `name`, потому что метку `job` Prometheus занимает именем цели сбора. Время успеха пишет только экземпляр, который взял блокировку задачи, поэтому `JobStale` берёт максимум по экземплярам. Пока задача ни разу не выполнилась успешно (например, `deliver_notifications` до её появления), ряда нет и `JobStale` по ней молчит.
+
+### Что делать при алерте
+
+| Алерт | Действия |
+|---|---|
+| `SiteUnavailable`, `AvailabilityBudgetBurnFast` | `docker compose -f compose.prod.yaml ps` и журналы `caddy` и `backend` (раздел 12). Если backend перезапускается после выката, откатите выкат (раздел 9). Если сервер недоступен целиком, проверьте его в панели провайдера; при потере сервера восстановите его по разделу 10 |
+| `AvailabilityBudgetBurnSlow` | ищите повторяющиеся короткие падения: перезапуски контейнеров (`docker compose -f compose.prod.yaml ps`, столбец STATUS), нехватку памяти (`MemoryHigh`), ошибки сертификата в журнале `caddy` |
+| `BookingsBudgetBurnFast`, `BookingsBudgetBurnSlow` | журнал backend по `POST /api/v1/bookings` и `redeem`; частые причины - исчерпан пул соединений базы (`DATABASE_POOL_SIZE`, [load.md](load.md)), долгие блокировки строк акций и позиций, ошибка в свежем выкате. Если ошибки начались после выката, откатите его |
+| `HighErrorRate` | смотрите панель «Ответы по кодам» и журнал backend, затем действуйте как при `BookingsBudgetBurnFast` |
+| `SlowResponses` | панели «Задержка API без распознавания» и «Ресурсы сервера»: при высоком CPU или памяти сервер мал для нагрузки ([load.md](load.md)), при медленных отдельных маршрутах ищите запрос в журнале backend |
+| `JobFailing` | `docker compose -f compose.prod.yaml logs backend \| grep 'job failed'` покажет ошибку задачи. Для `expire_bookings` это срочно: просроченные брони не возвращают порции в продажу |
+| `JobStale` | проверьте, что backend запущен и в журнале есть `scheduler started`. Если задача висит, перезапустите backend: `docker compose -f compose.prod.yaml restart backend` |
+| `TargetDown` | контейнер цели остановлен или не отвечает: `docker compose -f compose.prod.yaml ps`, затем `up -d --wait` |
+| `CertificateExpiresSoon` | журнал `caddy`: чаще всего закрыт порт 80 или изменилась A-запись |
+| `DiskAlmostFull`, `MemoryHigh`, `CpuHigh` | `df -h`, `docker system df`, `docker stats`; старые образы удаляет каждый выкат, копии базы старше срока удаляет `backup.sh` |
 
 Правила покрыты юнит-тестами `promtool test rules` ([deploy/monitoring/rules.test.yml](../deploy/monitoring/rules.test.yml)), их запускает CI.
 

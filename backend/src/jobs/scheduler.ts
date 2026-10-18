@@ -13,6 +13,20 @@ export interface Job {
 
 export type JobLock = (name: string, task: () => Promise<void>) => Promise<boolean>;
 
+export const JOB_RESULTS = ['ok', 'failed', 'locked'] as const;
+export type JobResult = (typeof JOB_RESULTS)[number];
+
+export interface JobRun {
+  job: string;
+  result: JobResult;
+  durationSeconds: number;
+  finishedAt: Date;
+}
+
+export interface JobMetrics {
+  record(run: JobRun): void;
+}
+
 export interface Scheduler {
   start(): void;
   stop(): Promise<void>;
@@ -24,8 +38,11 @@ interface SchedulerOptions {
   clock: Clock;
   logger: MaxLogger;
   jobs: Job[];
+  metrics?: JobMetrics;
   tickMs?: number;
 }
+
+const noMetrics: JobMetrics = { record: () => undefined };
 
 const DEFAULT_TICK_MS = 15_000;
 
@@ -89,6 +106,7 @@ export function createScheduler({
   clock,
   logger,
   jobs,
+  metrics = noMetrics,
   tickMs = DEFAULT_TICK_MS,
 }: SchedulerOptions): Scheduler {
   checkOptions(jobs, tickMs);
@@ -101,6 +119,15 @@ export function createScheduler({
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
 
+  function record(job: Job, result: JobResult, startedAt: number): void {
+    metrics.record({
+      job: job.name,
+      result,
+      durationSeconds: (performance.now() - startedAt) / 1000,
+      finishedAt: clock.now(),
+    });
+  }
+
   async function execute(job: Job, now: Date): Promise<string | null> {
     const startedAt = performance.now();
     const attempt = { invoked: false };
@@ -111,11 +138,14 @@ export function createScheduler({
       });
       if (!acquired) {
         logger.debug({ job: job.name }, 'job skipped: another instance is running it');
+        record(job, 'locked', startedAt);
         return null;
       }
       logger.debug({ job: job.name, durationMs: Math.round(performance.now() - startedAt) }, 'job finished');
+      record(job, 'ok', startedAt);
     } catch (error) {
       logger.error({ err: error, job: job.name }, 'job failed');
+      record(job, 'failed', startedAt);
     }
     return attempt.invoked ? job.name : null;
   }
