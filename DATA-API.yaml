@@ -311,6 +311,20 @@ checks:
       - status: 404
         contentType: application/problem+json
         requiredFields: [code]
+  - id: venue-audit
+    title: Журнал действий в демо-заведении с курсором следующей страницы
+    method: GET
+    path: /api/v1/venue/audit
+    role: venue
+    params:
+      path: {}
+      query: {}
+      headers: {}
+      body: null
+    expect:
+      - status: 200
+        contentType: application/json
+        requiredFields: [items, nextCursor]
   - id: venue-analytics
     title: Статистика заведения за последние 7 дней
     method: GET

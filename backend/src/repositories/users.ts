@@ -158,3 +158,65 @@ export async function revokeAllSessions(db: Queryable): Promise<number> {
 export async function remove(db: Queryable, id: number): Promise<void> {
   await db.query('delete from users where id = $1', [id]);
 }
+
+export async function touchLastSeen(db: Queryable, id: number, now: Date, throttleMs: number): Promise<void> {
+  await db.query(
+    `update users set last_seen_at = $2
+      where id = $1 and (last_seen_at is null or last_seen_at <= $2::timestamptz - make_interval(secs => $3))`,
+    [id, now, throttleMs / 1000],
+  );
+}
+
+export async function lastActiveAt(db: Queryable, id: number): Promise<Date | null> {
+  const row = await maybeOne<{ active_at: Date }>(
+    db,
+    'select coalesce(last_seen_at, created_at) as active_at from users where id = $1',
+    [id],
+  );
+  return row?.active_at ?? null;
+}
+
+export interface InactiveUser {
+  id: number;
+  activeAt: Date;
+}
+
+export async function listInactiveToWarn(
+  db: Queryable,
+  activeBefore: Date,
+  limit: number,
+): Promise<InactiveUser[]> {
+  const { rows } = await db.query<{ id: number; active_at: Date }>(
+    `select u.id, coalesce(u.last_seen_at, u.created_at) as active_at
+       from users u
+      where u.id > 0 and coalesce(u.last_seen_at, u.created_at) < $1
+        and not exists (
+          select 1 from notifications n
+           where n.user_id = u.id and n.kind = 'account_inactive_warning'
+             and n.created_at >= coalesce(u.last_seen_at, u.created_at))
+      order by u.id
+      limit $2`,
+    [activeBefore, limit],
+  );
+  return rows.map((row) => ({ id: row.id, activeAt: row.active_at }));
+}
+
+export async function listInactiveToDelete(
+  db: Queryable,
+  activeBefore: Date,
+  warnedBefore: Date,
+  limit: number,
+): Promise<number[]> {
+  const { rows } = await db.query<{ id: number }>(
+    `select u.id from users u
+      where u.id > 0 and coalesce(u.last_seen_at, u.created_at) < $1
+        and exists (
+          select 1 from notifications n
+           where n.user_id = u.id and n.kind = 'account_inactive_warning'
+             and n.created_at >= coalesce(u.last_seen_at, u.created_at) and n.created_at <= $2)
+      order by u.id
+      limit $3`,
+    [activeBefore, warnedBefore, limit],
+  );
+  return rows.map((row) => row.id);
+}

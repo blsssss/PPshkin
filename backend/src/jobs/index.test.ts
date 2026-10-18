@@ -8,7 +8,13 @@ const db: Queryable = { query: () => Promise.reject(new Error('the database is n
 
 function jobs(flags: Partial<JobsDependencies['config']>, extra: Partial<JobsDependencies> = {}) {
   return createJobs({
-    config: { BOT_MODE: 'polling', DEMO_MODE: false, PROACTIVE_OFFERS: false, ...flags },
+    config: {
+      BOT_MODE: 'polling',
+      DEMO_MODE: false,
+      PROACTIVE_OFFERS: false,
+      PURGE_INACTIVE_ACCOUNTS: false,
+      ...flags,
+    },
     db,
     services: fakeServices(),
     messenger: () => null,
@@ -28,6 +34,7 @@ describe('createJobs', () => {
       purge_processed_updates: { everyMs: 3_600_000 },
       purge_notifications: { dailyAt: '04:30', timeZone: 'Europe/Moscow' },
       purge_deal_impressions: { dailyAt: '04:40', timeZone: 'Europe/Moscow' },
+      purge_retention: { dailyAt: '04:50', timeZone: 'Europe/Moscow' },
     });
   });
 
@@ -109,7 +116,12 @@ describe('createJobs', () => {
   it('expires bookings across all guests and venues', async () => {
     const expireDue = vi.fn(() => Promise.resolve([]));
     const expire = createJobs({
-      config: { BOT_MODE: 'polling', DEMO_MODE: false, PROACTIVE_OFFERS: false },
+      config: {
+        BOT_MODE: 'polling',
+        DEMO_MODE: false,
+        PROACTIVE_OFFERS: false,
+        PURGE_INACTIVE_ACCOUNTS: false,
+      },
       db,
       services: fakeServices({
         bookings: { ...fakeServices().bookings, expireDue },

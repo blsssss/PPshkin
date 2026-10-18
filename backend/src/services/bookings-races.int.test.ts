@@ -209,7 +209,7 @@ describe('account deletion during bookings', () => {
   it('lets a redemption finish while the guest deletes the account', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const [redeemed, deleted] = await raceBehindLock<unknown>(pool, bookingLock(booking), [
-      () => service.redeem(OWNER, booking.code),
+      () => service.redeem(OWNER, booking.code, 'miniapp'),
       afterFirstWaiter(() => account.deleteAccount(GUEST)),
     ]);
     expect(redeemed).toMatchObject({ status: 'fulfilled', value: { booking: { status: 'redeemed' } } });
@@ -257,8 +257,8 @@ describe('concurrent resolutions', () => {
   it('redeems once when two cashiers scan the same code', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const results = await raceBehindLock(pool, bookingLock(booking), [
-      () => service.redeem(OWNER, booking.code),
-      () => service.redeem(OWNER, booking.code.toLowerCase()),
+      () => service.redeem(OWNER, booking.code, 'miniapp'),
+      () => service.redeem(OWNER, booking.code.toLowerCase(), 'miniapp'),
     ]);
     const { fulfilled, rejected } = outcomes(results);
     expect(fulfilled.map((view) => view.booking.status)).toEqual(['redeemed']);
@@ -271,7 +271,7 @@ describe('concurrent resolutions', () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const results = await raceBehindLock(pool, bookingLock(booking), [
       () => service.cancel(GUEST, booking.id),
-      () => service.redeem(OWNER, booking.code),
+      () => service.redeem(OWNER, booking.code, 'miniapp'),
     ]);
     const { fulfilled, rejected } = outcomes(results);
     expect(fulfilled).toHaveLength(1);

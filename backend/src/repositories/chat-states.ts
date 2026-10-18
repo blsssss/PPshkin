@@ -21,3 +21,10 @@ export async function save(db: Queryable, userId: number, state: unknown): Promi
 export async function clear(db: Queryable, userId: number): Promise<void> {
   await db.query('delete from chat_states where user_id = $1', [userId]);
 }
+
+export async function deleteUpdatedBefore(db: Queryable, before: Date): Promise<number> {
+  const { rowCount } = await db.query('delete from chat_states where user_id > 0 and updated_at < $1', [
+    before,
+  ]);
+  return rowCount ?? 0;
+}

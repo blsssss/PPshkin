@@ -169,7 +169,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     }
     let applied: AppliedMenuImport;
     try {
-      applied = await menuImports.apply(ctx.user.id, importId, priced);
+      applied = await menuImports.apply(ctx.user.id, importId, priced, 'bot');
     } catch (error) {
       const failure = knownFailure(error, APPLY_FAILURES);
       await ctx.reply({ text: VENUE_ERROR_TEXTS[failure], buttons: [menuRow()] });

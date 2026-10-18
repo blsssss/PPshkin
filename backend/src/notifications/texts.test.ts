@@ -7,6 +7,7 @@ import { createMaxMessenger } from '../integrations/max/messenger.ts';
 import type { DiaryDay } from '../services/diary.ts';
 import type { RecommendedOffer } from '../services/recommendations.ts';
 import {
+  accountInactiveMessage,
   bookingCancelledMessage,
   bookingConfirmedMessage,
   bookingCreatedMessage,
@@ -304,5 +305,16 @@ describe('venue deal messages', () => {
     ]) {
       await expect(messenger.sendToUser(101, message)).resolves.toEqual({ messageId: 'mid.1' });
     }
+  });
+});
+
+describe('account inactive warning', () => {
+  it('warns about the deletion without buttons', () => {
+    expect(accountInactiveMessage()).toEqual({
+      text: 'Аккаунт удалится через 14 дней, потому что вы давно не заходили. Чтобы сохранить его, откройте бот.',
+      format: 'markdown',
+      notify: true,
+      buttons: [],
+    });
   });
 });

@@ -2,7 +2,7 @@ import { addDays, atLocalTime, localDate, localParts, minutesOfDay } from '../sh
 import { dealOverAt } from './deals.ts';
 import type { Booking, Deal, MenuImport, Venue } from './models.ts';
 
-export const NOTIFICATION_KINDS = [
+export const SETTINGS_KINDS = [
   'booking_confirmed',
   'booking_reminder',
   'booking_redeemed',
@@ -15,6 +15,9 @@ export const NOTIFICATION_KINDS = [
   'menu_import_done',
   'venue_report_ready',
 ] as const;
+export type SettingsKind = (typeof SETTINGS_KINDS)[number];
+
+const NOTIFICATION_KINDS = [...SETTINGS_KINDS, 'account_inactive_warning'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export type NotificationStatus =
@@ -35,13 +38,15 @@ export type NotificationEvent =
   | { kind: VenueBookingKind; booking: Booking; venue: Venue }
   | { kind: VenueDealKind; deal: Deal; venue: Venue }
   | { kind: 'menu_import_done'; menuImport: MenuImport; venue: Venue }
-  | { kind: 'venue_report_ready'; venue: Venue; period: ReportPeriod; date: string };
+  | { kind: 'venue_report_ready'; venue: Venue; period: ReportPeriod; date: string }
+  | { kind: 'account_inactive_warning'; user: { id: number; activeAt: Date } };
 
 export type NotificationSubject =
   | { bookingId: number }
   | { dealId: number }
   | { importId: number }
-  | { venueId: number; period: ReportPeriod; date: string };
+  | { venueId: number; period: ReportPeriod; date: string }
+  | { userId: number };
 
 type NotificationAudience =
   { kind: 'guest'; userId: number | null } | { kind: 'venue'; permission: VenuePermission };
@@ -58,12 +63,12 @@ const HOUR_MS = 60 * MINUTE_MS;
 
 const BOOKING_EVENT_TTL_MS = 2 * HOUR_MS;
 const MENU_AND_REPORT_TTL_MS = 24 * HOUR_MS;
+const INACTIVE_WARNING_TTL_MS = 14 * 24 * HOUR_MS;
 
 const RETRY_DELAYS_MS = [MINUTE_MS, 5 * MINUTE_MS, 15 * MINUTE_MS] as const;
 const MAX_DELIVERY_ATTEMPTS = RETRY_DELAYS_MS.length + 1;
 export const SENDING_TIMEOUT_MS = 2 * MINUTE_MS;
 export const DELIVERY_BATCH_SIZE = 100;
-export const NOTIFICATION_RETENTION_MS = 30 * 24 * HOUR_MS;
 
 export const BOOKING_REMINDER_LEAD_MS = 10 * MINUTE_MS;
 export const BOOKING_REMINDER_MIN_HOLD_MS = 20 * MINUTE_MS;
@@ -75,6 +80,10 @@ const REPORT_PERMISSIONS: Record<ReportPeriod, VenuePermission> = {
   day: 'deal.edit',
   week: 'analytics.view',
 };
+
+export function isSettingsKind(value: string): value is SettingsKind {
+  return (SETTINGS_KINDS as readonly string[]).includes(value);
+}
 
 export function isNotificationKind(value: string): value is NotificationKind {
   return (NOTIFICATION_KINDS as readonly string[]).includes(value);
@@ -125,6 +134,13 @@ export function notificationTarget(event: NotificationEvent, now: Date): Notific
         subjectKey: String(event.menuImport.id),
         audience: { kind: 'venue', permission: 'menu.edit' },
         expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'account_inactive_warning':
+      return {
+        subject: { userId: event.user.id },
+        subjectKey: `${String(event.user.id)}:${event.user.activeAt.toISOString().slice(0, 10)}`,
+        audience: { kind: 'guest', userId: event.user.id },
+        expiresAt: after(now, INACTIVE_WARNING_TTL_MS),
       };
     case 'venue_report_ready':
       return {
@@ -293,10 +309,17 @@ export const NOTIFICATION_KIND_DESCRIPTIONS: Record<NotificationKind, KindDescri
     editable: false,
     urgent: true,
   },
+  account_inactive_warning: {
+    label: 'Аккаунт скоро удалится',
+    hint: 'За 14 дней до удаления давно неактивного аккаунта',
+    audience: 'guest',
+    editable: false,
+    urgent: false,
+  },
 };
 
-export function settingsKinds(hasVenue: boolean): NotificationKind[] {
-  return NOTIFICATION_KINDS.filter(
+export function settingsKinds(hasVenue: boolean): SettingsKind[] {
+  return SETTINGS_KINDS.filter(
     (kind) => hasVenue || NOTIFICATION_KIND_DESCRIPTIONS[kind].audience === 'guest',
   );
 }

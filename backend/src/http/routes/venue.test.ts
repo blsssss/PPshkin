@@ -277,7 +277,7 @@ describe('venue profile routes', () => {
     });
     expect(patched.statusCode).toBe(200);
     expectContract(patched, 'PATCH', '/api/v1/venue');
-    expect(update).toHaveBeenCalledWith(OWNER_ID, { closesAt: '23:00' });
+    expect(update).toHaveBeenCalledWith(OWNER_ID, { closesAt: '23:00' }, 'miniapp');
 
     const empty = await app.inject({ method: 'PATCH', url: '/api/v1/venue', headers: owner, payload: {} });
     expect(empty.statusCode).toBe(400);
@@ -307,7 +307,7 @@ describe('menu routes', () => {
     expect(response.statusCode).toBe(201);
     expectContract(response, 'POST', '/api/v1/venue/menu/items');
     expect(response.json()).toEqual(menuItemDto);
-    expect(create).toHaveBeenCalledWith(OWNER_ID, payload);
+    expect(create).toHaveBeenCalledWith(OWNER_ID, payload, 'miniapp');
 
     for (const invalid of [
       { ...payload, priceRub: 0 },
@@ -343,7 +343,7 @@ describe('menu routes', () => {
     });
     expect(response.statusCode).toBe(200);
     expectContract(response, 'PATCH', '/api/v1/venue/menu/items/{id}');
-    expect(update).toHaveBeenCalledWith(OWNER_ID, 11, { description: null, isAvailable: false });
+    expect(update).toHaveBeenCalledWith(OWNER_ID, 11, { description: null, isAvailable: false }, 'miniapp');
 
     for (const [url, payload] of [
       ['/api/v1/venue/menu/items/11', {}],
@@ -395,7 +395,7 @@ describe('menu routes', () => {
     });
     expect(response.statusCode).toBe(204);
     expectContract(response, 'DELETE', '/api/v1/venue/menu/items/{id}');
-    expect(archive).toHaveBeenCalledWith(OWNER_ID, 11);
+    expect(archive).toHaveBeenCalledWith(OWNER_ID, 11, 'miniapp');
   });
 });
 
@@ -561,7 +561,7 @@ describe('menu import routes', () => {
     expect(applied.statusCode).toBe(201);
     expectContract(applied, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
     expect(applied.json()).toEqual({ items: [menuItemDto], duplicates: [] });
-    expect(apply).toHaveBeenCalledWith(OWNER_ID, 31, [item]);
+    expect(apply).toHaveBeenCalledWith(OWNER_ID, 31, [item], 'miniapp');
 
     const again = await app.inject({ method: 'POST', url, headers: owner, payload: { items: [item] } });
     expect(again.statusCode).toBe(409);
@@ -658,12 +658,16 @@ describe('deal routes', () => {
     expect(response.statusCode).toBe(201);
     expectContract(response, 'POST', '/api/v1/venue/deals');
     expect(response.json()).toEqual(dealDto);
-    expect(create).toHaveBeenCalledWith(OWNER_ID, {
-      menuItemId: 11,
-      priceRub: 130,
-      quantity: 5,
-      endsAt: new Date('2026-09-25T11:00:00Z'),
-    });
+    expect(create).toHaveBeenCalledWith(
+      OWNER_ID,
+      {
+        menuItemId: 11,
+        priceRub: 130,
+        quantity: 5,
+        endsAt: new Date('2026-09-25T11:00:00Z'),
+      },
+      'miniapp',
+    );
   });
 
   it('validates new deals', async () => {
@@ -729,7 +733,7 @@ describe('deal routes', () => {
     expect(soldOut.statusCode).toBe(200);
     expectContract(soldOut, 'PATCH', path);
     expect(soldOut.json()).toMatchObject({ quantityLeft: 0, status: 'sold_out' });
-    expect(update).toHaveBeenCalledWith(OWNER_ID, 21, { quantityLeft: 0, endsAt: undefined });
+    expect(update).toHaveBeenCalledWith(OWNER_ID, 21, { quantityLeft: 0, endsAt: undefined }, 'miniapp');
 
     const finished = await app.inject({
       method: 'PATCH',
@@ -739,10 +743,12 @@ describe('deal routes', () => {
     });
     expect(finished.statusCode).toBe(409);
     expectContract(finished, 'PATCH', path);
-    expect(update).toHaveBeenLastCalledWith(OWNER_ID, 21, {
-      quantityLeft: undefined,
-      endsAt: new Date('2026-09-25T12:00:00Z'),
-    });
+    expect(update).toHaveBeenLastCalledWith(
+      OWNER_ID,
+      21,
+      { quantityLeft: undefined, endsAt: new Date('2026-09-25T12:00:00Z') },
+      'miniapp',
+    );
 
     const tooMany = await app.inject({ method: 'PATCH', url, headers: owner, payload: { quantityLeft: 50 } });
     expect(tooMany.statusCode).toBe(422);
@@ -774,7 +780,7 @@ describe('deal routes', () => {
     const cancelled = await app.inject({ method: 'DELETE', url: '/api/v1/venue/deals/21', headers: owner });
     expect(cancelled.statusCode).toBe(204);
     expectContract(cancelled, 'DELETE', '/api/v1/venue/deals/{id}');
-    expect(cancel).toHaveBeenCalledWith(OWNER_ID, 21);
+    expect(cancel).toHaveBeenCalledWith(OWNER_ID, 21, 'miniapp');
 
     const missing = await app.inject({ method: 'DELETE', url: '/api/v1/venue/deals/21', headers: owner });
     expect(missing.statusCode).toBe(404);

@@ -14,6 +14,7 @@ import { COMMAND_PREFIX, type Registry } from './registry.ts';
 import { isExpired, type ChatState, type ChatStateStore } from './state.ts';
 import { NOTICES } from './texts.ts';
 import { acquisitionOf } from '../domain/acquisition.ts';
+import { LAST_SEEN_THROTTLE_MS } from '../domain/retention.ts';
 
 export interface RouterOptions {
   db: Queryable;
@@ -265,6 +266,7 @@ export function createRouter(options: RouterOptions): UpdateHandler {
         at: clock.now(),
       },
     });
+    await users.touchLastSeen(db, user.id, clock.now(), LAST_SEEN_THROTTLE_MS);
     const session = openSession(event, user, await states.load(user.id));
     try {
       await route(session);

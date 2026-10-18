@@ -76,7 +76,7 @@ export function createBookingScreens({ services }: BotKit) {
 
   async function redeem(ownerId: number, code: string): Promise<RedeemOutcome> {
     try {
-      return { view: await bookings.redeem(ownerId, code) };
+      return { view: await bookings.redeem(ownerId, code, 'bot') };
     } catch (error) {
       return { failure: knownFailure(error, REDEEM_FAILURES) };
     }

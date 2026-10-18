@@ -2187,6 +2187,93 @@ components:
       additionalProperties: false
       description: Итоги заведения за период. Предложения и брони относятся к дню, в
         который они созданы. Данных гостей в ответе нет
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+          description: "Действие: booking.redeem, deal.create, deal.update, deal.cancel,
+            menu_item.create, menu_item.update, menu_item.archive,
+            menu_import.apply, venue.update"
+        actor:
+          anyOf:
+            - type: object
+              properties:
+                userId:
+                  type: integer
+                name:
+                  type:
+                    - string
+                    - "null"
+                role:
+                  type: string
+                  enum:
+                    - owner
+                    - manager
+                    - cashier
+              required:
+                - userId
+                - name
+                - role
+              additionalProperties: false
+            - type: "null"
+          description: Кто выполнил действие; null, если аккаунт удалён
+        target:
+          type: object
+          properties:
+            type:
+              type: string
+              description: booking, deal, menu_item, menu_import, venue или staff
+            id:
+              anyOf:
+                - type: integer
+                - type: "null"
+          required:
+            - type
+            - id
+          additionalProperties: false
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+          description: Подробности действия и канал (bot или miniapp); данных гостя здесь
+            нет, только код брони
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+      required:
+        - id
+        - action
+        - actor
+        - target
+        - details
+        - createdAt
+      additionalProperties: false
+      description: Запись журнала действий в заведении
+    AuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+          description: До 100 записей, новые сверху
+        nextCursor:
+          description: Курсор следующей страницы или null, если записей больше нет
+          type:
+            - string
+            - "null"
+      required:
+        - items
+        - nextCursor
+      additionalProperties: false
+      description: Страница журнала действий
 paths:
   /health:
     get:
@@ -3725,6 +3812,82 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "422":
           description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/audit:
+    get:
+      operationId: listVenueAudit
+      summary: Журнал действий в заведении
+      tags:
+        - venue
+      description: "Кто и когда погасил бронь, выставил, изменил или снял горящую
+        позицию, поменял меню, применил импорт или изменил карточку заведения.
+        До 100 записей на страницу, новые сверху; следующую страницу
+        запрашивайте с cursor из nextCursor. Период from и to включительно в
+        часовом поясе заведения, без них журнал за всё время (записи хранятся
+        год). Коды ошибок: venue_not_found (404, заведения ещё нет, предложите
+        создать его через POST /api/v1/venue), validation_failed (400, исправьте
+        поля из errors)."
+      parameters:
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+          in: query
+          name: from
+          required: false
+          description: Первый день периода в часовом поясе заведения, YYYY-MM-DD
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+          in: query
+          name: to
+          required: false
+          description: Последний день периода в часовом поясе заведения, YYYY-MM-DD
+        - schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,17}$
+          in: query
+          name: cursor
+          required: false
+          description: nextCursor из предыдущей страницы
+      security: *a4
+      responses:
+        "200":
+          description: Страница журнала
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
           content:
             application/problem+json:
               schema:

@@ -3,6 +3,7 @@ import type { Queryable } from '../db/pool.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
 import type { WebhookGuard } from '../integrations/max/webhook-guard.ts';
 import type { Outbox } from '../notifications/outbox.ts';
+import { silentNotifications } from '../notifications/silent-notifier.ts';
 import type { Messenger } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
 import { bookingRemindersJob } from './booking-reminders.ts';
@@ -15,13 +16,14 @@ import { proactiveOffersJob } from './proactive-offers.ts';
 import { purgeDealImpressionsJob } from './purge-deal-impressions.ts';
 import { purgeNotificationsJob } from './purge-notifications.ts';
 import { purgeProcessedUpdatesJob } from './purge-processed-updates.ts';
+import { purgeRetentionJob } from './purge-retention.ts';
 import { refreshDemoDataJob, type DemoDataRefresher } from './refresh-demo-data.ts';
 import type { Job } from './scheduler.ts';
 
 export interface JobsDependencies {
-  config: Pick<Config, 'BOT_MODE' | 'DEMO_MODE' | 'PROACTIVE_OFFERS'>;
+  config: Pick<Config, 'BOT_MODE' | 'DEMO_MODE' | 'PROACTIVE_OFFERS' | 'PURGE_INACTIVE_ACCOUNTS'>;
   db: Queryable;
-  services: Pick<Services, 'bookings' | 'insights' | 'menuImports' | 'recommendations'>;
+  services: Pick<Services, 'account' | 'bookings' | 'insights' | 'menuImports' | 'recommendations'>;
   messenger: () => Messenger | null;
   logger: MaxLogger;
   demo?: DemoDataRefresher;
@@ -45,6 +47,13 @@ export function createJobs({
     purgeProcessedUpdatesJob(db),
     purgeNotificationsJob(db),
     purgeDealImpressionsJob(db),
+    purgeRetentionJob({
+      db,
+      account: services.account,
+      notifications: outbox ?? silentNotifications,
+      purgeInactiveAccounts: config.PURGE_INACTIVE_ACCOUNTS,
+      logger,
+    }),
     ...(outbox
       ? [deliverNotificationsJob(outbox), bookingRemindersJob(db, outbox), dealEndingRemindersJob(db, outbox)]
       : []),

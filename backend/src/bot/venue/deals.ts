@@ -474,12 +474,16 @@ export function createDealScreens({ services }: BotKit) {
     await ctx.answer({ message: { text: `${dealSummary(offer, end, venue.timezone)}.` } });
     let created: DealView;
     try {
-      created = await deals.create(ctx.user.id, {
-        menuItemId: offer.menuItemId,
-        priceRub: offer.priceRub,
-        quantity: offer.quantity,
-        endsAt: end,
-      });
+      created = await deals.create(
+        ctx.user.id,
+        {
+          menuItemId: offer.menuItemId,
+          priceRub: offer.priceRub,
+          quantity: offer.quantity,
+          endsAt: end,
+        },
+        'bot',
+      );
     } catch (error) {
       await recover(ctx, venue, state, knownFailure(error, PUBLISH_FAILURES));
       return;
@@ -531,7 +535,7 @@ export function createDealScreens({ services }: BotKit) {
       return;
     }
     try {
-      await deals.cancel(ctx.user.id, dealId);
+      await deals.cancel(ctx.user.id, dealId, 'bot');
     } catch (error) {
       knownFailure(error, ['deal_not_found']);
       await ctx.answer({ message: { text: VENUE_ERROR_TEXTS.deal_not_found, buttons: [dealsRow()] } });

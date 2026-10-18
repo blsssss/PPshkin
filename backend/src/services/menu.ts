@@ -6,6 +6,8 @@ import * as menuItems from '../repositories/menu-items.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound, unprocessable } from '../shared/errors.ts';
 import { requireOwnedVenue } from './venues.ts';
+import { changedFields, type AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export interface MenuItemInput {
   name: string;
@@ -25,9 +27,9 @@ export type MenuItemPatch = Partial<MenuItemInput>;
 
 export interface MenuService {
   list(ownerId: number): Promise<MenuItem[]>;
-  create(ownerId: number, input: MenuItemInput): Promise<MenuItem>;
-  update(ownerId: number, itemId: number, patch: MenuItemPatch): Promise<MenuItem>;
-  archive(ownerId: number, itemId: number): Promise<void>;
+  create(ownerId: number, input: MenuItemInput, channel: AuditChannel): Promise<MenuItem>;
+  update(ownerId: number, itemId: number, patch: MenuItemPatch, channel: AuditChannel): Promise<MenuItem>;
+  archive(ownerId: number, itemId: number, channel: AuditChannel): Promise<void>;
 }
 
 interface MenuDependencies {
@@ -107,12 +109,28 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
       return (await menuItems.listOnMenu(pool, venue.id)).sort(byMenuOrder);
     },
 
-    async create(ownerId, input) {
+    async create(ownerId, input, channel) {
       const venue = await requireOwnedVenue(pool, ownerId);
-      return menuItems.insert(pool, venue.id, menuItemFields(input, 'venue'), clock.now());
+      return withTransaction(pool, async (client) => {
+        const now = clock.now();
+        const item = await menuItems.insert(client, venue.id, menuItemFields(input, 'venue'), now);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: ownerId,
+            action: 'menu_item.create',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: { name: item.name, priceRub: item.priceRub },
+          },
+          now,
+        );
+        return item;
+      });
     },
 
-    async update(ownerId, itemId, patch) {
+    async update(ownerId, itemId, patch, channel) {
       const venue = await requireOwnedVenue(pool, ownerId);
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
@@ -126,17 +144,45 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
             );
           }
         }
-        return menuItems.update(client, item.id, patchedFields(item, patch), now);
+        const updated = await menuItems.update(client, item.id, patchedFields(item, patch), now);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: ownerId,
+            action: 'menu_item.update',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: {
+              fields: changedFields(patch),
+              ...(patch.priceRub === undefined ? {} : { priceRub: updated.priceRub }),
+            },
+          },
+          now,
+        );
+        return updated;
       });
     },
 
-    async archive(ownerId, itemId) {
+    async archive(ownerId, itemId, channel) {
       const venue = await requireOwnedVenue(pool, ownerId);
       await withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
         await menuItems.archive(client, item.id, now);
         await deals.cancelLiveForItem(client, item.id, now);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: ownerId,
+            action: 'menu_item.archive',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: { name: item.name },
+          },
+          now,
+        );
       });
     },
   };

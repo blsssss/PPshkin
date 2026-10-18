@@ -194,6 +194,15 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...required, MINI_APP_ENABLED: 'maybe' })).toThrow(/MINI_APP_ENABLED/);
   });
 
+  it('keeps inactive accounts unless their deletion is switched on', () => {
+    expect(loadConfig(required).PURGE_INACTIVE_ACCOUNTS).toBe(false);
+    expect(loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: '' }).PURGE_INACTIVE_ACCOUNTS).toBe(false);
+    expect(loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: 'true' }).PURGE_INACTIVE_ACCOUNTS).toBe(true);
+    expect(() => loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: 'sometimes' })).toThrow(
+      /PURGE_INACTIVE_ACCOUNTS/,
+    );
+  });
+
   it('keeps proactive offers off unless they are switched on', () => {
     expect(loadConfig(required).PROACTIVE_OFFERS).toBe(false);
     expect(loadConfig({ ...required, PROACTIVE_OFFERS: '' }).PROACTIVE_OFFERS).toBe(false);

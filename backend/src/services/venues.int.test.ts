@@ -83,7 +83,7 @@ describe('venues service', () => {
       code: 'invalid_timezone',
     });
     await service.create(OWNER, input);
-    await expect(service.update(OWNER, { timezone: 'Europe/Kazan' })).rejects.toMatchObject({
+    await expect(service.update(OWNER, { timezone: 'Europe/Kazan' }, 'miniapp')).rejects.toMatchObject({
       status: 422,
       code: 'invalid_timezone',
     });
@@ -91,11 +91,11 @@ describe('venues service', () => {
 
   it('reports a missing venue for every owner call', async () => {
     await expect(service.get(OWNER)).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
-    await expect(service.update(OWNER, { name: 'Новое' })).rejects.toMatchObject({
+    await expect(service.update(OWNER, { name: 'Новое' }, 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',
     });
-    await expect(service.update(OWNER, { timezone: 'Mars/Olympus' })).rejects.toMatchObject({
+    await expect(service.update(OWNER, { timezone: 'Mars/Olympus' }, 'miniapp')).rejects.toMatchObject({
       code: 'venue_not_found',
     });
   });
@@ -103,11 +103,15 @@ describe('venues service', () => {
   it('updates only the given fields and the update time', async () => {
     const created = await service.create(OWNER, input);
     clock.advance(60_000);
-    const updated = await service.update(OWNER, {
-      name: ' Зерно на Кремлёвской ',
-      location: KREMLIN,
-      closesAt: '23:30',
-    });
+    const updated = await service.update(
+      OWNER,
+      {
+        name: ' Зерно на Кремлёвской ',
+        location: KREMLIN,
+        closesAt: '23:30',
+      },
+      'miniapp',
+    );
     expect(updated).toEqual({
       ...created,
       name: 'Зерно на Кремлёвской',

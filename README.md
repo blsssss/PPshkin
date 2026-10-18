@@ -268,6 +268,7 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 | **`MAX_WEBHOOK_SECRET`** | при `BOT_MODE=webhook` | пусто | секрет заголовка `X-Max-Bot-Api-Secret`, который MAX присылает с каждым обновлением на webhook |
 | `MINI_APP_ENABLED` | нет | `false` | кнопки открытия мини-приложения в сообщениях бота; включается после регистрации адреса мини-приложения в MAX |
 | `PROACTIVE_OFFERS` | нет | `false` | проактивные подсказки тем, кто дал согласие на персональные предложения (задача `proactive_offers` раз в 15 минут); в MVP выключены |
+| `PURGE_INACTIVE_ACCOUNTS` | нет | `false` | удалять аккаунты без входа 18 месяцев с предупреждением за 14 дней (задача `purge_retention`); выключено до решения о сроке хранения в политике |
 | **`SESSION_SECRET`** | при `BOT_MODE=webhook` | пусто: ключ выводится из `MAX_BOT_TOKEN` | ключ HMAC сессионных токенов мини-приложения, не короче 32 символов; новые токены подписываются им |
 | **`SESSION_SECRET_PREVIOUS`** | нет; задаётся только вместе с `SESSION_SECRET` и не равен ему | пусто | прежний ключ сессий на время ротации: токены, подписанные им, принимаются до конца своего срока, новые не выдаются. Удаляется через `SESSION_TTL_HOURS` после выката нового `SESSION_SECRET` |
 | `SESSION_TTL_HOURS` | нет | `12` | срок жизни сессии мини-приложения, от 1 до 720 часов |
@@ -695,7 +696,7 @@ curl -s -X POST -H "Authorization: Bearer local-demo-guest-token-not-secret" \
 | `docker compose down -v`, затем `docker compose up -d --wait` | удаляется и том `pgdata` | удаляются все; схема и демо-данные создаются заново |
 | `docker compose up -d --build --wait` | пересборка образов после изменения кода | сохраняются |
 
-Миграции (`backend/migrations/0001_init.sql`, `0002_offer_feedback.sql`, `0003_demo_copies.sql`, `0004_notifications.sql`, `0005_notification_settings.sql`, `0006_pilot_metrics.sql`, `0007_session_epoch.sql`) и демо-данные применяются идемпотентно при каждом старте: уже применённые миграции сверяются по контрольной сумме и не выполняются повторно.
+Миграции (`backend/migrations/0001_init.sql`, `0002_offer_feedback.sql`, `0003_demo_copies.sql`, `0004_notifications.sql`, `0005_notification_settings.sql`, `0006_pilot_metrics.sql`, `0007_session_epoch.sql`, `0008_audit_retention.sql`) и демо-данные применяются идемпотентно при каждом старте: уже применённые миграции сверяются по контрольной сумме и не выполняются повторно.
 
 ## Сервисы вне Docker
 

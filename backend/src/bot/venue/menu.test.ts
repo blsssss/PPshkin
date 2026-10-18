@@ -164,7 +164,12 @@ describe('menu import', () => {
         [UPLOAD],
       ],
     });
-    expect(chat.fake.services.menuImports.apply).toHaveBeenCalledWith(OWNER_ID, importId, [parsedItem()]);
+    expect(chat.fake.services.menuImports.apply).toHaveBeenCalledWith(
+      OWNER_ID,
+      importId,
+      [parsedItem()],
+      'bot',
+    );
     expect(chat.fake.state.items.map((item) => item.name)).toEqual(['Эклер']);
 
     const repeated = await chat.press(`vn:imp:apply:${importId}`, summary?.messageId);

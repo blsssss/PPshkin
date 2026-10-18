@@ -1,5 +1,6 @@
 import type { AccountService } from './account.ts';
 import type { AnalyticsService } from './analytics.ts';
+import type { AuditService } from './audit.ts';
 import type { AuthService } from './auth.ts';
 import type { BookingsService } from './bookings.ts';
 import type { CatalogService } from './catalog.ts';
@@ -36,4 +37,5 @@ export interface Services {
   analytics: AnalyticsService;
   demo: DemoService;
   notificationSettings: NotificationSettingsService;
+  audit: AuditService;
 }

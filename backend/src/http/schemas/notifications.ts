@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import {
   isQuietClock,
-  NOTIFICATION_KINDS,
+  SETTINGS_KINDS,
   QUIET_STEP_MINUTES,
   SETTINGS_KINDS_LIMIT,
 } from '../../domain/notifications.ts';
 import type { NotificationSettings } from '../../services/notification-settings.ts';
 
-const KindSchema = z.enum(NOTIFICATION_KINDS).describe('Тип уведомления');
+const KindSchema = z.enum(SETTINGS_KINDS).describe('Тип уведомления');
 
 const ClockSchema = z
   .string()

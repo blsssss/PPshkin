@@ -26,6 +26,7 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
     menu: services.menu,
     menuImports: services.menuImports,
     deals: services.deals,
+    audit: services.audit,
   });
   await app.register(catalogRoutes, { catalog: services.catalog });
   await app.register(recommendationsRoutes, { recommendations: services.recommendations });

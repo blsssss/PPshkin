@@ -1,7 +1,5 @@
 const DAY_MS = 86_400_000;
 
-export const DEAL_IMPRESSIONS_RETENTION_MS = 90 * DAY_MS;
-
 export interface Ratio {
   numerator: number;
   denominator: number;

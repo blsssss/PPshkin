@@ -27,12 +27,14 @@ import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as settings from '../repositories/notification-settings.ts';
 import * as notifications from '../repositories/notifications.ts';
+import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
 import type { DiaryDay } from '../services/diary.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import type { NotificationStats } from './stats.ts';
 import {
+  accountInactiveMessage,
   bookingCancelledMessage,
   bookingConfirmedMessage,
   bookingCreatedMessage,
@@ -203,11 +205,19 @@ export function createOutbox({
     return send(importScreen(found, { botUsername: username, miniAppEnabled }));
   }
 
+  async function composeInactiveWarning(subject: NotificationSubject, createdAt: Date): Promise<Composed> {
+    const userId = 'userId' in subject ? subject.userId : null;
+    const activeAt = userId === null ? null : await users.lastActiveAt(pool, userId);
+    if (activeAt === null) return skip('user is gone');
+    return activeAt > createdAt ? skip('user came back') : send(accountInactiveMessage());
+  }
+
   function compose(
     kind: string,
     subject: NotificationSubject,
     now: Date,
     username: string,
+    createdAt: Date,
   ): Promise<Composed> {
     if (!isNotificationKind(kind)) return Promise.resolve(skip('unknown notification kind'));
     switch (kind) {
@@ -226,6 +236,8 @@ export function createOutbox({
         return composeImport(subject, username);
       case 'venue_report_ready':
         return Promise.resolve(skip('venue reports are not available yet'));
+      case 'account_inactive_warning':
+        return composeInactiveWarning(subject, createdAt);
     }
   }
 
@@ -248,7 +260,7 @@ export function createOutbox({
         recipient !== null && isNotificationKind(row.kind) && !isKindEnabled(row.kind, recipient.preferences);
       const composed = disabled
         ? skip('the user turned this kind off')
-        : await compose(row.kind, row.subject, now, live.username);
+        : await compose(row.kind, row.subject, now, live.username, row.createdAt);
       if ('skip' in composed) {
         await notifications.finish(pool, row.id, 'skipped', composed.skip);
         stats?.finished(row.kind, 'skipped');
@@ -316,7 +328,9 @@ export function createOutbox({
       const recipients =
         target.audience.kind === 'guest'
           ? [target.audience.userId]
-          : await venueRecipients(db, event.venue, target.audience.permission);
+          : 'venue' in event
+            ? await venueRecipients(db, event.venue, target.audience.permission)
+            : [];
       for (const userId of recipients) {
         if (!isNotifiableUser(userId)) continue;
         const recipient = await settings.findRecipient(db, userId);

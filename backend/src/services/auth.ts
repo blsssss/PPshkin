@@ -7,6 +7,7 @@ import * as users from '../repositories/users.ts';
 import type { Clock } from '../shared/clock.ts';
 import { unauthorized, unavailable } from '../shared/errors.ts';
 import { acquisitionOf } from '../domain/acquisition.ts';
+import { LAST_SEEN_THROTTLE_MS } from '../domain/retention.ts';
 
 export interface AuthContext {
   userId: number;
@@ -96,6 +97,7 @@ export function createAuthService(db: Queryable, settings: AuthSettings, clock: 
         username: verified.user.username,
         acquisition: { source: acquisitionOf(verified.startParam), at: clock.now() },
       });
+      await users.touchLastSeen(db, user.id, clock.now(), LAST_SEEN_THROTTLE_MS);
       const epoch = (await users.sessionEpoch(db, user.id)) ?? 0;
       rememberEpoch(user.id, epoch);
       const session = issueSession(

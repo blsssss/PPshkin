@@ -24,6 +24,8 @@ import { dayRange, isLocalDate, isOpenAt } from '../shared/time.ts';
 import type { ConsentsService } from './consents.ts';
 import { lockMenuItem } from './menu.ts';
 import { requireOwnedVenue } from './venues.ts';
+import type { AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export const BOOKING_LIST_FILTERS = ['active', 'history'] as const;
 export type BookingListFilter = (typeof BOOKING_LIST_FILTERS)[number];
@@ -60,7 +62,7 @@ export interface BookingsService {
   qr(userId: number, bookingId: number): Promise<Buffer>;
   cancel(userId: number, bookingId: number): Promise<BookingView>;
   listForVenue(ownerId: number, query: VenueBookingsQuery): Promise<BookingView[]>;
-  redeem(ownerId: number, code: string): Promise<BookingView>;
+  redeem(ownerId: number, code: string, channel: AuditChannel): Promise<BookingView>;
   expireDue(scope: ExpireScope): Promise<Booking[]>;
 }
 
@@ -330,7 +332,7 @@ export function createBookingsService({
       return bookingViews(pool, found);
     },
 
-    async redeem(ownerId, input) {
+    async redeem(ownerId, input, channel) {
       const venue = await requireOwnedVenue(pool, ownerId);
       const code = normalizeBookingCode(input);
       if (code === null) throw bookingNotFound();
@@ -339,6 +341,18 @@ export function createBookingsService({
         async (client, booking, now) => {
           const redeemed = await bookings.markRedeemed(client, booking.id, now);
           const view = await bookingView(client, redeemed);
+          await audit.record(
+            client,
+            {
+              venueId: venue.id,
+              actorUserId: ownerId,
+              action: 'booking.redeem',
+              target: { type: 'booking', id: redeemed.id },
+              channel,
+              details: { code: redeemed.code, priceRub: redeemed.priceRub },
+            },
+            now,
+          );
           if (redeemed.userId !== null) {
             await meals.insert(client, {
               ...bookingMeal(redeemed, view.item),

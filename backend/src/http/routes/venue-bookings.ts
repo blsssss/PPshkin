@@ -85,7 +85,7 @@ export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOpti
         },
       },
     },
-    async (request) => toBooking(await bookings.redeem(userId(request), request.body.code)),
+    async (request) => toBooking(await bookings.redeem(userId(request), request.body.code, 'miniapp')),
   );
 
   app.get(

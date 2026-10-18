@@ -84,7 +84,7 @@ describe('venue bookings', () => {
       images: [],
     });
     expect(sent(redeemed)[0]).toMatchObject({ text: REDEEMED, buttons: AFTER_REDEEM });
-    expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX');
+    expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX', 'bot');
     expect(chat.fake.state.bookings[0]?.status).toBe('redeemed');
   });
 
@@ -191,7 +191,7 @@ describe('redeeming a typed code', () => {
       const [reply] = sent(await chat.send(input));
 
       expect(reply).toMatchObject({ text: REDEEMED, buttons: AFTER_REDEEM });
-      expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX');
+      expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX', 'bot');
       expect(chat.states.peek(OWNER_ID).flow).toBeNull();
     },
   );

@@ -1,4 +1,4 @@
-import { isNotificationKind, NOTIFICATION_KIND_DESCRIPTIONS } from '../../domain/notifications.ts';
+import { isSettingsKind, NOTIFICATION_KIND_DESCRIPTIONS } from '../../domain/notifications.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
 import type { NotificationSettings } from '../../services/notification-settings.ts';
 import { answerStale, byAction, payload } from '../callbacks.ts';
@@ -34,11 +34,7 @@ export function createNotificationsModule({ services }: BotKit): BotModule {
   const { notificationSettings, profile } = services;
 
   async function editableKind(ctx: BotContext, value: string | undefined) {
-    if (
-      value === undefined ||
-      !isNotificationKind(value) ||
-      !NOTIFICATION_KIND_DESCRIPTIONS[value].editable
-    ) {
+    if (value === undefined || !isSettingsKind(value) || !NOTIFICATION_KIND_DESCRIPTIONS[value].editable) {
       await answerStale(ctx);
       return null;
     }

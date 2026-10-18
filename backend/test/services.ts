@@ -118,6 +118,7 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       get: notStubbed('notificationSettings.get'),
       update: notStubbed('notificationSettings.update'),
     },
+    audit: { list: notStubbed('audit.list') },
     ...overrides,
   };
 }

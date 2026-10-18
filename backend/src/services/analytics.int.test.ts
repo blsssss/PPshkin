@@ -111,7 +111,7 @@ beforeAll(async () => {
       expiresAt: at('2026-09-26T09:00:00Z'),
     });
   }
-  await createMenuService({ pool, clock }).update(OWNER, achma.id, { name: 'Ачма с сыром' });
+  await createMenuService({ pool, clock }).update(OWNER, achma.id, { name: 'Ачма с сыром' }, 'miniapp');
 });
 
 afterAll(async () => {

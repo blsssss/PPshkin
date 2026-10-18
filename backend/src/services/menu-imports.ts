@@ -12,6 +12,8 @@ import { conflict, notFound } from '../shared/errors.ts';
 import { dayRange, localDate } from '../shared/time.ts';
 import { menuItemFields, type MenuItemInput } from './menu.ts';
 import { requireOwnedVenue, venueNotFound } from './venues.ts';
+import type { AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export type ParsedMenuItemInput = Omit<MenuItemInput, 'isAvailable'>;
 
@@ -24,7 +26,12 @@ export interface MenuImportsService {
   fromPhoto(ownerId: number, image: Buffer): Promise<MenuImport>;
   fromText(ownerId: number, text: string): Promise<MenuImport>;
   get(ownerId: number, importId: number): Promise<MenuImport>;
-  apply(ownerId: number, importId: number, items: ParsedMenuItemInput[]): Promise<AppliedMenuImport>;
+  apply(
+    ownerId: number,
+    importId: number,
+    items: ParsedMenuItemInput[],
+    channel: AuditChannel,
+  ): Promise<AppliedMenuImport>;
   failStale(now: Date): Promise<MenuImport[]>;
 }
 
@@ -156,7 +163,7 @@ export function createMenuImportsService({
       return asOf(found, clock.now());
     },
 
-    async apply(ownerId, importId, items) {
+    async apply(ownerId, importId, items, channel) {
       return withTransaction(pool, async (client) => {
         const venue = await venues.lockByOwner(client, ownerId);
         if (!venue) throw venueNotFound();
@@ -189,6 +196,18 @@ export function createMenuImportsService({
           onMenu.set(key, created);
         }
         await menuImports.markApplied(client, locked.id);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: ownerId,
+            action: 'menu_import.apply',
+            target: { type: 'menu_import', id: locked.id },
+            channel,
+            details: { added: added.length, duplicates: duplicates.size },
+          },
+          now,
+        );
         return { added, duplicates: [...duplicates.values()] };
       });
     },

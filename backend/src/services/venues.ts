@@ -1,10 +1,12 @@
-import type { Pool, Queryable } from '../db/pool.ts';
+import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
 import type { GeoPoint, Venue } from '../domain/models.ts';
 import type { VenueCategory } from '../domain/vocabulary.ts';
 import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../shared/errors.ts';
 import { isValidTimeZone } from '../shared/time.ts';
+import { changedFields, type AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export interface VenueInput {
   name: string;
@@ -21,7 +23,7 @@ export type VenuePatch = Partial<VenueInput>;
 export interface VenuesService {
   get(ownerId: number): Promise<Venue>;
   create(ownerId: number, input: VenueInput): Promise<Venue>;
-  update(ownerId: number, patch: VenuePatch): Promise<Venue>;
+  update(ownerId: number, patch: VenuePatch, channel: AuditChannel): Promise<Venue>;
 }
 
 interface VenuesDependencies {
@@ -73,15 +75,31 @@ export function createVenuesService({ pool, clock }: VenuesDependencies): Venues
       return venue;
     },
 
-    async update(ownerId, patch) {
+    async update(ownerId, patch, channel) {
       const venue = await requireOwnedVenue(pool, ownerId);
       assertTimeZone(patch.timezone);
-      return venues.update(
-        pool,
-        venue.id,
-        { ...patch, name: patch.name?.trim(), address: patch.address?.trim() },
-        clock.now(),
-      );
+      return withTransaction(pool, async (client) => {
+        const now = clock.now();
+        const updated = await venues.update(
+          client,
+          venue.id,
+          { ...patch, name: patch.name?.trim(), address: patch.address?.trim() },
+          now,
+        );
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: ownerId,
+            action: 'venue.update',
+            target: { type: 'venue', id: venue.id },
+            channel,
+            details: { fields: changedFields(patch) },
+          },
+          now,
+        );
+        return updated;
+      });
     },
   };
 }

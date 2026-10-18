@@ -148,7 +148,7 @@ describe('redeeming a booking', () => {
       status: 'redeemed',
       resolvedAt: '2026-09-25T09:20:00.000Z',
     });
-    expect(redeem).toHaveBeenCalledExactlyOnceWith(OWNER_ID, 'ppshkin:booking:k7mp4x');
+    expect(redeem).toHaveBeenCalledExactlyOnceWith(OWNER_ID, 'ppshkin:booking:k7mp4x', 'miniapp');
   });
 
   it('validates the code', async () => {

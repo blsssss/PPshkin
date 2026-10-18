@@ -1,5 +1,5 @@
 import type { Queryable } from '../db/pool.ts';
-import { DEAL_IMPRESSIONS_RETENTION_MS } from '../domain/pilot-metrics.ts';
+import { DEAL_IMPRESSIONS_RETENTION_MS } from '../domain/retention.ts';
 import { purgeCreatedBefore } from '../repositories/deal-impressions.ts';
 import type { Job } from './scheduler.ts';
 

@@ -235,10 +235,10 @@ describe('seed', () => {
 
   it('restores seeded venues and menus changed through the demo venue account', async () => {
     await demo.seed();
-    await services.venues.update(DEMO_OWNER, { name: 'Переименовано', opensAt: '11:00' });
+    await services.venues.update(DEMO_OWNER, { name: 'Переименовано', opensAt: '11:00' }, 'miniapp');
     const croissant = 910108;
-    await services.menu.update(DEMO_OWNER, 910101, { priceRub: 999 });
-    await services.menu.archive(DEMO_OWNER, croissant);
+    await services.menu.update(DEMO_OWNER, 910101, { priceRub: 999 }, 'miniapp');
+    await services.menu.archive(DEMO_OWNER, croissant, 'miniapp');
     await demo.seed();
     expect(await services.venues.get(DEMO_OWNER)).toMatchObject({
       name: 'Кофейня «Зерно»',
@@ -469,7 +469,7 @@ describe('claimVenue', () => {
   it('copies another seeded venue and skips deals of items it no longer sells', async () => {
     await demo.seed();
     await seedUser(pool, REVIEWER);
-    await services.menu.archive(DEMO_OWNER, 910110);
+    await services.menu.archive(DEMO_OWNER, 910110, 'miniapp');
     expect((await demo.claimVenue(REVIEWER, ZERNO)).name).toBe('Кофейня «Зерно»');
     expect((await services.deals.list(REVIEWER, 'active')).map(({ item }) => item.name)).toEqual([
       'Круассан',
@@ -563,7 +563,7 @@ describe('claimVenue', () => {
       'bot',
     );
     expect(booking.venue.ownerId).toBe(REVIEWER);
-    const redeemed = await services.bookings.redeem(REVIEWER, booking.booking.code);
+    const redeemed = await services.bookings.redeem(REVIEWER, booking.booking.code, 'miniapp');
     expect(redeemed.booking.status).toBe('redeemed');
     expect((await services.diary.day(REVIEWER)).meals.map((meal) => meal.title)).toEqual([
       'Сэндвич с курицей',

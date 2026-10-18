@@ -122,13 +122,14 @@ export async function cancelLiveInVenue(
   venueId: number,
   id: number,
   now: Date,
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const { rowCount } = await db.query(
     `update deals as d set cancelled_at = $3
        from venues v
       where v.id = d.venue_id and d.venue_id = $1 and d.id = $2 and ${LIVE} and ${OVER_AT} > $3`,
     [venueId, id, now],
   );
+  return rowCount === 1;
 }
 
 export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<void> {

@@ -4,7 +4,7 @@ import {
   NOTIFICATION_KIND_DESCRIPTIONS,
   settingsKinds,
   type NotificationAudienceKind,
-  type NotificationKind,
+  type SettingsKind,
   type NotificationPreferences,
   type QuietHours,
 } from '../domain/notifications.ts';
@@ -16,7 +16,7 @@ import type { Clock } from '../shared/clock.ts';
 import { notFound, unprocessable } from '../shared/errors.ts';
 
 export interface NotificationKindSetting {
-  kind: NotificationKind;
+  kind: SettingsKind;
   audience: NotificationAudienceKind;
   enabled: boolean;
   editable: boolean;
@@ -30,7 +30,7 @@ export interface NotificationSettings {
 
 export interface NotificationSettingsPatch {
   quietHours?: QuietHours | null;
-  kinds?: { kind: NotificationKind; enabled: boolean }[];
+  kinds?: { kind: SettingsKind; enabled: boolean }[];
 }
 
 export interface NotificationSettingsService {
@@ -60,7 +60,7 @@ async function hasVenue(db: Queryable, userId: number): Promise<boolean> {
   return (await venues.findByOwner(db, userId)) !== null;
 }
 
-function editableFor(kind: NotificationKind, withVenue: boolean): boolean {
+function editableFor(kind: SettingsKind, withVenue: boolean): boolean {
   const { audience, editable } = NOTIFICATION_KIND_DESCRIPTIONS[kind];
   return editable && (audience === 'guest' || withVenue);
 }

@@ -393,7 +393,7 @@ describe('booking reminders', () => {
     const { booking } = await services.bookings.create(GUEST, { menuItemId: tart.id }, 'bot');
     clock.set(new Date(booking.expiresAt.getTime() - 5 * MINUTE));
     await remind.run(clock.now());
-    await services.bookings.redeem(OWNER, booking.code);
+    await services.bookings.redeem(OWNER, booking.code, 'miniapp');
     await settle();
     live = true;
     await outbox.deliverDue(clock.now());
@@ -574,7 +574,7 @@ describe('menu import result', () => {
     menus.fromText.mockResolvedValue(recognized);
     const started = await services.menuImports.fromText(OWNER, 'Сырники 350 ₽');
     await settle();
-    await services.menuImports.apply(OWNER, started.id, [syrniki]);
+    await services.menuImports.apply(OWNER, started.id, [syrniki], 'miniapp');
     await settle();
     live = true;
     await outbox.deliverDue(clock.now());
@@ -653,6 +653,37 @@ describe('notification settings', () => {
 
     expect(await statusesOf('venue_report_ready')).toMatchObject([
       { status: 'pending', silent: false, sendAfter: new Date('2026-09-26T09:00:00+03:00') },
+    ]);
+  });
+});
+
+describe('account inactive warning', () => {
+  it('sends the warning and skips it when the user came back before it went out', async () => {
+    const activeAt = new Date(clock.now().getTime() - HOUR);
+    await outbox.enqueue(
+      pool,
+      { kind: 'account_inactive_warning', user: { id: GUEST, activeAt } },
+      clock.now(),
+    );
+    await outbox.enqueue(
+      pool,
+      { kind: 'account_inactive_warning', user: { id: SECOND_GUEST, activeAt } },
+      clock.now(),
+    );
+    await pool.query('update users set last_seen_at = $2 where id = $1', [GUEST, activeAt]);
+    await pool.query('update users set last_seen_at = $2 where id = $1', [SECOND_GUEST, later(MINUTE)]);
+    clock.advance(2 * MINUTE);
+    await outbox.deliverDue(clock.now());
+
+    expect(sentTo()).toEqual([
+      [
+        GUEST,
+        'Аккаунт удалится через 14 дней, потому что вы давно не заходили. Чтобы сохранить его, откройте бот.',
+      ],
+    ]);
+    expect(await statusesOf('account_inactive_warning')).toMatchObject([
+      { userId: GUEST, status: 'sent' },
+      { userId: SECOND_GUEST, status: 'skipped', lastError: 'user came back' },
     ]);
   });
 });

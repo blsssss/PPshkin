@@ -285,6 +285,9 @@ export function guestWorld(options: { now?: string; services?: Partial<Services>
 export function worldDatabase(world: GuestWorld): Queryable {
   return {
     query<Row extends QueryResultRow>(text: string) {
+      if (text.includes('update users set last_seen_at')) {
+        return Promise.resolve({ rows: [] as Row[], rowCount: 0 } as QueryResult<Row>);
+      }
       if (!text.includes('insert into users')) {
         return Promise.reject(new Error(`Unexpected query: ${text.slice(0, 40)}`));
       }

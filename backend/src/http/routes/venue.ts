@@ -1,9 +1,11 @@
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
+import type { AuditService } from '../../services/audit.ts';
 import type { DealsService } from '../../services/deals.ts';
 import type { MenuImportsService } from '../../services/menu-imports.ts';
 import type { MenuService } from '../../services/menu.ts';
 import type { VenuesService } from '../../services/venues.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
+import { AuditPageSchema, AuditQuerySchema, toAuditPage } from '../schemas/audit.ts';
 import { errorResponses, IdParams, noContent, success } from '../schemas/common.ts';
 import {
   DealBody,
@@ -33,6 +35,7 @@ interface VenueRouteOptions {
   menu: MenuService;
   menuImports: MenuImportsService;
   deals: DealsService;
+  audit: AuditService;
 }
 
 const NO_VENUE = 'venue_not_found (404, заведения ещё нет, предложите создать его через POST /api/v1/venue)';
@@ -50,7 +53,7 @@ const IMPORT_LIMITS = [
 
 export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
   app,
-  { venues, menu, menuImports, deals },
+  { venues, menu, menuImports, deals, audit },
   done,
 ) => {
   app.post(
@@ -115,7 +118,28 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         },
       },
     },
-    async (request) => toVenue(await venues.update(userId(request), request.body)),
+    async (request) => toVenue(await venues.update(userId(request), request.body, 'miniapp')),
+  );
+
+  app.get(
+    '/venue/audit',
+    {
+      preValidation: requireAuth,
+      schema: {
+        operationId: 'listVenueAudit',
+        tags: ['venue'],
+        summary: 'Журнал действий в заведении',
+        description: [
+          'Кто и когда погасил бронь, выставил, изменил или снял горящую позицию, поменял меню, применил импорт или изменил карточку заведения. До 100 записей на страницу, новые сверху; следующую страницу запрашивайте с cursor из nextCursor.',
+          'Период from и to включительно в часовом поясе заведения, без них журнал за всё время (записи хранятся год).',
+          `Коды ошибок: ${NO_VENUE}, ${BAD_INPUT}.`,
+        ].join(' '),
+        security: bearerSecurity,
+        querystring: AuditQuerySchema,
+        response: { 200: success('Страница журнала', AuditPageSchema), ...errorResponses(400, 401, 404) },
+      },
+    },
+    async (request) => toAuditPage(await audit.list(userId(request), request.query)),
   );
 
   app.get(
@@ -158,7 +182,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
       },
     },
     async (request, reply) =>
-      reply.code(201).send(toMenuItem(await menu.create(userId(request), request.body))),
+      reply.code(201).send(toMenuItem(await menu.create(userId(request), request.body, 'miniapp'))),
   );
 
   app.patch(
@@ -184,7 +208,8 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         },
       },
     },
-    async (request) => toMenuItem(await menu.update(userId(request), request.params.id, request.body)),
+    async (request) =>
+      toMenuItem(await menu.update(userId(request), request.params.id, request.body, 'miniapp')),
   );
 
   app.delete(
@@ -206,7 +231,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
       },
     },
     async (request, reply) => {
-      await menu.archive(userId(request), request.params.id);
+      await menu.archive(userId(request), request.params.id, 'miniapp');
       return reply.code(204).send(null);
     },
   );
@@ -321,6 +346,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         userId(request),
         request.params.id,
         request.body.items,
+        'miniapp',
       );
       return reply.code(201).send({ items: added.map(toMenuItem), duplicates: duplicates.map(toMenuItem) });
     },
@@ -379,7 +405,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
     },
     async (request, reply) => {
       const { endsAt, ...input } = request.body;
-      const created = await deals.create(userId(request), { ...input, endsAt: new Date(endsAt) });
+      const created = await deals.create(userId(request), { ...input, endsAt: new Date(endsAt) }, 'miniapp');
       return reply.code(201).send(toDeal(created));
     },
   );
@@ -415,10 +441,15 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
     },
     async (request) => {
       const { quantityLeft, endsAt } = request.body;
-      const updated = await deals.update(userId(request), request.params.id, {
-        quantityLeft,
-        endsAt: endsAt === undefined ? undefined : new Date(endsAt),
-      });
+      const updated = await deals.update(
+        userId(request),
+        request.params.id,
+        {
+          quantityLeft,
+          endsAt: endsAt === undefined ? undefined : new Date(endsAt),
+        },
+        'miniapp',
+      );
       return toDeal(updated);
     },
   );
@@ -443,7 +474,7 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
       },
     },
     async (request, reply) => {
-      await deals.cancel(userId(request), request.params.id);
+      await deals.cancel(userId(request), request.params.id, 'miniapp');
       return reply.code(204).send(null);
     },
   );

@@ -7,6 +7,7 @@ import type { Notifications } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
 import { createAnalyticsService } from './services/analytics.ts';
+import { createAuditService } from './services/audit.ts';
 import { createAuthService } from './services/auth.ts';
 import { createBookingsService } from './services/bookings.ts';
 import { createCatalogService } from './services/catalog.ts';
@@ -86,5 +87,6 @@ export function createServices({
     analytics: createAnalyticsService({ pool, clock, bookings }),
     demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
     notificationSettings: createNotificationSettingsService({ pool, clock }),
+    audit: createAuditService({ pool }),
   };
 }

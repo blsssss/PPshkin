@@ -302,3 +302,19 @@ describe('planDelivery', () => {
     expect(settingsKinds(true)).toHaveLength(11);
   });
 });
+
+describe('account inactive warning', () => {
+  it('goes to the user for 14 days, once per period of inactivity, and is not in the settings', () => {
+    const activeAt = new Date('2025-03-20T10:00:00Z');
+    expect(
+      notificationTarget({ kind: 'account_inactive_warning', user: { id: 101, activeAt } }, NOW),
+    ).toEqual({
+      subject: { userId: 101 },
+      subjectKey: '101:2025-03-20',
+      audience: { kind: 'guest', userId: 101 },
+      expiresAt: at(14 * 24 * HOUR),
+    });
+    expect(settingsKinds(true)).not.toContain('account_inactive_warning');
+    expect(isKindEnabled('account_inactive_warning', { disabledKinds: [], quietHours: null })).toBe(true);
+  });
+});

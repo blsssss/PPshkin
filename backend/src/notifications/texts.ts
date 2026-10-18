@@ -172,6 +172,13 @@ export function dealEndingMessage({ deal, venue, itemName }: DealNotice): Outgoi
   );
 }
 
+export function accountInactiveMessage(): OutgoingMessage {
+  return message(
+    ['Аккаунт удалится через 14 дней, потому что вы давно не заходили. Чтобы сохранить его, откройте бот.'],
+    [],
+  );
+}
+
 export function proactiveOfferMessage(offer: RecommendedOffer): OutgoingMessage {
   const { item, venue, deal, explanation } = offer;
   const summary = [

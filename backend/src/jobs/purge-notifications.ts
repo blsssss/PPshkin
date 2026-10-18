@@ -1,5 +1,5 @@
 import type { Queryable } from '../db/pool.ts';
-import { NOTIFICATION_RETENTION_MS } from '../domain/notifications.ts';
+import { NOTIFICATION_RETENTION_MS } from '../domain/retention.ts';
 import { purgeCreatedBefore } from '../repositories/notifications.ts';
 import type { Job } from './scheduler.ts';
 
