@@ -57,6 +57,18 @@ describe('buildApp', () => {
     const response = await instance.inject({ method: 'GET', url: '/health' });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(response.headers['content-security-policy']).toBe("default-src 'none';frame-ancestors 'none'");
+  });
+
+  it('sends the strict policy on errors and a working policy for Swagger UI', async () => {
+    const instance = await start();
+    const missing = await instance.inject({ method: 'GET', url: '/nope' });
+    expect(missing.headers['content-security-policy']).toBe("default-src 'none';frame-ancestors 'none'");
+    for (const url of ['/docs', '/docs/', '/docs/static/swagger-initializer.js']) {
+      const response = await instance.inject({ method: 'GET', url });
+      expect(response.headers['content-security-policy'], url).toContain("script-src 'self'");
+      expect(response.headers['content-security-policy'], url).toContain("frame-ancestors 'none'");
+    }
   });
 
   it('returns problem details for unknown routes', async () => {

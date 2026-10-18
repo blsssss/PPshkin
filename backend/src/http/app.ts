@@ -9,6 +9,7 @@ import type { Services } from '../services/index.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import { tooManyRequests } from '../shared/errors.ts';
 import { rateLimitKey, registerAuthentication } from './auth.ts';
+import { API_CSP_DIRECTIVES } from './csp.ts';
 import { registerMetrics } from './metrics.ts';
 import { registerOpenApi } from './openapi.ts';
 import { registerProblemHandlers } from './problem.ts';
@@ -65,7 +66,9 @@ export async function buildApp({ config, services, logger, maxWebhook, notificat
   app.setSerializerCompiler(serializerCompiler);
   registerProblemHandlers(app);
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: { useDefaults: false, directives: API_CSP_DIRECTIVES },
+  });
   await app.register(cors, {
     origin: config.CORS_ORIGINS.length > 0 ? config.CORS_ORIGINS : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -84,10 +87,11 @@ export async function buildApp({ config, services, logger, maxWebhook, notificat
   await registerUploads(app);
   await registerOpenApi(app);
   const probeLogLevel = quietestLevel(config.LOG_LEVEL, 'warn');
-  registerMetrics(app, services.metrics, probeLogLevel, notificationStats?.metrics ?? []);
+  const metrics = registerMetrics(app, services.metrics, probeLogLevel, notificationStats?.metrics ?? []);
 
   await app.register(systemRoutes, {
     health: services.health,
+    metrics,
     probeLogLevel,
   });
   await app.register(apiRoutes, { prefix: '/api/v1', services });

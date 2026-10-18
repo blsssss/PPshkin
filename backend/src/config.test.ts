@@ -74,6 +74,30 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...required, DEMO_MODE: 'true', DEMO_GUEST_TOKEN: 'short' })).toThrow(
       /DEMO_GUEST_TOKEN/,
     );
+    expect(() =>
+      loadConfig({
+        ...required,
+        SESSION_SECRET: 'session-secret-for-tests-0123456789',
+        SESSION_SECRET_PREVIOUS: 'short',
+      }),
+    ).toThrow(/SESSION_SECRET_PREVIOUS/);
+  });
+
+  it('keeps the previous session secret only next to a different current one', () => {
+    const current = 'session-secret-for-tests-0123456789';
+    const previous = 'previous-session-secret-0123456789';
+    expect(loadConfig(required).SESSION_SECRET_PREVIOUS).toBeUndefined();
+    expect(loadConfig({ ...required, SESSION_SECRET_PREVIOUS: '' }).SESSION_SECRET_PREVIOUS).toBeUndefined();
+    expect(
+      loadConfig({ ...required, SESSION_SECRET: current, SESSION_SECRET_PREVIOUS: previous })
+        .SESSION_SECRET_PREVIOUS,
+    ).toBe(previous);
+    expect(() => loadConfig({ ...required, SESSION_SECRET_PREVIOUS: previous })).toThrow(
+      /SESSION_SECRET_PREVIOUS needs SESSION_SECRET/,
+    );
+    expect(() =>
+      loadConfig({ ...required, SESSION_SECRET: current, SESSION_SECRET_PREVIOUS: current }),
+    ).toThrow(/SESSION_SECRET_PREVIOUS must differ/);
   });
 
   it('configures ChadGPT with safe defaults and no key', () => {

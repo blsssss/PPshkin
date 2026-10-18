@@ -2,6 +2,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, jsonSchemaTransformObject } from 'fastify-type-provider-zod';
+import { DOCS_CSP } from './csp.ts';
 import { STANDARD_ERROR_HEADERS } from './schemas/common.ts';
 import { IMAGE_UPLOAD_BODY } from './uploads.ts';
 
@@ -121,5 +122,5 @@ export async function registerOpenApi(app: FastifyInstance) {
     },
     transformObject: (input) => tidyDocument(jsonSchemaTransformObject(input)),
   });
-  await app.register(swaggerUi, { routePrefix: '/docs' });
+  await app.register(swaggerUi, { routePrefix: '/docs', staticCSP: DOCS_CSP });
 }

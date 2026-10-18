@@ -23,6 +23,7 @@ const auth = createAuthService(
   {
     botToken: BOT_TOKEN,
     sessionSecret: 'pilot-session-secret-0123456789abcdef',
+    previousSessionSecret: null,
     sessionTtlSeconds: 3600,
     initDataMaxAgeSeconds: 3600,
     demoTokens: null,

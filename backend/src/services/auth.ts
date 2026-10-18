@@ -29,6 +29,7 @@ export interface AuthService {
 export interface AuthSettings {
   botToken: string | null;
   sessionSecret: string | null;
+  previousSessionSecret: string | null;
   sessionTtlSeconds: number;
   initDataMaxAgeSeconds: number;
   demoTokens: DemoTokens | null;
@@ -41,8 +42,28 @@ const INIT_DATA_MESSAGES = {
   no_user: 'Init data has no user',
 } as const;
 
+export const SESSION_EPOCH_CACHE_MS = 30_000;
+const SESSION_EPOCH_CACHE_LIMIT = 10_000;
+
 export function createAuthService(db: Queryable, settings: AuthSettings, clock: Clock): AuthService {
   const ensuredDemoUsers = new Set<DemoRole>();
+  const verificationSecrets = [settings.sessionSecret, settings.previousSessionSecret].filter(
+    (secret): secret is string => secret !== null,
+  );
+  const epochs = new Map<number, { epoch: number | null; checkedAt: number }>();
+
+  function rememberEpoch(userId: number, epoch: number | null) {
+    if (epochs.size >= SESSION_EPOCH_CACHE_LIMIT) epochs.clear();
+    epochs.set(userId, { epoch, checkedAt: clock.now().getTime() });
+  }
+
+  async function currentEpoch(userId: number): Promise<number | null> {
+    const cached = epochs.get(userId);
+    if (cached && clock.now().getTime() - cached.checkedAt < SESSION_EPOCH_CACHE_MS) return cached.epoch;
+    const epoch = await users.sessionEpoch(db, userId);
+    rememberEpoch(userId, epoch);
+    return epoch;
+  }
 
   async function ensureDemoUser(role: DemoRole) {
     if (ensuredDemoUsers.has(role)) return;
@@ -75,7 +96,15 @@ export function createAuthService(db: Queryable, settings: AuthSettings, clock: 
         username: verified.user.username,
         acquisition: { source: acquisitionOf(verified.startParam), at: clock.now() },
       });
-      const session = issueSession(user.id, settings.sessionSecret, settings.sessionTtlSeconds, clock.now());
+      const epoch = (await users.sessionEpoch(db, user.id)) ?? 0;
+      rememberEpoch(user.id, epoch);
+      const session = issueSession(
+        user.id,
+        epoch,
+        settings.sessionSecret,
+        settings.sessionTtlSeconds,
+        clock.now(),
+      );
       return { ...session, user, startParam: verified.startParam };
     },
 
@@ -87,9 +116,11 @@ export function createAuthService(db: Queryable, settings: AuthSettings, clock: 
           return { userId: DEMO_ACCOUNTS[role].userId, via: 'demo', demoRole: role };
         }
       }
-      if (!settings.sessionSecret) return null;
-      const claims = verifySession(token, settings.sessionSecret, clock.now());
-      return claims ? { userId: claims.userId, via: 'session', demoRole: null } : null;
+      if (verificationSecrets.length === 0) return null;
+      const claims = verifySession(token, verificationSecrets, clock.now());
+      if (!claims) return null;
+      if ((await currentEpoch(claims.userId)) !== claims.epoch) return null;
+      return { userId: claims.userId, via: 'session', demoRole: null };
     },
   };
 }

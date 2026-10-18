@@ -138,6 +138,23 @@ export async function clearLocation(db: Queryable, id: number): Promise<void> {
   );
 }
 
+export async function sessionEpoch(db: Queryable, id: number): Promise<number | null> {
+  const row = await maybeOne<{ session_epoch: number }>(db, 'select session_epoch from users where id = $1', [
+    id,
+  ]);
+  return row ? row.session_epoch : null;
+}
+
+export async function revokeSessions(db: Queryable, id: number): Promise<boolean> {
+  const result = await db.query('update users set session_epoch = session_epoch + 1 where id = $1', [id]);
+  return result.rowCount === 1;
+}
+
+export async function revokeAllSessions(db: Queryable): Promise<number> {
+  const result = await db.query('update users set session_epoch = session_epoch + 1');
+  return result.rowCount ?? 0;
+}
+
 export async function remove(db: Queryable, id: number): Promise<void> {
   await db.query('delete from users where id = $1', [id]);
 }

@@ -147,7 +147,7 @@ sequenceDiagram
     API-->>App: 401 application/problem+json, code init_data_malformed, init_data_bad_signature, init_data_expired или init_data_no_user
   else подпись верна
     API->>DB: upsert users: id и имя в MAX
-    API->>API: сессионный токен v1.userId.expiresAt.подпись HMAC на SESSION_SECRET
+    API->>API: сессионный токен v2.userId.sessionEpoch.expiresAt.подпись HMAC на SESSION_SECRET
     API-->>App: 200: token, expiresAt, startParam, user с состоянием согласий
   end
   App->>App: переход по startParam: venue_, deal_, booking_, import_
@@ -254,7 +254,7 @@ sequenceDiagram
 
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql) и [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql) и [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql), [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql), [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql) и [0007_session_epoch.sql](../backend/migrations/0007_session_epoch.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
@@ -292,6 +292,7 @@ erDiagram
     float8 location_lat
     float8 location_lon
     timestamptz location_updated_at
+    integer session_epoch
     timestamptz created_at
     timestamptz updated_at
   }
@@ -479,7 +480,7 @@ erDiagram
 | Способ | Где | Как проверяется |
 |---|---|---|
 | Подпись `initData` | `POST /api/v1/auth/max` | HMAC-SHA256: секрет это HMAC от токена бота с ключом `WebAppData`, сравнение за постоянное время, возраст `auth_date` не больше `INIT_DATA_MAX_AGE_SECONDS` (по умолчанию 3600 секунд) |
-| Сессионный токен | заголовок `Authorization: Bearer` на `/api/v1` | токен `v1.<userId>.<expiresAt>.<подпись>`, подпись HMAC-SHA256 на `SESSION_SECRET` (без него ключ выводится из `MAX_BOT_TOKEN`), срок `SESSION_TTL_HOURS` |
+| Сессионный токен | заголовок `Authorization: Bearer` на `/api/v1` | токен `v2.<userId>.<sessionEpoch>.<expiresAt>.<подпись>`, подпись HMAC-SHA256 на `SESSION_SECRET` (без него ключ выводится из `MAX_BOT_TOKEN`), срок `SESSION_TTL_HOURS`. Подпись проверяется текущим ключом и `SESSION_SECRET_PREVIOUS`, если он задан. Номер сессии сверяется с `users.session_epoch` (кэш в процессе на 30 секунд): токен отозванной сессии или удалённого пользователя получает 401 `invalid_token`. Токены прежнего формата `v1.<userId>.<expiresAt>.<подпись>` принимаются до конца срока как токены с номером 0 |
 | Демо-токены | заголовок `Authorization: Bearer` | только при `DEMO_MODE=true`: сравнение за постоянное время с `DEMO_GUEST_TOKEN` (`userId -1001`) и `DEMO_VENUE_TOKEN` (`userId -1002`). Демо-учётки нельзя удалить, и они не могут взять копию демо-заведения |
 | Бот | обновления MAX | пользователь определяется платформой MAX, webhook принимается только с верным `X-Max-Bot-Api-Secret` |
 
@@ -491,6 +492,7 @@ erDiagram
 |---|---|---|
 | Весь API | `RATE_LIMIT_PER_MINUTE` в минуту, по умолчанию 300 | пользователь; демо-роль и IP для демо-токенов; IP без входа |
 | `POST /api/v1/auth/max` | 30 в минуту | IP |
+| `POST /api/v1/csp-reports` | 30 в минуту | IP |
 | Распознавание блюда по фото и тексту | 20 в минуту | пользователь |
 | Рекомендации, QR брони | 30 в минуту | пользователь |
 | Импорт меню по фото | 10 в минуту | пользователь |
@@ -539,7 +541,10 @@ erDiagram
 - В журналах backend маскируются `Authorization` и `X-Max-Bot-Api-Secret`, Caddy удаляет секрет webhook из своих записей, журнал запросов Caddy выключен, чтобы координаты из query-параметров не попадали в его логи. Сам backend записывает о запросе только метод и путь без параметров и без IP-адреса клиента (сериализатор `req` в `backend/src/http/app.ts`), журналы контейнеров в продакшене ротируются: не больше пяти файлов по 10 МБ на сервис ([privacy.md](privacy.md)).
 - Все SQL-запросы параметризованы; входные данные проверяются строгими zod-схемами с границами чисел, длин и перечислений.
 - Загрузка фото: не больше 10 МБ через API и 15 МБ из чата MAX, тип определяется по содержимому (JPEG, PNG, WebP), перед отправкой в ChadGPT изображение перекодируется в JPEG без метаданных. Тело обычного запроса не больше 1 МБ.
-- Заголовки безопасности `@fastify/helmet`, CORS выключен по умолчанию, контейнеры запускаются от непривилегированного пользователя (`node` в backend, `nginx-unprivileged` в frontend).
+- Заголовки безопасности `@fastify/helmet`, CORS выключен по умолчанию, контейнеры запускаются от непривилегированного пользователя (`node` в backend, `nginx-unprivileged` в frontend). В образе backend нет npm, yarn и corepack: для работы они не нужны, а их зависимости давали известные уязвимости; в образ мини-приложения при сборке ставятся обновления пакетов Alpine.
+- Content Security Policy. Ответы API получают `default-src 'none'; frame-ancestors 'none'`, Swagger UI `/docs` свою политику: скрипты, стили, картинки и запросы только с того же адреса (стили и `data:` нужны самому Swagger UI). Мини-приложение отдаётся nginx (`frontend/nginx.conf`) с политикой в режиме `Content-Security-Policy-Report-Only`: скрипты только свои и `https://st.max.ru`, стили, шрифты и запросы только свои, картинки свои, `data:` и `blob:` (QR брони и превью фото), `object-src 'none'`, `base-uri 'none'`. Нарушения браузер отправляет на `POST /api/v1/csp-reports`: backend ничего не сохраняет, считает их в метрике `ppshkin_csp_violations_total{directive}` и пишет в журнал директиву и заблокированный адрес без query. После недели отчётов в рабочем боте та же политика включается заголовком `Content-Security-Policy`, а в `frame-ancestors` попадают только источники, которые встраивают мини-приложение в клиентах MAX.
+- Сессии отзываются без смены ключа: `node dist/scripts/revoke-sessions.js --user <id>` или `--all` увеличивает `users.session_epoch`, и прежние токены перестают действовать не позже чем через 30 секунд. Ключ сессий меняется без повторного входа пользователей через `SESSION_SECRET_PREVIOUS` ([deploy.md](deploy.md#ротация-секретов)).
+- CI проверяет зависимости и секреты: `npm audit --omit=dev --audit-level=high` в backend и мини-приложении, Trivy по файлам репозитория и собранным образам, падение на HIGH и CRITICAL. Принятые исключения с причиной и датой пересмотра хранятся в [.trivyignore.yaml](../.trivyignore.yaml).
 - Местоположение округляется до сотых градуса (около 1 км) до записи в базу.
 - Удаление аккаунта (`/delete`, `DELETE /api/v1/me`) в одной транзакции отменяет активные брони, очищает объяснения показанных предложений, удаляет копии демо-заведений и пользователя; показы и брони остаются в статистике заведения обезличенными.
 - Демо-режим включается только явно, локальные демо-токены отклоняются в режиме `webhook`.

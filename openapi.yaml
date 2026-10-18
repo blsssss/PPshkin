@@ -2242,7 +2242,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: &a1
+          headers: &a2
             Retry-After:
               description: Через сколько секунд можно повторить запрос
               schema:
@@ -2255,6 +2255,57 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "503":
           description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/csp-reports:
+    post:
+      operationId: reportCspViolation
+      summary: Отчёт браузера о нарушении Content Security Policy
+      tags:
+        - system
+      description: "Принимает отчёты, которые браузер отправляет по директиве
+        report-uri, без входа. Тело в формате application/csp-report или
+        application/reports+json, не больше 8 КБ. Отчёты не сохраняются: сервер
+        считает нарушения по директивам и пишет директиву и заблокированный
+        адрес без query в журнал. Коды ошибок: report_too_large (413),
+        unsupported_report_type (415), rate_limited (429, не больше 30 отчётов в
+        минуту с одного IP)."
+      requestBody:
+        required: true
+        content:
+          application/csp-report: &a1
+            schema:
+              description: Объект с полем csp-report или массив отчётов Reporting API с типом
+                csp-violation
+          application/reports+json: *a1
+        description: Объект с полем csp-report или массив отчётов Reporting API с типом
+          csp-violation
+      responses:
+        "204":
+          description: Отчёт принят
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
           content:
             application/problem+json:
               schema:
@@ -2309,7 +2360,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: &a2
+          headers: &a3
             WWW-Authenticate:
               description: Схема аутентификации Bearer
               schema:
@@ -2332,7 +2383,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2354,7 +2405,7 @@ paths:
       description: "Профиль вместе с состоянием согласий: по consents мини-приложение
         решает, показывать ли экраны согласий. Коды ошибок: user_not_found
         (404): аккаунт удалён, войдите заново."
-      security: &a3
+      security: &a4
         - bearerAuth: []
       responses:
         "200":
@@ -2369,7 +2420,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2382,7 +2433,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2408,7 +2459,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ProfilePatchInput"
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Обновлённый профиль
@@ -2428,7 +2479,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -2453,7 +2504,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2473,7 +2524,7 @@ paths:
         user_not_found на GET /api/v1/me, новый вход создаёт пустой профиль без
         согласий. Коды ошибок: demo_account_protected (403): демо-учётка общая
         для всех проверяющих, её удалить нельзя."
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Аккаунт удалён
@@ -2483,7 +2534,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -2496,7 +2547,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2514,7 +2565,7 @@ paths:
         поясе. Типы заведения (audience venue) возвращаются только пользователю
         с заведением. Коды ошибок: user_not_found (404): аккаунт удалён, войдите
         заново."
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Настройки уведомлений
@@ -2528,7 +2579,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2541,7 +2592,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2567,7 +2618,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/NotificationSettingsPatchInput"
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Обновлённые настройки уведомлений
@@ -2587,7 +2638,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2606,7 +2657,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2632,7 +2683,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GeoPointInput"
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Сохранённое местоположение
@@ -2652,7 +2703,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -2671,7 +2722,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2685,7 +2736,7 @@ paths:
         - me
       description: Работает без согласия на обработку данных. Повторный вызов тоже
         отвечает 204.
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Местоположение удалено
@@ -2695,14 +2746,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "429":
           description: Too Many Requests
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2719,7 +2770,7 @@ paths:
         не сохраняются) и personalized_offers (необязательное). Каждое согласие
         показывается отдельным экраном с полным текстом и своей кнопкой, после
         нажатия отправьте PUT /api/v1/consents/{kind} с version из ответа.
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Согласия в порядке показа
@@ -2741,14 +2792,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "429":
           description: Too Many Requests
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2792,7 +2843,7 @@ paths:
           required: true
           description: personal_data - обработка персональных данных, personalized_offers
             - персональные предложения
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Состояние согласия
@@ -2812,7 +2863,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2831,7 +2882,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2860,7 +2911,7 @@ paths:
           required: true
           description: personal_data - обработка персональных данных, personalized_offers
             - персональные предложения
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Согласие отозвано
@@ -2876,7 +2927,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "409":
           description: Conflict
           content:
@@ -2889,7 +2940,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2904,7 +2955,7 @@ paths:
         - diary
       description: "Сегодняшний день считается в часовом поясе пользователя. Коды
         ошибок: user_not_found (404): аккаунт удалён, войдите заново."
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Дневник за сегодня
@@ -2918,7 +2969,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2931,7 +2982,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -2956,7 +3007,7 @@ paths:
           name: date
           required: true
           description: Дата YYYY-MM-DD в часовом поясе пользователя
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Дневник за день
@@ -2976,7 +3027,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -2989,7 +3040,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3016,7 +3067,7 @@ paths:
           name: days
           required: false
           description: Сколько последних дней включая сегодня
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Итоги по дням
@@ -3036,7 +3087,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3049,7 +3100,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3075,7 +3126,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ManualMealInput"
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Запись создана
@@ -3095,7 +3146,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -3120,7 +3171,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3160,7 +3211,7 @@ paths:
                   type: string
                   format: binary
                   description: Фото JPEG, PNG или WebP до 10 МБ
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Результат распознавания
@@ -3180,7 +3231,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -3211,7 +3262,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3248,7 +3299,7 @@ paths:
                     молоком»
               required:
                 - description
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Результат распознавания
@@ -3268,7 +3319,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -3287,7 +3338,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3321,7 +3372,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Исправленная запись
@@ -3341,7 +3392,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -3366,7 +3417,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3389,7 +3440,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Запись удалена
@@ -3405,7 +3456,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3418,7 +3469,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3483,7 +3534,7 @@ paths:
                 - address
                 - category
                 - location
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Заведение создано
@@ -3503,7 +3554,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "409":
           description: Conflict
           content:
@@ -3534,7 +3585,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3548,7 +3599,7 @@ paths:
         - venue
       description: "Коды ошибок: venue_not_found (404, заведения ещё нет, предложите
         создать его через POST /api/v1/venue)."
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Заведение
@@ -3562,7 +3613,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3575,7 +3626,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3633,7 +3684,7 @@ paths:
                   minLength: 1
                   maxLength: 64
               minProperties: 1
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Заведение изменено
@@ -3653,7 +3704,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3684,7 +3735,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3700,7 +3751,7 @@ paths:
       description: "Все позиции, кроме удалённых, включая скрытые от гостей, по
         категориям и названию. Коды ошибок: venue_not_found (404, заведения ещё
         нет, предложите создать его через POST /api/v1/venue)."
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Позиции меню
@@ -3722,7 +3773,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3735,7 +3786,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -3868,7 +3919,7 @@ paths:
                 - category
                 - priceRub
                 - kcal
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Позиция добавлена
@@ -3888,7 +3939,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -3913,7 +3964,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4053,7 +4104,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Позиция изменена
@@ -4073,7 +4124,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4104,7 +4155,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4129,7 +4180,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Позиция убрана
@@ -4145,7 +4196,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4158,7 +4209,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4196,7 +4247,7 @@ paths:
                   type: string
                   format: binary
                   description: Фото JPEG, PNG или WebP до 10 МБ
-      security: *a3
+      security: *a4
       responses:
         "202":
           description: Импорт запущен
@@ -4216,7 +4267,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4247,7 +4298,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4283,7 +4334,7 @@ paths:
                   description: "Текст меню: каждая позиция с новой строки, с ценой"
               required:
                 - text
-      security: *a3
+      security: *a4
       responses:
         "202":
           description: Импорт запущен
@@ -4303,7 +4354,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4334,7 +4385,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4361,7 +4412,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Импорт меню
@@ -4381,7 +4432,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4394,7 +4445,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4550,7 +4601,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Новые позиции добавлены в меню
@@ -4570,7 +4621,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4601,7 +4652,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4631,7 +4682,7 @@ paths:
           required: false
           description: active - идущие и запланированные; finished - закончившиеся за
             последние 7 дней
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Горящие предложения
@@ -4659,7 +4710,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4672,7 +4723,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4732,7 +4783,7 @@ paths:
                 - priceRub
                 - quantity
                 - endsAt
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Предложение выставлено
@@ -4752,7 +4803,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4789,7 +4840,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4846,7 +4897,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Предложение изменено
@@ -4866,7 +4917,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4903,7 +4954,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -4929,7 +4980,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Предложение снято
@@ -4945,7 +4996,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -4958,7 +5009,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5005,7 +5056,7 @@ paths:
           name: radius
           required: false
           description: Радиус поиска в метрах, применяется при известной точке
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Заведения
@@ -5040,14 +5091,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "429":
           description: Too Many Requests
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5071,7 +5122,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Заведение, меню и предложения
@@ -5091,7 +5142,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5104,7 +5155,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5151,7 +5202,7 @@ paths:
           name: radius
           required: false
           description: Радиус поиска в метрах, применяется при известной точке
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Горящие предложения
@@ -5186,14 +5237,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "429":
           description: Too Many Requests
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5253,7 +5304,7 @@ paths:
           name: limit
           required: false
           description: Сколько блюд подобрать
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Подобранные блюда
@@ -5273,7 +5324,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -5292,7 +5343,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5334,7 +5385,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "204":
           description: Отказ сохранён
@@ -5350,7 +5401,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5381,7 +5432,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5402,7 +5453,7 @@ paths:
         (403): нет согласия на обработку данных, покажите его текст из GET
         /api/v1/consents и отправьте PUT /api/v1/consents/personal_data.
         user_not_found (404): аккаунт удалён, войдите заново."
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Профиль и сводка дня
@@ -5416,7 +5467,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -5435,7 +5486,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5462,7 +5513,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/BodyParametersInput"
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Оценка ориентира
@@ -5482,7 +5533,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "413":
           description: Payload Too Large
           content:
@@ -5501,7 +5552,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5548,7 +5599,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/BookingRequestInput"
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Бронь создана
@@ -5568,7 +5619,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -5611,7 +5662,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5640,7 +5691,7 @@ paths:
           required: false
           description: active - действующие брони; history - погашенные, отменённые и
             истёкшие
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Брони
@@ -5668,14 +5719,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "429":
           description: Too Many Requests
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5699,7 +5750,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Бронь
@@ -5719,7 +5770,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5732,7 +5783,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5760,7 +5811,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: QR-код брони
@@ -5782,7 +5833,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5795,7 +5846,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5821,7 +5872,7 @@ paths:
           in: path
           name: id
           required: true
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Бронь отменена
@@ -5841,7 +5892,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5860,7 +5911,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5902,7 +5953,7 @@ paths:
           required: false
           description: Только брони, созданные в эти сутки YYYY-MM-DD по часовому поясу
             заведения
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Брони
@@ -5930,7 +5981,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -5943,7 +5994,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -5973,7 +6024,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/RedeemInput"
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Бронь погашена
@@ -5993,7 +6044,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -6024,7 +6075,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -6064,7 +6115,7 @@ paths:
           name: to
           required: false
           description: Последний день периода включительно, по умолчанию сегодня
-      security: *a3
+      security: *a4
       responses:
         "200":
           description: Аналитика
@@ -6084,7 +6135,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "404":
           description: Not Found
           content:
@@ -6097,7 +6148,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -6137,7 +6188,7 @@ paths:
                     умолчанию кофейня «Зерно»
                   type: integer
                   exclusiveMinimum: 0
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Копия демо-заведения создана
@@ -6157,7 +6208,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -6194,7 +6245,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:
@@ -6220,7 +6271,7 @@ paths:
         сервере выключен, скройте эту кнопку. user_not_found (404): аккаунт
         удалён, войдите заново. demo_diary_exists (409): пример уже добавлен,
         откройте дневник."
-      security: *a3
+      security: *a4
       responses:
         "201":
           description: Пример дневника добавлен
@@ -6234,7 +6285,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a2
+          headers: *a3
         "403":
           description: Forbidden
           content:
@@ -6259,7 +6310,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          headers: *a1
+          headers: *a2
         "500":
           description: Internal Server Error
           content:

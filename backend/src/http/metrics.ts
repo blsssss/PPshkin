@@ -1,19 +1,30 @@
 import type { FastifyInstance, LogLevel } from 'fastify';
-import { Gauge, Histogram, Registry, collectDefaultMetrics, type Metric } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics, type Metric } from 'prom-client';
 import type { MetricsService } from '../services/metrics.ts';
 
 const BOOKING_STATUSES = ['active', 'redeemed', 'cancelled', 'expired'] as const;
 const OFFER_STATUSES = ['shown', 'accepted', 'declined'] as const;
+
+export interface HttpMetrics {
+  cspViolation(directive: string): void;
+}
 
 export function registerMetrics(
   app: FastifyInstance,
   metrics: MetricsService,
   logLevel: LogLevel,
   collectors: readonly Metric[] = [],
-): Registry {
+): HttpMetrics {
   const registry = new Registry();
   collectDefaultMetrics({ register: registry });
   for (const collector of collectors) registry.registerMetric(collector);
+
+  const cspViolations = new Counter({
+    name: 'ppshkin_csp_violations_total',
+    help: 'Content Security Policy violations reported by browsers, by directive',
+    labelNames: ['directive'] as const,
+    registers: [registry],
+  });
 
   const requestDuration = new Histogram({
     name: 'http_request_duration_seconds',
@@ -160,5 +171,9 @@ export function registerMetrics(
     },
   );
 
-  return registry;
+  return {
+    cspViolation: (directive) => {
+      cspViolations.inc({ directive });
+    },
+  };
 }

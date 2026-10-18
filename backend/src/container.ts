@@ -56,6 +56,7 @@ export function createServices({
       {
         botToken: config.MAX_BOT_TOKEN ?? null,
         sessionSecret: deriveSessionSecret(config.SESSION_SECRET, config.MAX_BOT_TOKEN),
+        previousSessionSecret: config.SESSION_SECRET_PREVIOUS ?? null,
         sessionTtlSeconds: config.SESSION_TTL_HOURS * 3600,
         initDataMaxAgeSeconds: config.INIT_DATA_MAX_AGE_SECONDS,
         demoTokens: config.DEMO_MODE

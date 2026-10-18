@@ -64,6 +64,7 @@ const baseSchema = z.object({
   MINI_APP_ENABLED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   PROACTIVE_OFFERS: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
+  SESSION_SECRET_PREVIOUS: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   DEMO_MODE: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
@@ -110,6 +111,23 @@ export const configSchema = baseSchema.superRefine((config, context) => {
       code: 'custom',
       path: ['DEMO_MODE'],
       message: 'demo tokens are set but DEMO_MODE is not true',
+    });
+  }
+  if (config.SESSION_SECRET_PREVIOUS !== undefined && config.SESSION_SECRET === undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['SESSION_SECRET_PREVIOUS'],
+      message: 'SESSION_SECRET_PREVIOUS needs SESSION_SECRET',
+    });
+  }
+  if (
+    config.SESSION_SECRET_PREVIOUS !== undefined &&
+    config.SESSION_SECRET_PREVIOUS === config.SESSION_SECRET
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['SESSION_SECRET_PREVIOUS'],
+      message: 'SESSION_SECRET_PREVIOUS must differ from SESSION_SECRET',
     });
   }
   if (config.BOT_MODE === 'webhook') {
