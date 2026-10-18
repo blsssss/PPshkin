@@ -8,7 +8,6 @@ import { realSleep, sleepUnlessAborted, type Sleep } from '../integrations/max/s
 import { createMaxTransport, type MaxTransport } from '../integrations/max/transport.ts';
 import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
-import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import { BOT_COMMANDS } from './commands.ts';
 import { withFallbackReply } from './failures.ts';
@@ -44,7 +43,6 @@ export interface BotRuntimeOptions {
   clock: Clock;
   logger: MaxLogger;
   miniAppEnabled: boolean;
-  background: BackgroundTasks;
   states?: ChatStateStore;
   sleep?: Sleep;
 }
@@ -52,6 +50,7 @@ export interface BotRuntimeOptions {
 export interface BotRuntime {
   handle: UpdateHandler;
   messenger(): Messenger | null;
+  username(): string | null;
   start(): void;
   stop(): Promise<void>;
 }
@@ -66,6 +65,7 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
   ready.promise.catch(() => undefined);
   let transport: MaxTransport | undefined;
   let liveMessenger: Messenger | null = null;
+  let liveUsername: string | null = null;
   let running: Promise<void> | undefined;
 
   async function launch(): Promise<UpdateHandler | null> {
@@ -81,8 +81,6 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
       logger,
       bot: { username: me.username, userId: me.user_id },
       miniAppEnabled: options.miniAppEnabled,
-      background: options.background,
-      sleep: (ms) => sleepUnlessAborted(sleep, ms, lifetime.signal),
     });
     const handler = withFallbackReply(createDedupingHandler(pool, bot), { messenger, logger });
     const started = createMaxTransport({
@@ -100,6 +98,7 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
     }
     transport = started;
     liveMessenger = messenger;
+    liveUsername = me.username;
     return handler;
   }
 
@@ -130,6 +129,7 @@ export function createBotRuntime(options: BotRuntimeOptions): BotRuntime {
 
   return {
     messenger: () => liveMessenger,
+    username: () => liveUsername,
     handle: async (event) => {
       const handler = await ready.promise;
       await handler(event);

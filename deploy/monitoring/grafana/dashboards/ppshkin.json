@@ -162,34 +162,51 @@
       "fieldConfig": { "defaults": { "unit": "reqps" } }
     },
     {
+      "type": "timeseries", "title": "Уведомления",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+      "targets": [{ "refId": "A", "expr": "sum by (result) (increase(ppshkin_notifications_total{job=\"backend\"}[15m]))", "legendFormat": "{{result}}" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries", "title": "Очередь уведомлений",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+      "targets": [
+        { "refId": "A", "expr": "max(ppshkin_notifications_oldest_pending_seconds{job=\"backend\"})", "legendFormat": "самая старая готовая строка" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(ppshkin_notification_delay_seconds_bucket{job=\"backend\"}[15m])))", "legendFormat": "p95 задержки доставки" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
       "type": "row", "title": "Сервер", "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 }
     },
     {
       "type": "timeseries", "title": "CPU",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 35 },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 43 },
       "targets": [{ "refId": "A", "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Память",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 35 },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 43 },
       "targets": [{ "refId": "A", "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Диск /",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 35 },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 43 },
       "targets": [{ "refId": "A", "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Память backend",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 35 },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 43 },
       "targets": [
         { "refId": "A", "expr": "process_resident_memory_bytes{job=\"backend\"}", "legendFormat": "RSS" },
         { "refId": "B", "expr": "nodejs_heap_size_used_bytes{job=\"backend\"}", "legendFormat": "heap" }
@@ -199,7 +216,7 @@
     {
       "type": "table", "title": "Сработавшие алерты",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 42 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 50 },
       "targets": [{ "refId": "A", "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "format": "table" }],
       "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true } } }]
     }

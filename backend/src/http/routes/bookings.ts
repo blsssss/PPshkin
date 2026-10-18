@@ -59,7 +59,7 @@ export const bookingsRoutes: FastifyPluginCallbackZod<{ bookings: BookingsServic
       },
     },
     async (request, reply) =>
-      reply.code(201).send(toBooking(await bookings.create(userId(request), request.body))),
+      reply.code(201).send(toBooking(await bookings.create(userId(request), request.body, 'miniapp'))),
   );
 
   app.get(

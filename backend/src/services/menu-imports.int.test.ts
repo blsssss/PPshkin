@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi, type Mock } from 'vites
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { raceBehindLock } from '../../test/locks.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { seedUser, seedVenue } from '../../test/venues.ts';
 import type { ParsedMenuItem } from '../domain/models.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
@@ -62,9 +63,10 @@ const parsed: MenuParseResult = {
 let menus: { fromPhoto: Mock<MenuParser['fromPhoto']>; fromText: Mock<MenuParser['fromText']> };
 let logger: { error: Mock<BackgroundLogger['error']> };
 let background: BackgroundTasks;
+const recorded = recordingNotifications();
 
 function service() {
-  return createMenuImportsService({ pool, clock, menus, background });
+  return createMenuImportsService({ pool, clock, menus, background, notifications: recorded.notifications });
 }
 
 function pendingParse() {

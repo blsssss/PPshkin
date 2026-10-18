@@ -104,6 +104,7 @@ function importsStub(overrides: Partial<MenuImportsService> = {}): MenuImportsSe
     fromText: () => Promise.resolve({ ...processing, source: 'text' }),
     get: () => Promise.resolve(readyImport),
     apply: () => Promise.resolve({ added: [sampleMenuItem], duplicates: [] }),
+    failStale: () => Promise.resolve([]),
     ...overrides,
   };
 }

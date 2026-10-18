@@ -22,6 +22,7 @@ describe('metrics service', () => {
       activeDeals: 0,
       bookings: {},
       offers: {},
+      notifications: { pending: 0, oldestDueSeconds: 0 },
     });
   });
 
@@ -53,12 +54,20 @@ describe('metrics service', () => {
       [venue.id, item.id],
     );
 
+    await pool.query(
+      `insert into notifications (user_id, kind, dedup_key, subject, status, send_after, expires_at, created_at) values
+         (101, 'venue_booking_created', 'a', '{}', 'pending', now() - interval '10 minutes', now() + interval '1 hour', now()),
+         (101, 'venue_booking_created', 'b', '{}', 'pending', now() + interval '5 minutes', now() + interval '1 hour', now()),
+         (101, 'venue_booking_created', 'c', '{}', 'sent', now() - interval '1 hour', now() + interval '1 hour', now())`,
+    );
+
     expect(await service.snapshot()).toEqual({
       users: 2,
       mealsLastDay: 1,
       activeDeals: 1,
       bookings: { redeemed: 2, active: 1 },
       offers: {},
+      notifications: { pending: 2, oldestDueSeconds: expect.closeTo(600, -1) as unknown },
     });
   });
 });

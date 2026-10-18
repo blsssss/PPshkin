@@ -25,7 +25,7 @@ flowchart LR
       services["Сервисы: бизнес-правила"]
       domain["Доменные модули: расчёты, ранжирование, объяснения"]
       repos["Репозитории: SQL"]
-      ports["Порты: Messenger, Recognition, Notifier"]
+      ports["Порты: Messenger, Recognition, Notifications"]
     end
     db[("PostgreSQL 18.6")]
   end
@@ -77,10 +77,10 @@ flowchart LR
 | Сервисы | `backend/src/services/` | бизнес-правила и транзакции (`withTransaction`); фабрики `createXxxService(deps)` получают пул, часы, порты и настройки явно, глобальных объектов нет |
 | Репозитории | `backend/src/repositories/` | только параметризованный SQL, колонки перечисляются явно, строки превращаются в доменные модели |
 | Доменные модули | `backend/src/domain/` | чистые функции без ввода-вывода: ориентир калорий и слоты приёма пищи (`nutrition/`), профиль пищевого поведения, ранжирование и объяснения (`intent/`), правила броней и согласий |
-| Порты | `backend/src/ports/` | интерфейсы внешних систем: `Messenger` (отправка, редактирование, загрузка изображений, скачивание файлов в MAX), `Recognition` (распознавание блюд и меню), `Notifier` (уведомления о бронях) |
-| Реализации портов | `backend/src/integrations/`, `backend/src/recognition/`, `backend/src/notifications/` | клиент MAX Bot API, клиент ChadGPT с подготовкой изображений, уведомления через бота |
+| Порты | `backend/src/ports/` | интерфейсы внешних систем: `Messenger` (отправка, редактирование, загрузка изображений, скачивание файлов в MAX), `Recognition` (распознавание блюд и меню), `Notifications` (постановка уведомлений в очередь и быстрая отправка) |
+| Реализации портов | `backend/src/integrations/`, `backend/src/recognition/`, `backend/src/notifications/` | клиент MAX Bot API, клиент ChadGPT с подготовкой изображений, очередь уведомлений `notifications/outbox.ts` с отправкой через бота |
 
-Сервисы зависят от портов, а не от реализаций. Поэтому без бота (нет `MAX_BOT_TOKEN` или `BOT_MODE=off`) вместо уведомлений работает `silentNotifier`, без `CHADGPT_API_KEY` распознавание переключается на офлайн-реализацию (справочник типичных порций для текста и эвристика для текстового меню), а тесты подставляют заглушки. Сборка зависимостей находится в `backend/src/container.ts`, точка входа в `backend/src/main.ts`.
+Сервисы зависят от портов, а не от реализаций. Поэтому без бота (нет `MAX_BOT_TOKEN` или `BOT_MODE=off`) вместо очереди уведомлений работает `silentNotifications` и строки в `notifications` не пишутся, без `CHADGPT_API_KEY` распознавание переключается на офлайн-реализацию (справочник типичных порций для текста и эвристика для текстового меню), а тесты подставляют заглушки. Сборка зависимостей находится в `backend/src/container.ts`, точка входа в `backend/src/main.ts`.
 
 ## 3. Запись приёма пищи по фото
 
@@ -199,7 +199,7 @@ sequenceDiagram
   participant GuestUI as Бот или мини-приложение гостя
   participant Svc as backend: BookingsService
   participant DB as PostgreSQL
-  participant Notify as Notifier: сообщения бота
+  participant Notify as Notifications: очередь и отправка
   actor Staff as Сотрудник заведения
 
   Guest->>GuestUI: «Забронировать»
@@ -207,8 +207,9 @@ sequenceDiagram
   Svc->>DB: транзакция: блокировка пользователя, позиции и горящей позиции
   Svc->>Svc: заведение открыто, нет брони этой позиции, меньше 3 активных, порции остались
   Svc->>DB: quantity_left минус 1, offers.status accepted, insert bookings с кодом из 6 символов и expires_at
+  Svc->>DB: в той же транзакции insert notifications: venue_booking_created, booking_confirmed из мини-приложения, venue_deal_sold_out за последнюю порцию
   Svc-->>GuestUI: 201: code, qrPayload ppshkin:booking:КОД, expiresAt
-  Svc-)Notify: bookingCreated
+  Svc-)Notify: flush после фиксации
   Notify-)Staff: «Новая бронь КОД» с кнопками «Погасить» и «Все брони»
   GuestUI-->>Guest: код и QR: картинка в чате или QR на весь экран с максимальной яркостью
   Guest->>Staff: показывает код или QR на кассе
@@ -220,17 +221,38 @@ sequenceDiagram
   else бронь активна
     Svc->>DB: status redeemed, resolved_at
     Svc->>DB: insert meals с source booking, ккал позиции плюс минус 10%
+    Svc->>DB: insert notifications: booking_redeemed
     Svc-->>Staff: «Погашено: позиция, цена. Блюдо добавлено гостю в дневник.»
-    Svc-)Notify: bookingRedeemed
+    Svc-)Notify: flush после фиксации
     Notify-)Guest: «Приятного аппетита! В дневник записано: ...» и остаток на день
   end
 ```
 
-Код брони состоит из 6 символов алфавита без похожих знаков (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`), QR содержит строку `ppshkin:booking:<код>`. При вводе кода кириллические буквы, похожие на латинские, и пробелы нормализуются. Задача `expire_bookings` раз в минуту переводит просроченные брони в `expired`, возвращает порции в горящие позиции и присылает гостю «Бронь <код> истекла...». Отмена гостем возвращает порцию и уведомляет заведение.
+Код брони состоит из 6 символов алфавита без похожих знаков (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`), QR содержит строку `ppshkin:booking:<код>`. При вводе кода кириллические буквы, похожие на латинские, и пробелы нормализуются. Задача `expire_bookings` раз в минуту переводит просроченные брони в `expired`, возвращает порции в горящие позиции и ставит в очередь два уведомления: гостю «Бронь <код> истекла...» и владельцу «Гость не пришёл». Отмена гостем возвращает порцию и уведомляет заведение.
+
+### Уведомления
+
+Все сервисные сообщения о статусах идут через очередь `notifications` (outbox). Событие записывается строкой в той же транзакции, что и изменение брони, горящей позиции или разбора меню, поэтому откат не оставляет уведомления, а повтор запроса или задачи не создаёт второе: у строки уникальный ключ `<kind>:<id>:<userId>`. После фиксации сервис вызывает `flush()`, и отправка начинается в фоне примерно через секунду. Надёжный путь: задача `deliver_notifications` каждые 15 секунд забирает до 100 готовых строк через `for update skip locked`, поэтому два экземпляра backend не отправят строку дважды, а строка, оставшаяся после остановки процесса, уходит с новым экземпляром.
+
+| `kind` | Кому | Когда |
+|---|---|---|
+| `booking_confirmed` | гость | бронь оформлена в мини-приложении: код, позиция, заведение, кнопки «Показать QR» и «Отменить» |
+| `booking_reminder` | гость | за 10 минут до конца брони, если она длится не меньше 20 минут |
+| `booking_redeemed` | гость | бронь погашена: что записано в дневник и остаток на день |
+| `booking_expired` | гость | бронь истекла |
+| `venue_booking_created` | заведение | новая бронь |
+| `venue_booking_cancelled` | заведение | гость отменил бронь или удалил аккаунт |
+| `venue_booking_expired` | заведение | бронь истекла, гость не пришёл; порция вернулась, если акция ещё идёт |
+| `venue_deal_sold_out` | заведение | забронирована последняя порция горящей позиции, один раз на акцию |
+| `venue_deal_ending` | заведение | до конца горящей позиции с остатком 30 минут |
+| `menu_import_done` | заведение | разбор меню закончился или закрыт по таймауту, когда бы это ни случилось |
+| `venue_report_ready` | заведение | итоги дня и недели, тексты добавляет отчёт заведения |
+
+В строке хранятся только идентификаторы, текст собирается при отправке по свежим данным. Перед отправкой проверяется актуальность: подтверждение и напоминание уходят только для активной брони, предупреждение о конце акции только для живой акции с остатком, иначе строка получает `skipped`. Статусы строки: `pending`, `sending`, `sent`, `skipped`, `unreachable` (пользователь заблокировал бота), `failed`, `expired`. Транспорт сам повторяет 429, 5xx и сетевые ошибки; если ошибка осталась, строка возвращается в очередь через 1, 5 и 15 минут, после 4-й попытки получает `failed`. Срок жизни: подтверждение и напоминание до конца брони, остальные события брони 2 часа, события акции до её конца, разбор меню и отчёт 24 часа. Получатели событий заведения вычисляются при постановке функцией `venueRecipients`, каждому своя строка. Проактивные предложения в очередь не входят и отправляются напрямую.
 
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql) и [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql) и [0004_notifications.sql](../backend/migrations/0004_notifications.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
@@ -240,6 +262,7 @@ erDiagram
   users |o--o{ offers : "user_id"
   users |o--o{ bookings : "user_id"
   users ||--o| chat_states : "user_id"
+  users ||--o{ notifications : "user_id"
   venues |o--o{ venues : "demo_source_id"
   venues ||--o{ menu_items : "venue_id"
   venues ||--o{ menu_imports : "venue_id"
@@ -388,6 +411,23 @@ erDiagram
     text key PK
     timestamptz processed_at
   }
+  notifications {
+    bigint id PK
+    bigint user_id FK
+    text kind
+    text dedup_key UK
+    jsonb subject
+    text status
+    boolean silent
+    int attempts
+    timestamptz send_after
+    timestamptz expires_at
+    timestamptz claimed_at
+    timestamptz sent_at
+    text message_id
+    text last_error
+    timestamptz created_at
+  }
 ```
 
 Ключевые ограничения:
@@ -396,7 +436,8 @@ erDiagram
 - `venues`: одно заведение на владельца (уникальный индекс по `owner_id`); `demo_source_id` заполняется только у копий демо-заведений (`is_demo`).
 - `deals`, `offers`, `bookings` ссылаются на позицию составным ключом `(venue_id, menu_item_id)`, поэтому позиция другого заведения не может попасть в акцию или бронь.
 - `bookings`: код из алфавита `[A-HJ-NP-Z2-9]{6}` уникален среди активных броней заведения; у гостя одна активная бронь на горящую позицию; `resolved_at` заполнен тогда и только тогда, когда бронь не активна.
-- При удалении пользователя `consents`, `meals` и `chat_states` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
+- `notifications`: одна строка на событие и получателя (уникальный `dedup_key`); `subject` содержит только идентификаторы брони, акции, разбора или отчёта; `kind` проверяется в коде, чтобы новые типы не требовали миграции.
+- При удалении пользователя `consents`, `meals`, `chat_states` и `notifications` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
 - `float8` в схеме это `double precision`, `text[]` это массив строк.
 
 ## 8. Формат ошибок
@@ -446,9 +487,13 @@ erDiagram
 
 | Задача | Расписание | Что делает |
 |---|---|---|
-| `expire_bookings` | каждую минуту | просроченные брони в `expired`, порции обратно в горящие позиции, уведомление гостю |
-| `fail_stale_imports` | каждые 5 минут | зависшие импорты меню в `failed` |
+| `expire_bookings` | каждую минуту | просроченные брони в `expired`, порции обратно в горящие позиции, уведомления гостю и заведению в очередь |
+| `fail_stale_imports` | каждые 5 минут | зависшие импорты меню в `failed`, событие `menu_import_done` владельцу |
 | `purge_processed_updates` | каждый час | удаление ключей обновлений MAX старше 2 дней |
+| `deliver_notifications` | каждые 15 секунд, только с ботом | отправка готовых строк очереди, возврат зависших в `sending` больше 2 минут, перевод просроченных в `expired` |
+| `booking_reminders` | каждую минуту, только с ботом | напоминание гостю за 10 минут до конца брони |
+| `deal_ending_reminders` | каждые 5 минут, только с ботом | предупреждение владельцу за 30 минут до конца горящей позиции с остатком |
+| `purge_notifications` | ежедневно в 04:30 по Москве | удаление строк очереди старше 30 дней |
 | `max_webhook_guard` | каждые 10 минут, только `BOT_MODE=webhook` | проверка подписки webhook и восстановление, если её нет или в ней не хватает типов обновлений |
 | `refresh_demo_data` | ежедневно в 06:00 по Москве, только `DEMO_MODE=true` | горящие позиции на сегодня, дневник демо-гостя, история аналитики |
 | `proactive_offers` | каждые 15 минут, только `PROACTIVE_OFFERS=true` | подсказки гостям с согласием на персональные предложения; в MVP выключена |

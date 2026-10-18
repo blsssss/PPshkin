@@ -222,7 +222,7 @@ describe('seed', () => {
       endsAt: moscow('2026-09-26T21:00:00'),
     });
     await seedGuest(pool, REVIEWER, clock.now());
-    await services.bookings.create(REVIEWER, { menuItemId: item.id, dealId: deal.id });
+    await services.bookings.create(REVIEWER, { menuItemId: item.id, dealId: deal.id }, 'bot');
 
     expect(await demo.seed()).toMatchObject({ venues: 6, menuItems: 64 });
 
@@ -535,12 +535,14 @@ describe('claimVenue', () => {
     expect(offers.items.some((offer) => offer.venue.id === copy.id)).toBe(false);
 
     const [copyItem] = await services.menu.list(REVIEWER);
-    await expect(services.bookings.create(OTHER, { menuItemId: copyItem!.id })).rejects.toMatchObject({
+    await expect(services.bookings.create(OTHER, { menuItemId: copyItem!.id }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
     const zernoItem = (await services.catalog.venue(OTHER, ZERNO)).menu[0]!;
-    await expect(services.bookings.create(REVIEWER, { menuItemId: zernoItem.id })).rejects.toMatchObject({
+    await expect(
+      services.bookings.create(REVIEWER, { menuItemId: zernoItem.id }, 'bot'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
@@ -552,10 +554,14 @@ describe('claimVenue', () => {
     await seedGuest(pool, REVIEWER, clock.now());
     await demo.claimVenue(REVIEWER);
     const [sandwich] = await services.deals.list(REVIEWER, 'active');
-    const booking = await services.bookings.create(REVIEWER, {
-      menuItemId: sandwich!.item.id,
-      dealId: sandwich!.deal.id,
-    });
+    const booking = await services.bookings.create(
+      REVIEWER,
+      {
+        menuItemId: sandwich!.item.id,
+        dealId: sandwich!.deal.id,
+      },
+      'bot',
+    );
     expect(booking.venue.ownerId).toBe(REVIEWER);
     const redeemed = await services.bookings.redeem(REVIEWER, booking.booking.code);
     expect(redeemed.booking.status).toBe('redeemed');

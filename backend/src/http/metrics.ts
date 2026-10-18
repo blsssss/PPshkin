@@ -1,13 +1,19 @@
 import type { FastifyInstance, LogLevel } from 'fastify';
-import { Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Gauge, Histogram, Registry, collectDefaultMetrics, type Metric } from 'prom-client';
 import type { MetricsService } from '../services/metrics.ts';
 
 const BOOKING_STATUSES = ['active', 'redeemed', 'cancelled', 'expired'] as const;
 const OFFER_STATUSES = ['shown', 'accepted', 'declined'] as const;
 
-export function registerMetrics(app: FastifyInstance, metrics: MetricsService, logLevel: LogLevel): Registry {
+export function registerMetrics(
+  app: FastifyInstance,
+  metrics: MetricsService,
+  logLevel: LogLevel,
+  collectors: readonly Metric[] = [],
+): Registry {
   const registry = new Registry();
   collectDefaultMetrics({ register: registry });
+  for (const collector of collectors) registry.registerMetric(collector);
 
   const requestDuration = new Histogram({
     name: 'http_request_duration_seconds',
@@ -29,6 +35,8 @@ export function registerMetrics(app: FastifyInstance, metrics: MetricsService, l
         for (const status of BOOKING_STATUSES)
           snapshots.set(`booking:${status}`, snapshot.bookings[status] ?? 0);
         for (const status of OFFER_STATUSES) snapshots.set(`offer:${status}`, snapshot.offers[status] ?? 0);
+        snapshots.set('notifications:pending', snapshot.notifications.pending);
+        snapshots.set('notifications:oldest', snapshot.notifications.oldestDueSeconds);
       })
       .finally(() => {
         pending = null;
@@ -81,6 +89,24 @@ export function registerMetrics(app: FastifyInstance, metrics: MetricsService, l
     async collect() {
       await refresh();
       for (const status of OFFER_STATUSES) this.set({ status }, snapshots.get(`offer:${status}`) ?? 0);
+    },
+  });
+  new Gauge({
+    name: 'ppshkin_notifications_pending',
+    help: 'Queued notifications waiting for delivery or a retry',
+    registers: [registry],
+    async collect() {
+      await refresh();
+      this.set(snapshots.get('notifications:pending') ?? 0);
+    },
+  });
+  new Gauge({
+    name: 'ppshkin_notifications_oldest_pending_seconds',
+    help: 'Age of the oldest queued notification that is already due for delivery',
+    registers: [registry],
+    async collect() {
+      await refresh();
+      this.set(snapshots.get('notifications:oldest') ?? 0);
     },
   });
 

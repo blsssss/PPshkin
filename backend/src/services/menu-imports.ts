@@ -1,6 +1,7 @@
-import { withTransaction, type Pool } from '../db/pool.ts';
+import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
 import { menuNameKey, STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
 import type { MenuImport, MenuItem } from '../domain/models.ts';
+import type { Notifications } from '../ports/notifier.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
@@ -24,6 +25,7 @@ export interface MenuImportsService {
   fromText(ownerId: number, text: string): Promise<MenuImport>;
   get(ownerId: number, importId: number): Promise<MenuImport>;
   apply(ownerId: number, importId: number, items: ParsedMenuItemInput[]): Promise<AppliedMenuImport>;
+  failStale(now: Date): Promise<MenuImport[]>;
 }
 
 interface MenuImportsDependencies {
@@ -31,6 +33,7 @@ interface MenuImportsDependencies {
   clock: Clock;
   menus: MenuParser;
   background: BackgroundTasks;
+  notifications: Notifications;
 }
 
 const DAILY_IMPORT_LIMIT = 20;
@@ -76,10 +79,25 @@ export function createMenuImportsService({
   clock,
   menus,
   background,
+  notifications,
 }: MenuImportsDependencies): MenuImportsService {
-  function finish(importId: number, outcome: menuImports.ImportOutcome): Promise<MenuImport | null> {
+  async function announce(db: Queryable, finished: readonly MenuImport[], now: Date): Promise<void> {
+    const places = await venues.findByIds(db, [...new Set(finished.map((menuImport) => menuImport.venueId))]);
+    for (const menuImport of finished) {
+      const venue = places.find((place) => place.id === menuImport.venueId);
+      if (venue) await notifications.enqueue(db, { kind: 'menu_import_done', menuImport, venue }, now);
+    }
+  }
+
+  async function finish(importId: number, outcome: menuImports.ImportOutcome): Promise<MenuImport | null> {
     const now = clock.now();
-    return menuImports.complete(pool, importId, outcome, now, processingSince(now));
+    const completed = await withTransaction(pool, async (client) => {
+      const found = await menuImports.complete(client, importId, outcome, now, processingSince(now));
+      if (found) await announce(client, [found], now);
+      return found;
+    });
+    if (completed) notifications.flush();
+    return completed;
   }
 
   async function recognize(importId: number, parse: () => Promise<MenuParseResult>): Promise<void> {
@@ -173,6 +191,16 @@ export function createMenuImportsService({
         await menuImports.markApplied(client, locked.id);
         return { added, duplicates: [...duplicates.values()] };
       });
+    },
+
+    async failStale(now) {
+      const failed = await withTransaction(pool, async (client) => {
+        const stale = await menuImports.failStale(client, now);
+        await announce(client, stale, now);
+        return stale;
+      });
+      if (failed.length > 0) notifications.flush();
+      return failed;
     },
   };
 }

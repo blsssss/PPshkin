@@ -12,8 +12,9 @@ import { createWebhookGuard } from './integrations/max/webhook-guard.ts';
 import { createJobs } from './jobs/index.ts';
 import { createAdvisoryLock } from './jobs/lock.ts';
 import { createScheduler } from './jobs/scheduler.ts';
-import { createMessengerNotifier } from './notifications/messenger-notifier.ts';
-import { silentNotifier } from './notifications/silent-notifier.ts';
+import { createOutbox } from './notifications/outbox.ts';
+import { silentNotifications } from './notifications/silent-notifier.ts';
+import { createNotificationStats } from './notifications/stats.ts';
 import { createRecognition } from './recognition/index.ts';
 import { createBackgroundTasks } from './shared/background.ts';
 import { systemClock } from './shared/clock.ts';
@@ -65,20 +66,30 @@ const botSettings = maxBotSettings(config);
 const maxApi = botSettings && createMaxApi({ token: botSettings.token, baseUrl: config.MAX_API_BASE_URL });
 const webhook = botSettings?.webhook;
 const botMessenger = () => botRuntime?.messenger() ?? null;
-const notifier = botSettings
-  ? createMessengerNotifier({
-      messenger: botMessenger,
+const notificationStats = createNotificationStats();
+const outbox = botSettings
+  ? createOutbox({
+      pool,
+      clock: systemClock,
+      bot: () => {
+        const messenger = botRuntime?.messenger();
+        const username = botRuntime?.username();
+        return messenger && username ? { messenger, username } : null;
+      },
+      miniAppEnabled: config.MINI_APP_ENABLED,
       diaryDay: (userId) => services.diary.day(userId),
+      background,
       logger: botLogger,
+      stats: notificationStats,
     })
-  : silentNotifier;
+  : undefined;
 const services = createServices({
   config,
   pool,
   clock: systemClock,
   recognition,
   background,
-  notifier,
+  notifications: outbox ?? silentNotifications,
   demoDataset: config.DEMO_MODE ? await loadDemoDataset() : null,
 });
 const botRuntime =
@@ -92,7 +103,6 @@ const botRuntime =
     clock: systemClock,
     logger: botLogger,
     miniAppEnabled: config.MINI_APP_ENABLED,
-    background,
   });
 const jobs = createJobs({
   config,
@@ -111,6 +121,7 @@ const jobs = createJobs({
           logger: botLogger,
         })
       : undefined,
+  outbox,
 });
 const lockPool = createPool(config.DATABASE_URL, {
   max: jobs.length,
@@ -127,6 +138,7 @@ const scheduler = createScheduler({
 const app = await buildApp({
   config,
   services,
+  notificationStats,
   maxWebhook:
     webhook && botRuntime ? { secret: webhook.secret, handler: botRuntime.handle, background } : undefined,
 });

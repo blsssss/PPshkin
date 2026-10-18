@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { normalizeBookingCode } from '../src/domain/bookings.ts';
 import { dealOverAt } from '../src/domain/deals.ts';
+import { importScreen } from '../src/bot/venue/menu.ts';
 import { menuNameKey } from '../src/domain/menu-imports.ts';
 import type { Booking, Deal, MenuImport, MenuItem, ParsedMenuItem, Venue } from '../src/domain/models.ts';
 import type { VenueAnalytics } from '../src/services/analytics.ts';
@@ -12,7 +13,7 @@ import { venueNotFound } from '../src/services/venues.ts';
 import type { Clock } from '../src/shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../src/shared/errors.ts';
 import { addDays, localDate } from '../src/shared/time.ts';
-import { botChat, GUEST_ID, guestWorld, type ChatOptions, type Outgoing } from './bot.ts';
+import { BOT_IDENTITY, botChat, GUEST_ID, guestWorld, type ChatOptions, type Outgoing } from './bot.ts';
 import { sampleMenuItem, sampleVenue } from './venues.ts';
 
 export const OWNER_ID = GUEST_ID;
@@ -116,10 +117,10 @@ export function venueFake(clock: Clock) {
     return { booking: { ...booking }, item: { ...item }, venue: { ...state.venue } };
   };
 
-  const settleImport = (menuImport: MenuImport): MenuImport => {
+  const settleImport = (menuImport: MenuImport, force = false): MenuImport => {
     const script = scripts.get(menuImport.id);
     if (menuImport.status !== 'processing' || !script) return menuImport;
-    if (clock.now().getTime() < menuImport.createdAt.getTime() + script.afterMs) return menuImport;
+    if (!force && clock.now().getTime() < menuImport.createdAt.getTime() + script.afterMs) return menuImport;
     Object.assign(menuImport, {
       status: script.status,
       items: script.items,
@@ -198,6 +199,7 @@ export function venueFake(clock: Clock) {
       get: vi.fn((ownerId: number, importId: number) =>
         Promise.resolve().then(() => ({ ...findImport(ownerId, importId) })),
       ),
+      failStale: () => Promise.reject(new Error('menuImports.failStale is not stubbed')),
       apply: vi.fn<VenueServices['menuImports']['apply']>(async (ownerId, importId, items) => {
         await Promise.resolve();
         const found = findImport(ownerId, importId);
@@ -311,6 +313,11 @@ export function venueFake(clock: Clock) {
   const fake = {
     state,
     services,
+    finishImports(): MenuImport[] {
+      return state.imports
+        .filter((menuImport) => menuImport.status === 'processing')
+        .map((menuImport) => ({ ...settleImport(menuImport, true) }));
+    },
     seedVenue(overrides: Partial<Venue> = {}): Venue {
       state.venue = { ...sampleVenue, ownerId: OWNER_ID, ...overrides };
       return state.venue;
@@ -382,6 +389,21 @@ export function venueChat(
 }
 
 export type VenueChat = ReturnType<typeof venueChat>;
+
+export async function withImportResult(
+  chat: VenueChat,
+  replies: Promise<Outgoing[]>,
+  miniAppEnabled = false,
+): Promise<Outgoing[]> {
+  const direct = await replies;
+  for (const finished of chat.fake.finishImports()) {
+    await chat.messenger.sendToUser(
+      OWNER_ID,
+      importScreen(finished, { botUsername: BOT_IDENTITY.username, miniAppEnabled }),
+    );
+  }
+  return [...direct, ...chat.takeOutgoing()];
+}
 
 export async function withBackground(chat: VenueChat, replies: Promise<Outgoing[]>): Promise<Outgoing[]> {
   const direct = await replies;

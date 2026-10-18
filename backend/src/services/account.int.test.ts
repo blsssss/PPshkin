@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { seedDeal, seedDemoCopy, seedDemoVenue, seedMenuItem } from '../../test/venues.ts';
 import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { jsonb, one } from '../db/pool.ts';
@@ -11,7 +12,8 @@ import { createAccountService } from './account.ts';
 const pool = testPool();
 const NOW = '2026-09-25T15:00:00.000Z';
 const clock = fixedClock(NOW);
-const account = createAccountService({ pool, clock });
+const recorded = recordingNotifications();
+const account = createAccountService({ pool, clock, notifications: recorded.notifications });
 
 const GUEST = 1;
 const OTHER = 2;

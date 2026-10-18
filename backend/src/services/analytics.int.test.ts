@@ -1,11 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
 import type { MenuItem } from '../domain/models.ts';
-import type { Notifier } from '../ports/notifier.ts';
-import { createBackgroundTasks } from '../shared/background.ts';
 import { createAnalyticsService } from './analytics.ts';
 import { createBookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
@@ -13,19 +12,12 @@ import { createMenuService } from './menu.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
-const background = createBackgroundTasks({ error: () => undefined });
-const notifier = {
-  bookingCreated: vi.fn<Notifier['bookingCreated']>(() => Promise.resolve()),
-  bookingCancelled: vi.fn<Notifier['bookingCancelled']>(() => Promise.resolve()),
-  bookingRedeemed: vi.fn<Notifier['bookingRedeemed']>(() => Promise.resolve()),
-  bookingExpired: vi.fn<Notifier['bookingExpired']>(() => Promise.resolve()),
-} satisfies Notifier;
+const recorded = recordingNotifications();
 const bookings = createBookingsService({
   pool,
   clock,
   consents: createConsentsService({ pool, clock }),
-  notifier,
-  background,
+  notifications: recorded.notifications,
 });
 const service = createAnalyticsService({ pool, clock, bookings });
 
@@ -285,8 +277,9 @@ describe('venue analytics', () => {
     });
     const { rows } = await pool.query('select status from bookings where id = $1', [overdue]);
     expect(rows).toEqual([{ status: 'expired' }]);
-    await background.idle();
-    expect(notifier.bookingExpired.mock.calls.map(([notice]) => notice.booking.id)).toEqual([overdue]);
+    expect(
+      recorded.events.flatMap((event) => (event.kind === 'booking_expired' ? [event.booking.id] : [])),
+    ).toEqual([overdue]);
   });
 
   it('validates dates and needs a venue', async () => {

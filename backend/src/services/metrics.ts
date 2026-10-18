@@ -6,6 +6,7 @@ export interface DomainSnapshot {
   activeDeals: number;
   bookings: Record<string, number>;
   offers: Record<string, number>;
+  notifications: { pending: number; oldestDueSeconds: number };
 }
 
 export interface MetricsService {
@@ -29,6 +30,12 @@ export function createMetricsService(db: Queryable): MetricsService {
            (select count(*)::int from deals
              where cancelled_at is null and quantity_left > 0 and starts_at <= now() and ends_at > now()) as active_deals`,
       );
+      const queue = await db.query<{ pending: number; oldest_due_seconds: number }>(
+        `select count(*)::int as pending,
+                coalesce(extract(epoch from now() - min(send_after) filter (where send_after <= now())), 0)::float8
+                  as oldest_due_seconds
+           from notifications where status = 'pending'`,
+      );
       const row = totals.rows[0];
       return {
         users: row?.users ?? 0,
@@ -36,6 +43,10 @@ export function createMetricsService(db: Queryable): MetricsService {
         activeDeals: row?.active_deals ?? 0,
         bookings: await countByStatus(db, 'bookings'),
         offers: await countByStatus(db, 'offers'),
+        notifications: {
+          pending: queue.rows[0]?.pending ?? 0,
+          oldestDueSeconds: queue.rows[0]?.oldest_due_seconds ?? 0,
+        },
       };
     },
   };

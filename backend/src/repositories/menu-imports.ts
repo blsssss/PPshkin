@@ -97,14 +97,24 @@ export async function complete(
   return row ? mapMenuImport(row) : null;
 }
 
-export async function failStale(db: Queryable, now: Date): Promise<number> {
-  const { rowCount } = await db.query(
+export async function failStale(db: Queryable, now: Date): Promise<MenuImport[]> {
+  const { rows } = await db.query<MenuImportRow>(
     `update menu_imports
         set status = 'failed', error = $2, completed_at = created_at + make_interval(secs => $3)
-      where status = 'processing' and created_at < $1`,
+      where status = 'processing' and created_at < $1
+      returning ${MENU_IMPORT_COLUMNS}`,
     [new Date(now.getTime() - STALE_IMPORT_MS), STALE_IMPORT_ERROR, STALE_IMPORT_MS / 1000],
   );
-  return rowCount ?? 0;
+  return rows.map(mapMenuImport);
+}
+
+export async function findById(db: Queryable, id: number): Promise<MenuImport | null> {
+  const row = await maybeOne<MenuImportRow>(
+    db,
+    `select ${MENU_IMPORT_COLUMNS} from menu_imports where id = $1`,
+    [id],
+  );
+  return row ? mapMenuImport(row) : null;
 }
 
 export async function markApplied(db: Queryable, id: number): Promise<void> {

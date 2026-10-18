@@ -1,8 +1,6 @@
-import type { Notifier } from '../ports/notifier.ts';
+import type { Notifications } from '../ports/notifier.ts';
 
-export const silentNotifier: Notifier = {
-  bookingCreated: () => Promise.resolve(),
-  bookingCancelled: () => Promise.resolve(),
-  bookingRedeemed: () => Promise.resolve(),
-  bookingExpired: () => Promise.resolve(),
+export const silentNotifications: Notifications = {
+  enqueue: () => Promise.resolve(),
+  flush: () => undefined,
 };

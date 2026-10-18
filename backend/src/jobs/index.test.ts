@@ -26,7 +26,32 @@ describe('createJobs', () => {
       expire_bookings: { everyMs: 60_000 },
       fail_stale_imports: { everyMs: 300_000 },
       purge_processed_updates: { everyMs: 3_600_000 },
+      purge_notifications: { dailyAt: '04:30', timeZone: 'Europe/Moscow' },
     });
+  });
+
+  it('delivers and reminds through the notification queue only when the bot can send', async () => {
+    const outbox = {
+      enqueue: vi.fn(() => Promise.resolve()),
+      flush: vi.fn(),
+      deliverDue: vi.fn(() =>
+        Promise.resolve({ sent: 0, skipped: 0, unreachable: 0, failed: 0, expired: 0, retried: 0 }),
+      ),
+    };
+    const names = (list: ReturnType<typeof jobs>) => list.map((job) => job.name);
+
+    expect(names(jobs({}))).not.toContain('deliver_notifications');
+    expect(schedules(jobs({}, { outbox }))).toMatchObject({
+      deliver_notifications: { everyMs: 15_000 },
+      booking_reminders: { everyMs: 60_000 },
+      deal_ending_reminders: { everyMs: 300_000 },
+    });
+
+    const now = new Date('2026-09-26T09:00:00Z');
+    await jobs({}, { outbox })
+      .find((job) => job.name === 'deliver_notifications')
+      ?.run(now);
+    expect(outbox.deliverDue).toHaveBeenCalledExactlyOnceWith(now);
   });
 
   it('leaves proactive offers out unless PROACTIVE_OFFERS is on', () => {

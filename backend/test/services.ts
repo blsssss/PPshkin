@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { loadConfig } from '../src/config.ts';
 import { buildApp } from '../src/http/app.ts';
 import type { AuthContext } from '../src/services/auth.ts';
+import type { NotificationStats } from '../src/notifications/stats.ts';
 import type { Services } from '../src/services/index.ts';
 import { notFound } from '../src/shared/errors.ts';
 
@@ -24,6 +25,7 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
           activeDeals: 2,
           bookings: { redeemed: 4 },
           offers: { shown: 7 },
+          notifications: { pending: 4, oldestDueSeconds: 12.5 },
         }),
     },
     auth: {
@@ -69,6 +71,7 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       fromText: notStubbed('menuImports.fromText'),
       get: notStubbed('menuImports.get'),
       apply: notStubbed('menuImports.apply'),
+      failStale: notStubbed('menuImports.failStale'),
     },
     deals: {
       list: notStubbed('deals.list'),
@@ -127,10 +130,15 @@ export async function buildTestApp(
   options: {
     env?: Record<string, string>;
     services?: Partial<Services>;
+    notificationStats?: NotificationStats;
     extend?: (app: FastifyInstance) => void;
   } = {},
 ): Promise<FastifyInstance> {
-  const app = await buildApp({ config: testConfig(options.env), services: fakeServices(options.services) });
+  const app = await buildApp({
+    config: testConfig(options.env),
+    services: fakeServices(options.services),
+    notificationStats: options.notificationStats,
+  });
   options.extend?.(app);
   await app.ready();
   return app;

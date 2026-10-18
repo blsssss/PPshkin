@@ -138,6 +138,21 @@ export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: 
   );
 }
 
+export async function findById(db: Queryable, id: number): Promise<Deal | null> {
+  const row = await maybeOne<DealRow>(db, `select ${DEAL_COLUMNS} from deals d where d.id = $1`, [id]);
+  return row ? mapDeal(row) : null;
+}
+
+export async function listEndingCandidates(db: Queryable, startedBefore: Date, now: Date): Promise<Deal[]> {
+  const { rows } = await db.query<DealRow>(
+    `select ${DEAL_COLUMNS} from deals d
+      where ${LIVE} and d.starts_at <= $1 and d.ends_at > $2
+      order by d.id`,
+    [startedBefore, now],
+  );
+  return rows.map(mapDeal);
+}
+
 export async function findInVenue(db: Queryable, venueId: number, id: number): Promise<Deal | null> {
   const row = await maybeOne<DealRow>(
     db,

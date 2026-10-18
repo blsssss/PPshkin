@@ -2,8 +2,8 @@ import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
 import type { DemoDataset } from './demo/dataset.ts';
-import { silentNotifier } from './notifications/silent-notifier.ts';
-import type { Notifier } from './ports/notifier.ts';
+import { silentNotifications } from './notifications/silent-notifier.ts';
+import type { Notifications } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
 import { createAnalyticsService } from './services/analytics.ts';
@@ -32,7 +32,7 @@ export interface ContainerOptions {
   clock: Clock;
   recognition: Recognition;
   background: BackgroundTasks;
-  notifier?: Notifier;
+  notifications?: Notifications;
   demoDataset?: DemoDataset | null;
 }
 
@@ -42,11 +42,11 @@ export function createServices({
   clock,
   recognition,
   background,
-  notifier = silentNotifier,
+  notifications = silentNotifications,
   demoDataset = null,
 }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
-  const bookings = createBookingsService({ pool, clock, consents, notifier, background });
+  const bookings = createBookingsService({ pool, clock, consents, notifications });
   return {
     health: createHealthService(pool),
     metrics: createMetricsService(pool),
@@ -66,10 +66,16 @@ export function createServices({
     profile: createProfileService({ pool, clock, consents }),
     consents,
     diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
-    account: createAccountService({ pool, clock }),
+    account: createAccountService({ pool, clock, notifications }),
     venues: createVenuesService({ pool, clock }),
     menu: createMenuService({ pool, clock }),
-    menuImports: createMenuImportsService({ pool, clock, menus: recognition.menus, background }),
+    menuImports: createMenuImportsService({
+      pool,
+      clock,
+      menus: recognition.menus,
+      background,
+      notifications,
+    }),
     deals: createDealsService({ pool, clock }),
     catalog: createCatalogService({ pool, clock, demoMode: config.DEMO_MODE }),
     recommendations: createRecommendationsService({ pool, clock, consents, demoMode: config.DEMO_MODE }),

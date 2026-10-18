@@ -1,12 +1,9 @@
 import type { MenuImport, MenuItem } from '../../domain/models.ts';
 import { MAX_IMAGE_BYTES } from '../../http/uploads.ts';
-import { DownloadTooLargeError, UserUnreachableError } from '../../integrations/max/errors.ts';
+import { DownloadTooLargeError } from '../../integrations/max/errors.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
-import type { Sleep } from '../../integrations/max/sleep.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
 import type { AppliedMenuImport } from '../../services/menu-imports.ts';
-import type { BackgroundTasks } from '../../shared/background.ts';
-import type { Clock } from '../../shared/clock.ts';
 import { answerStale, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit } from '../context.ts';
 import { link, miniAppUrl } from '../keyboards.ts';
@@ -17,7 +14,6 @@ import { clearFlow, knownFailure, ownerCallback, ownerFlow, saveFlow } from './o
 import {
   hasPrice,
   IMPORT_FAILED,
-  IMPORT_TIMEOUT,
   importAppliedText,
   importReadyText,
   MENU_EMPTY,
@@ -35,20 +31,10 @@ import {
   VENUE_ERROR_TEXTS,
 } from './texts.ts';
 
-export interface ImportWaiting {
-  clock: Clock;
-  background: BackgroundTasks;
-  sleep: Sleep;
-}
-
-interface Audience {
-  ownerId: number;
+export interface ImportAudience {
   botUsername: string;
   miniAppEnabled: boolean;
 }
-
-const IMPORT_POLL_INTERVAL_MS = 3000;
-const IMPORT_WAIT_LIMIT_MS = 3 * 60_000;
 
 const START_FAILURES = ['import_in_progress', 'import_limit_reached'] as const;
 const APPLY_FAILURES = ['import_already_applied', 'import_not_ready', 'import_not_found'] as const;
@@ -73,7 +59,7 @@ function menuScreen(items: readonly MenuItem[], miniAppEnabled: boolean): Outgoi
   };
 }
 
-function importScreen(found: MenuImport, audience: Omit<Audience, 'ownerId'>): OutgoingMessage {
+export function importScreen(found: MenuImport, audience: ImportAudience): OutgoingMessage {
   switch (found.status) {
     case 'ready':
       return {
@@ -98,52 +84,12 @@ function importScreen(found: MenuImport, audience: Omit<Audience, 'ownerId'>): O
   }
 }
 
-export function createMenuScreens({ services, messenger, logger }: BotKit, waiting: ImportWaiting) {
+export function createMenuScreens({ services, messenger, logger }: BotKit) {
   const { venues, menu, menuImports } = services;
-  const { clock, background, sleep } = waiting;
-
-  async function deliver(ownerId: number, message: OutgoingMessage): Promise<void> {
-    try {
-      await messenger.sendToUser(ownerId, message);
-    } catch (error) {
-      if (!(error instanceof UserUnreachableError)) throw error;
-      logger.warn({ userId: ownerId }, 'venue owner cannot be reached, the bot is probably blocked');
-    }
-  }
-
-  async function check(ownerId: number, importId: number): Promise<MenuImport | null> {
-    try {
-      return await menuImports.get(ownerId, importId);
-    } catch (error) {
-      logger.warn({ err: error, userId: ownerId, importId }, 'menu import status check failed');
-      return null;
-    }
-  }
-
-  async function waitForImport({ ownerId, ...audience }: Audience, importId: number): Promise<void> {
-    const deadline = clock.now().getTime() + IMPORT_WAIT_LIMIT_MS;
-    while (clock.now().getTime() < deadline) {
-      const slept = await sleep(IMPORT_POLL_INTERVAL_MS).then(
-        () => true,
-        () => false,
-      );
-      if (!slept) return;
-      const found = await check(ownerId, importId);
-      if (found && found.status !== 'processing') {
-        await deliver(ownerId, importScreen(found, audience));
-        return;
-      }
-    }
-    await deliver(ownerId, {
-      text: IMPORT_TIMEOUT,
-      buttons: [uploadRow(VENUE_BUTTONS.retry), ...appRow(audience.miniAppEnabled)],
-    });
-  }
 
   async function start(ctx: BotContext, run: () => Promise<MenuImport>, started: string): Promise<void> {
-    let created: MenuImport;
     try {
-      created = await run();
+      await run();
     } catch (error) {
       const failure = knownFailure(error, START_FAILURES);
       await clearFlow(ctx, 'menu_upload');
@@ -152,12 +98,6 @@ export function createMenuScreens({ services, messenger, logger }: BotKit, waiti
     }
     await clearFlow(ctx, 'menu_upload');
     await ctx.reply({ text: started });
-    const audience = {
-      ownerId: ctx.user.id,
-      botUsername: ctx.botUsername,
-      miniAppEnabled: ctx.miniAppEnabled,
-    };
-    background.run(`menu-import-${created.id}-wait`, () => waitForImport(audience, created.id));
   }
 
   async function download(ctx: BotContext, url: string): Promise<Buffer | null> {

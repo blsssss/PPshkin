@@ -51,6 +51,26 @@ groups:
           summary: "95-й перцентиль ответа {{ $value | humanizeDuration }}"
           description: "API без распознавания отвечает медленнее 2 секунд больше 10 минут."
 
+      - alert: NotificationsFailing
+        expr: >-
+          sum(increase(ppshkin_notifications_total{job="backend",result=~"failed|expired"}[30m]))
+          / sum(increase(ppshkin_notifications_total{job="backend"}[30m])) > 0.1
+          and sum(increase(ppshkin_notifications_total{job="backend"}[30m])) >= 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Не доставлено {{ $value | humanizePercentage }} уведомлений"
+          description: "За 30 минут больше 10% уведомлений закончились статусом failed или expired: проверьте доступность MAX и журнал backend."
+
+      - alert: NotificationsBacklog
+        expr: max(ppshkin_notifications_oldest_pending_seconds{job="backend"}) > 300
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Уведомление ждёт отправки {{ $value | humanizeDuration }}"
+          description: "Готовые к отправке уведомления не уходят больше 5 минут: проверьте, запущен ли бот и задача deliver_notifications."
+
       - alert: DiskAlmostFull
         expr: 1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.85
         for: 10m

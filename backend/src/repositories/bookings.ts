@@ -122,6 +122,28 @@ export async function listActiveItemIds(db: Queryable, userId: number): Promise<
   return rows.map((row) => row.menu_item_id);
 }
 
+export async function findById(db: Queryable, id: number): Promise<Booking | null> {
+  const row = await maybeOne<BookingRow>(db, `select ${BOOKING_COLUMNS} from bookings b where b.id = $1`, [
+    id,
+  ]);
+  return row ? mapBooking(row) : null;
+}
+
+export async function listActiveExpiringBetween(
+  db: Queryable,
+  { from, to }: TimeRange,
+  minHoldMs: number,
+): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
+    `select ${BOOKING_COLUMNS} from bookings b
+      where b.status = 'active' and b.expires_at > $1 and b.expires_at <= $2
+        and b.expires_at - b.created_at >= make_interval(secs => $3)
+      order by b.expires_at, b.id`,
+    [from, to, minHoldMs / 1000],
+  );
+  return rows.map(mapBooking);
+}
+
 export async function findForUser(db: Queryable, userId: number, id: number): Promise<Booking | null> {
   const row = await maybeOne<BookingRow>(
     db,
@@ -232,16 +254,17 @@ export async function release(
   return mapBooking(row);
 }
 
-export async function cancelActiveForUser(db: Queryable, userId: number, at: Date): Promise<void> {
-  await db.query(
+export async function cancelActiveForUser(db: Queryable, userId: number, at: Date): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
     `with cancelled as (
-       update bookings set status = 'cancelled', resolved_at = $2
-        where user_id = $1 and status = 'active'
-       returning deal_id
-     )
-     ${restockDeals('cancelled', '$2')}`,
+       update bookings as b set status = 'cancelled', resolved_at = $2
+        where b.user_id = $1 and b.status = 'active'
+       returning ${BOOKING_COLUMNS}
+     ), restocked as (${restockDeals('cancelled', '$2')})
+     select ${BOOKING_COLUMNS} from cancelled b order by b.id`,
     [userId, at],
   );
+  return rows.map(mapBooking);
 }
 
 export async function markRedeemed(db: Queryable, id: number, at: Date): Promise<Booking> {

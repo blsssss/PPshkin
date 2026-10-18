@@ -1,12 +1,12 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { fakeLogger } from '../../test/max-api.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { testConfig } from '../../test/services.ts';
 import { seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
 import { createServices } from '../container.ts';
-import type { Notifier } from '../ports/notifier.ts';
 import { createRecognition } from '../recognition/index.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import { createMenuImportsService } from '../services/menu-imports.ts';
@@ -36,12 +36,7 @@ afterAll(async () => {
 });
 
 describe('expire_bookings job', () => {
-  const notifier = {
-    bookingCreated: vi.fn<Notifier['bookingCreated']>(() => Promise.resolve()),
-    bookingCancelled: vi.fn<Notifier['bookingCancelled']>(() => Promise.resolve()),
-    bookingRedeemed: vi.fn<Notifier['bookingRedeemed']>(() => Promise.resolve()),
-    bookingExpired: vi.fn<Notifier['bookingExpired']>(() => Promise.resolve()),
-  } satisfies Notifier;
+  const recorded = recordingNotifications();
   const config = testConfig();
   const background = createBackgroundTasks({ error: () => undefined });
   const services = createServices({
@@ -57,7 +52,7 @@ describe('expire_bookings job', () => {
       menuTimeoutMs: config.CHADGPT_MENU_TIMEOUT_MS,
     }),
     background,
-    notifier,
+    notifications: recorded.notifications,
   });
   const { bookings } = services;
   const job = createJobs({ config, db: pool, services, messenger: () => null, logger: fakeLogger() }).find(
@@ -73,15 +68,15 @@ describe('expire_bookings job', () => {
     return rows[0]?.quantity_left;
   }
 
-  it('expires due bookings, returns the portion and tells the guest once', async () => {
+  it('expires due bookings, returns the portion and queues the notices once', async () => {
     const venue = await seedVenue(pool, OWNER);
     const eclair = await seedMenuItem(pool, venue.id);
     const deal = await seedDeal(pool, eclair, { quantity: 3, startsAt: ago(HOUR), endsAt: ago(-5 * HOUR) });
     await seedGuest(pool, GUEST, ago(DAY));
-    const { booking } = await bookings.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await bookings.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     expect(await dealStock(deal.id)).toBe(2);
-    await background.idle();
-    expect(notifier.bookingCreated).toHaveBeenCalledTimes(1);
+    expect(recorded.kinds()).toEqual(['venue_booking_created']);
+    recorded.clear();
 
     clock.advance(59 * MINUTE);
     await runJob();
@@ -89,7 +84,6 @@ describe('expire_bookings job', () => {
 
     clock.advance(MINUTE);
     await runJob();
-    await background.idle();
 
     const { rows } = await pool.query<{ status: string; resolved_at: Date }>(
       'select status, resolved_at from bookings where id = $1',
@@ -97,22 +91,24 @@ describe('expire_bookings job', () => {
     );
     expect(rows).toEqual([{ status: 'expired', resolved_at: clock.now() }]);
     expect(await dealStock(deal.id)).toBe(3);
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(1);
-    expect(notifier.bookingExpired).toHaveBeenCalledWith({
-      booking: expect.objectContaining({ id: booking.id, status: 'expired' }) as unknown,
-      venue: expect.objectContaining({ id: venue.id, ownerId: OWNER }) as unknown,
-    });
+    expect(recorded.events).toEqual(
+      ['booking_expired', 'venue_booking_expired'].map((kind) => ({
+        kind,
+        booking: expect.objectContaining({ id: booking.id, status: 'expired' }) as unknown,
+        venue: expect.objectContaining({ id: venue.id, ownerId: OWNER }) as unknown,
+      })),
+    );
+    expect(recorded.notifications.flush).toHaveBeenCalledTimes(1);
 
     clock.advance(MINUTE);
     await runJob();
-    await background.idle();
     expect(await dealStock(deal.id)).toBe(3);
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(1);
+    expect(recorded.events).toHaveLength(2);
   });
 });
 
 describe('fail_stale_imports job', () => {
-  const job = failStaleImportsJob(pool);
+  const recorded = recordingNotifications();
   const service = createMenuImportsService({
     pool,
     clock,
@@ -121,7 +117,9 @@ describe('fail_stale_imports job', () => {
       fromText: () => Promise.reject(new Error('menus.fromText is not stubbed')),
     },
     background: createBackgroundTasks({ error: () => undefined }),
+    notifications: recorded.notifications,
   });
+  const job = failStaleImportsJob(service);
 
   async function importRow(id: number) {
     const { rows } = await pool.query<{ status: string; error: string | null; completed_at: Date | null }>(
@@ -154,6 +152,13 @@ describe('fail_stale_imports job', () => {
       completed_at: new Date(stale.createdAt.getTime() + 30 * MINUTE),
     });
     expect(await importRow(recent.id)).toEqual({ status: 'processing', error: null, completed_at: null });
+    expect(recorded.events).toEqual([
+      {
+        kind: 'menu_import_done',
+        menuImport: expect.objectContaining({ id: stale.id, status: 'failed' }) as unknown,
+        venue: expect.objectContaining({ id: venue.id }) as unknown,
+      },
+    ]);
     expect(await importRow(ready.id)).toEqual({
       status: 'ready',
       error: null,
@@ -164,13 +169,14 @@ describe('fail_stale_imports job', () => {
     expect((await importRow(stale.id))?.completed_at).toEqual(
       new Date(stale.createdAt.getTime() + 30 * MINUTE),
     );
+    expect(recorded.events).toHaveLength(1);
   });
 
   it('keeps an import that reached exactly 30 minutes', async () => {
     const venue = await seedVenue(pool, OWNER);
     const boundary = await menuImports.insert(pool, venue.id, 'photo', ago(30 * MINUTE));
 
-    expect(await menuImports.failStale(pool, clock.now())).toBe(0);
+    expect(await menuImports.failStale(pool, clock.now())).toEqual([]);
     expect((await importRow(boundary.id))?.status).toBe('processing');
   });
 });

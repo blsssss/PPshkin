@@ -135,7 +135,7 @@ export function createBookingsModule({ services, messenger, logger }: BotKit): B
 
   async function create(ctx: BotContext, request: BookRequest): Promise<BookingView | null> {
     try {
-      return await bookings.create(ctx.user.id, bookingInput(request));
+      return await bookings.create(ctx.user.id, bookingInput(request), 'bot');
     } catch (error) {
       const failure = bookingFailure(error);
       if (failure === null) throw error;

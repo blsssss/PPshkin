@@ -2,17 +2,16 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedBooking, seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { decodeQrPng } from '../../test/qr.ts';
 import { seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
 import { qrPayload } from '../domain/bookings.ts';
 import type { Deal, MenuItem, Venue } from '../domain/models.ts';
-import type { Notifier } from '../ports/notifier.ts';
 import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
 import * as offers from '../repositories/offers.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
-import { createBackgroundTasks, type BackgroundTasks } from '../shared/background.ts';
 import { createBookingsService, type BookingsDependencies, type BookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
 import { createMenuService } from './menu.ts';
@@ -33,15 +32,8 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 
-const notifier = {
-  bookingCreated: vi.fn<Notifier['bookingCreated']>(() => Promise.resolve()),
-  bookingCancelled: vi.fn<Notifier['bookingCancelled']>(() => Promise.resolve()),
-  bookingRedeemed: vi.fn<Notifier['bookingRedeemed']>(() => Promise.resolve()),
-  bookingExpired: vi.fn<Notifier['bookingExpired']>(() => Promise.resolve()),
-} satisfies Notifier;
-const logger = { error: vi.fn() };
+const recorded = recordingNotifications();
 
-let background: BackgroundTasks;
 let service: BookingsService;
 let venue: Venue;
 let eclair: MenuItem;
@@ -51,7 +43,13 @@ let deal: Deal;
 const later = (ms: number) => new Date(clock.now().getTime() + ms);
 
 function createService(overrides: Partial<BookingsDependencies> = {}): BookingsService {
-  return createBookingsService({ pool, clock, consents, notifier, background, ...overrides });
+  return createBookingsService({
+    pool,
+    clock,
+    consents,
+    notifications: recorded.notifications,
+    ...overrides,
+  });
 }
 
 async function quantityLeft(dealId: number): Promise<number> {
@@ -110,7 +108,7 @@ beforeEach(async () => {
   await resetDatabase(pool);
   clock.set(START);
   vi.clearAllMocks();
-  background = createBackgroundTasks(logger);
+  recorded.clear();
   service = createService();
   venue = await seedVenue(pool, OWNER);
   eclair = await seedMenuItem(pool, venue.id, { name: 'Эклер', priceRub: 200, kcal: 330, carbsG: 38 });
@@ -130,7 +128,7 @@ afterAll(async () => {
 
 describe('creating bookings', () => {
   it('reserves a portion of a hot deal at the deal price for an hour', async () => {
-    const view = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const view = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     expect(view.booking).toMatchObject({
       userId: GUEST,
       venueId: venue.id,
@@ -149,23 +147,51 @@ describe('creating bookings', () => {
     expect(view.item).toEqual(eclair);
     expect(view.venue).toEqual(venue);
     expect(await quantityLeft(deal.id)).toBe(1);
-    await background.idle();
-    expect(notifier.bookingCreated).toHaveBeenCalledExactlyOnceWith({ booking: view.booking, venue });
+    expect(recorded.events).toEqual([{ kind: 'venue_booking_created', booking: view.booking, venue }]);
+    expect(recorded.notifications.flush).toHaveBeenCalledTimes(1);
   });
 
-  it('answers even when the notification fails and logs the failure', async () => {
-    notifier.bookingCreated.mockRejectedValueOnce(new Error('MAX is unavailable'));
-    const view = await service.create(GUEST, { menuItemId: eclair.id });
-    expect(view.booking.status).toBe('active');
-    await background.idle();
-    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ task: `bookingCreated-${view.booking.id}` }),
-      'background task failed',
+  it('confirms a mini app booking to the guest in the chat, but not a bot booking', async () => {
+    const fromApp = await service.create(GUEST, { menuItemId: eclair.id }, 'miniapp');
+    const fromBot = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
+    expect(
+      recorded.events.map((event) => [event.kind, 'booking' in event ? event.booking.id : null]),
+    ).toEqual([
+      ['venue_booking_created', fromApp.booking.id],
+      ['booking_confirmed', fromApp.booking.id],
+      ['venue_booking_created', fromBot.booking.id],
+    ]);
+  });
+
+  it('tells the venue when the last portion of a deal is booked', async () => {
+    await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    expect(recorded.kinds()).toEqual(['venue_booking_created']);
+    const last = await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    expect(recorded.kinds()).toEqual([
+      'venue_booking_created',
+      'venue_booking_created',
+      'venue_deal_sold_out',
+    ]);
+    expect(recorded.events.at(-1)).toEqual({
+      kind: 'venue_deal_sold_out',
+      deal: expect.objectContaining({ id: deal.id, quantityLeft: 0 }) as unknown,
+      venue,
+    });
+    expect(last.booking.dealId).toBe(deal.id);
+  });
+
+  it('rolls the booking back when the notice cannot be queued', async () => {
+    recorded.notifications.enqueue.mockRejectedValueOnce(new Error('queue is unavailable'));
+    await expect(service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot')).rejects.toThrow(
+      'queue is unavailable',
     );
+    expect(await quantityLeft(deal.id)).toBe(2);
+    expect(await service.list(GUEST, 'active')).toEqual([]);
+    expect(recorded.notifications.flush).not.toHaveBeenCalled();
   });
 
   it('books at the menu price without a deal and keeps the deal stock', async () => {
-    const view = await service.create(GUEST, { menuItemId: eclair.id });
+    const view = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     expect(view.booking).toMatchObject({ dealId: null, priceRub: 200, expiresAt: later(HOUR) });
     expect(await quantityLeft(deal.id)).toBe(2);
   });
@@ -176,16 +202,16 @@ describe('creating bookings', () => {
       startsAt: later(-HOUR),
       endsAt: later(25 * MINUTE),
     });
-    const withDeal = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id });
+    const withDeal = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id }, 'bot');
     expect(withDeal.booking.expiresAt).toEqual(later(25 * MINUTE));
 
     clock.set('2026-09-25T18:30:00Z');
-    const beforeClosing = await service.create(SECOND_GUEST, { menuItemId: eclair.id });
+    const beforeClosing = await service.create(SECOND_GUEST, { menuItemId: eclair.id }, 'bot');
     expect(beforeClosing.booking.expiresAt).toEqual(new Date('2026-09-25T19:00:00Z'));
   });
 
   it('keeps the price and calories of the moment of booking', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: tart.id });
+    const { booking } = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
     await menu.update(OWNER, tart.id, { name: 'Тарт с малиной', priceRub: 280, kcal: 450 });
     const view = await service.get(GUEST, booking.id);
     expect(view.booking).toMatchObject({ itemName: 'Тарт', priceRub: 250, kcal: 410 });
@@ -193,22 +219,22 @@ describe('creating bookings', () => {
   });
 
   it('needs an available item on the menu of an open venue', async () => {
-    await expect(service.create(GUEST, { menuItemId: 999_999 })).rejects.toMatchObject({
+    await expect(service.create(GUEST, { menuItemId: 999_999 }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
     await menu.update(OWNER, tart.id, { isAvailable: false });
-    await expect(service.create(GUEST, { menuItemId: tart.id })).rejects.toMatchObject({
+    await expect(service.create(GUEST, { menuItemId: tart.id }, 'bot')).rejects.toMatchObject({
       status: 422,
       code: 'menu_item_unavailable',
     });
     await menu.archive(OWNER, tart.id);
-    await expect(service.create(GUEST, { menuItemId: tart.id })).rejects.toMatchObject({
+    await expect(service.create(GUEST, { menuItemId: tart.id }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
     clock.set('2026-09-25T19:00:00Z');
-    await expect(service.create(GUEST, { menuItemId: eclair.id })).rejects.toMatchObject({
+    await expect(service.create(GUEST, { menuItemId: eclair.id }, 'bot')).rejects.toMatchObject({
       status: 409,
       code: 'venue_closed',
     });
@@ -220,7 +246,7 @@ describe('creating bookings', () => {
     clock.set('2026-09-25T19:05:00Z');
     for (const dealId of [late.id, deal.id]) {
       const menuItemId = dealId === late.id ? tart.id : eclair.id;
-      await expect(service.create(GUEST, { menuItemId, dealId })).rejects.toMatchObject({
+      await expect(service.create(GUEST, { menuItemId, dealId }, 'bot')).rejects.toMatchObject({
         status: 409,
         code: 'deal_not_active',
       });
@@ -235,7 +261,7 @@ describe('creating bookings', () => {
     const foreignDeal = await seedDeal(pool, foreignItem, { startsAt: later(-HOUR), endsAt: later(HOUR) });
     const tartDeal = await seedDeal(pool, tart, { startsAt: later(-HOUR), endsAt: later(HOUR) });
     for (const dealId of [999_999, foreignDeal.id, tartDeal.id]) {
-      await expect(service.create(GUEST, { menuItemId: eclair.id, dealId })).rejects.toMatchObject({
+      await expect(service.create(GUEST, { menuItemId: eclair.id, dealId }, 'bot')).rejects.toMatchObject({
         status: 404,
         code: 'deal_not_found',
       });
@@ -245,7 +271,7 @@ describe('creating bookings', () => {
     const cancelled = await seedDeal(pool, tart, { startsAt: later(-HOUR), endsAt: later(HOUR) });
     await deals.cancelLiveInVenue(pool, venue.id, cancelled.id, clock.now());
     for (const dealId of [scheduled.id, ended.id, cancelled.id]) {
-      await expect(service.create(GUEST, { menuItemId: tart.id, dealId })).rejects.toMatchObject({
+      await expect(service.create(GUEST, { menuItemId: tart.id, dealId }, 'bot')).rejects.toMatchObject({
         status: 409,
         code: 'deal_not_active',
       });
@@ -253,67 +279,71 @@ describe('creating bookings', () => {
   });
 
   it('keeps one active booking per guest and item', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     for (const input of [{ menuItemId: eclair.id, dealId: deal.id }, { menuItemId: eclair.id }]) {
-      await expect(service.create(GUEST, input)).rejects.toMatchObject({
+      await expect(service.create(GUEST, input, 'bot')).rejects.toMatchObject({
         status: 409,
         code: 'booking_exists',
       });
     }
     expect(await quantityLeft(deal.id)).toBe(1);
-    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     await service.cancel(GUEST, booking.id);
-    expect((await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })).booking.priceRub).toBe(
-      130,
-    );
+    expect(
+      (await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot')).booking.priceRub,
+    ).toBe(130);
   });
 
   it('sells no more portions than the deal has', async () => {
-    await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
-    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     await expect(
-      service.create(THIRD_GUEST, { menuItemId: eclair.id, dealId: deal.id }),
+      service.create(THIRD_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot'),
     ).rejects.toMatchObject({
       status: 409,
       code: 'deal_sold_out',
     });
-    await expect(service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })).rejects.toMatchObject({
+    await expect(
+      service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot'),
+    ).rejects.toMatchObject({
       code: 'booking_exists',
     });
     expect(await quantityLeft(deal.id)).toBe(0);
-    expect((await service.create(THIRD_GUEST, { menuItemId: eclair.id })).booking.priceRub).toBe(200);
+    expect((await service.create(THIRD_GUEST, { menuItemId: eclair.id }, 'bot')).booking.priceRub).toBe(200);
   });
 
   it('allows at most 3 active bookings', async () => {
     const coffee = await seedMenuItem(pool, venue.id, { name: 'Капучино', category: 'drink' });
     const bun = await seedMenuItem(pool, venue.id, { name: 'Булочка', category: 'bakery' });
-    await service.create(GUEST, { menuItemId: tart.id });
-    await service.create(GUEST, { menuItemId: coffee.id });
-    const { booking } = await service.create(GUEST, { menuItemId: bun.id });
-    await expect(service.create(GUEST, { menuItemId: eclair.id })).rejects.toMatchObject({
+    await service.create(GUEST, { menuItemId: tart.id }, 'bot');
+    await service.create(GUEST, { menuItemId: coffee.id }, 'bot');
+    const { booking } = await service.create(GUEST, { menuItemId: bun.id }, 'bot');
+    await expect(service.create(GUEST, { menuItemId: eclair.id }, 'bot')).rejects.toMatchObject({
       status: 409,
       code: 'too_many_bookings',
     });
     await deals.update(pool, deal.id, { quantityLeft: 0, endsAt: deal.endsAt });
-    await expect(service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })).rejects.toMatchObject({
+    await expect(
+      service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot'),
+    ).rejects.toMatchObject({
       code: 'deal_sold_out',
     });
     await service.cancel(GUEST, booking.id);
-    expect((await service.create(GUEST, { menuItemId: eclair.id })).booking.status).toBe('active');
+    expect((await service.create(GUEST, { menuItemId: eclair.id }, 'bot')).booking.status).toBe('active');
   });
 
   it('releases expired bookings of the guest before checking the limits', async () => {
     const coffee = await seedMenuItem(pool, venue.id, { name: 'Капучино', category: 'drink' });
-    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
-    await service.create(GUEST, { menuItemId: tart.id });
-    await service.create(GUEST, { menuItemId: coffee.id });
+    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    await service.create(GUEST, { menuItemId: tart.id }, 'bot');
+    await service.create(GUEST, { menuItemId: coffee.id }, 'bot');
     clock.advance(HOUR);
-    const again = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const again = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     expect(again.booking.status).toBe('active');
     expect(await storedStatus(first.booking.id)).toEqual({ status: 'expired', resolved_at: clock.now() });
     expect(await quantityLeft(deal.id)).toBe(1);
-    await background.idle();
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(3);
+    expect(recorded.kinds().filter((kind) => kind === 'booking_expired')).toHaveLength(3);
+    expect(recorded.kinds().filter((kind) => kind === 'venue_booking_expired')).toHaveLength(3);
   });
 
   it('accepts the offer the guest booked from, even a declined one', async () => {
@@ -322,7 +352,7 @@ describe('creating bookings', () => {
     await offers.decline(pool, { id: declinedId, userId: GUEST, reason: 'not_today', at: clock.now() });
     clock.advance(MINUTE);
 
-    const fromOffer = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id, offerId });
+    const fromOffer = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id, offerId }, 'bot');
     expect(fromOffer.booking.offerId).toBe(offerId);
     expect(await offerState(offerId)).toEqual({
       status: 'accepted',
@@ -330,7 +360,7 @@ describe('creating bookings', () => {
       responded_at: clock.now(),
     });
 
-    await service.create(GUEST, { menuItemId: tart.id, offerId: declinedId });
+    await service.create(GUEST, { menuItemId: tart.id, offerId: declinedId }, 'bot');
     expect(await offerState(declinedId)).toEqual({
       status: 'accepted',
       decline_reason: null,
@@ -343,7 +373,7 @@ describe('creating bookings', () => {
     const tartOffer = await showOffer(GUEST, tart);
     for (const offerId of [999_999, othersOffer, tartOffer]) {
       await expect(
-        service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id, offerId }),
+        service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id, offerId }, 'bot'),
       ).rejects.toMatchObject({ status: 404, code: 'offer_not_found' });
     }
     expect(await quantityLeft(deal.id)).toBe(2);
@@ -353,12 +383,12 @@ describe('creating bookings', () => {
 
   it('needs the personal data consent and an existing account', async () => {
     await seedUser(pool, 104);
-    await expect(service.create(104, { menuItemId: eclair.id })).rejects.toMatchObject({
+    await expect(service.create(104, { menuItemId: eclair.id }, 'bot')).rejects.toMatchObject({
       status: 403,
       code: 'consent_required',
     });
     const consented = createService({ consents: { requirePersonalData: () => Promise.resolve() } });
-    await expect(consented.create(999, { menuItemId: eclair.id })).rejects.toMatchObject({
+    await expect(consented.create(999, { menuItemId: eclair.id }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'user_not_found',
     });
@@ -388,13 +418,13 @@ describe('creating bookings', () => {
       .mockReturnValueOnce('THERE2');
     const retrying = createService({ generateCode });
 
-    expect((await retrying.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })).booking.code).toBe(
-      'FRESH2',
-    );
+    expect(
+      (await retrying.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot')).booking.code,
+    ).toBe('FRESH2');
     expect(generateCode).toHaveBeenCalledTimes(2);
-    expect((await retrying.create(GUEST, { menuItemId: tart.id })).booking.code).toBe('REUSE2');
+    expect((await retrying.create(GUEST, { menuItemId: tart.id }, 'bot')).booking.code).toBe('REUSE2');
     const coffee = await seedMenuItem(pool, venue.id, { name: 'Капучино', category: 'drink' });
-    expect((await retrying.create(GUEST, { menuItemId: coffee.id })).booking.code).toBe('THERE2');
+    expect((await retrying.create(GUEST, { menuItemId: coffee.id }, 'bot')).booking.code).toBe('THERE2');
   });
 
   it('gives up after 5 taken codes and rolls everything back', async () => {
@@ -402,7 +432,11 @@ describe('creating bookings', () => {
     const offerId = await showOffer(GUEST, eclair);
     const generateCode = vi.fn(() => 'TAKEN2');
     await expect(
-      createService({ generateCode }).create(GUEST, { menuItemId: eclair.id, dealId: deal.id, offerId }),
+      createService({ generateCode }).create(
+        GUEST,
+        { menuItemId: eclair.id, dealId: deal.id, offerId },
+        'bot',
+      ),
     ).rejects.toThrow('No free booking code');
     expect(generateCode).toHaveBeenCalledTimes(5);
     expect(await quantityLeft(deal.id)).toBe(2);
@@ -413,7 +447,7 @@ describe('creating bookings', () => {
 
 describe('expiring bookings', () => {
   it('keeps a booking until the second it expires and then returns the portion', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.set(new Date(booking.expiresAt.getTime() - SECOND));
     expect(await service.expireDue({})).toEqual([]);
     expect((await service.get(GUEST, booking.id)).booking.status).toBe('active');
@@ -423,26 +457,28 @@ describe('expiring bookings', () => {
     const expired = await service.expireDue({});
     expect(expired).toEqual([{ ...booking, status: 'expired', resolvedAt: booking.expiresAt }]);
     expect(await quantityLeft(deal.id)).toBe(2);
-    await background.idle();
-    expect(notifier.bookingExpired).toHaveBeenCalledExactlyOnceWith({ booking: expired[0], venue });
+    expect(recorded.events.slice(1)).toEqual([
+      { kind: 'booking_expired', booking: expired[0], venue },
+      { kind: 'venue_booking_expired', booking: expired[0], venue },
+    ]);
   });
 
   it('returns the portion only to a live deal and never above its total', async () => {
-    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     await deals.update(pool, deal.id, { quantityLeft: 2, endsAt: deal.endsAt });
     const short = await seedDeal(pool, tart, {
       quantity: 2,
       startsAt: later(-HOUR),
       endsAt: later(30 * MINUTE),
     });
-    const second = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id });
+    const second = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id }, 'bot');
     const coffee = await seedMenuItem(pool, venue.id, { name: 'Капучино', category: 'drink' });
     const withdrawn = await seedDeal(pool, coffee, {
       quantity: 2,
       startsAt: later(-HOUR),
       endsAt: later(3 * HOUR),
     });
-    const third = await service.create(GUEST, { menuItemId: coffee.id, dealId: withdrawn.id });
+    const third = await service.create(GUEST, { menuItemId: coffee.id, dealId: withdrawn.id }, 'bot');
     await deals.cancelLiveInVenue(pool, venue.id, withdrawn.id, clock.now());
 
     clock.advance(HOUR);
@@ -460,8 +496,8 @@ describe('expiring bookings', () => {
   it('expires only the bookings in scope', async () => {
     const foreignVenue = await seedVenue(pool, OTHER_OWNER);
     const foreignItem = await seedMenuItem(pool, foreignVenue.id);
-    const own = await service.create(GUEST, { menuItemId: eclair.id });
-    const foreign = await service.create(SECOND_GUEST, { menuItemId: foreignItem.id });
+    const own = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
+    const foreign = await service.create(SECOND_GUEST, { menuItemId: foreignItem.id }, 'bot');
     clock.advance(HOUR);
     expect((await service.expireDue({ userId: SECOND_GUEST })).map((booking) => booking.id)).toEqual([
       foreign.booking.id,
@@ -470,11 +506,9 @@ describe('expiring bookings', () => {
       own.booking.id,
     ]);
     expect(await service.expireDue({})).toEqual([]);
-    await background.idle();
-    expect(notifier.bookingExpired.mock.calls.map(([notice]) => notice.venue.id)).toEqual([
-      foreignVenue.id,
-      venue.id,
-    ]);
+    expect(
+      recorded.events.flatMap((event) => (event.kind === 'booking_expired' ? [event.venue.id] : [])),
+    ).toEqual([foreignVenue.id, venue.id]);
   });
 });
 
@@ -485,9 +519,9 @@ describe('guest bookings', () => {
       startsAt: later(-HOUR),
       endsAt: later(20 * MINUTE),
     });
-    const eclairBooking = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const eclairBooking = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.advance(MINUTE);
-    const tartBooking = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id });
+    const tartBooking = await service.create(GUEST, { menuItemId: tart.id, dealId: short.id }, 'bot');
     expect((await service.list(GUEST, 'active')).map((view) => view.booking.id)).toEqual([
       tartBooking.booking.id,
       eclairBooking.booking.id,
@@ -529,7 +563,7 @@ describe('guest bookings', () => {
   });
 
   it('shows a booking only to its guest and marks it expired when its time is up', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     for (const attempt of [
       () => service.get(SECOND_GUEST, booking.id),
       () => service.qr(SECOND_GUEST, booking.id),
@@ -544,7 +578,7 @@ describe('guest bookings', () => {
   });
 
   it('renders a scannable QR code with the booking payload', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     const png = await service.qr(GUEST, booking.id);
     expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     expect(await decodeQrPng(png)).toEqual({
@@ -560,19 +594,18 @@ describe('guest bookings', () => {
 
 describe('cancelling bookings', () => {
   it('cancels an active booking and returns the portion', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.advance(10 * MINUTE);
     const view = await service.cancel(GUEST, booking.id);
     expect(view.booking).toEqual({ ...booking, status: 'cancelled', resolvedAt: clock.now() });
     expect(await quantityLeft(deal.id)).toBe(2);
-    await background.idle();
-    expect(notifier.bookingCancelled).toHaveBeenCalledExactlyOnceWith({ booking: view.booking, venue });
+    expect(recorded.events.at(-1)).toEqual({ kind: 'venue_booking_cancelled', booking: view.booking, venue });
   });
 
   it('refuses bookings that are no longer active', async () => {
-    const cancelled = await service.create(GUEST, { menuItemId: eclair.id });
+    const cancelled = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await service.cancel(GUEST, cancelled.booking.id);
-    const redeemed = await service.create(GUEST, { menuItemId: tart.id });
+    const redeemed = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
     await service.redeem(OWNER, redeemed.booking.code);
     for (const id of [cancelled.booking.id, redeemed.booking.id]) {
       await expect(service.cancel(GUEST, id)).rejects.toMatchObject({
@@ -583,7 +616,7 @@ describe('cancelling bookings', () => {
   });
 
   it('expires a booking whose time is up instead of cancelling it', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.set(booking.expiresAt);
     await expect(service.cancel(GUEST, booking.id)).rejects.toMatchObject({
       status: 409,
@@ -592,15 +625,13 @@ describe('cancelling bookings', () => {
     expect(await storedStatus(booking.id)).toEqual({ status: 'expired', resolved_at: booking.expiresAt });
     expect(await quantityLeft(deal.id)).toBe(2);
     await expect(service.cancel(GUEST, booking.id)).rejects.toMatchObject({ code: 'booking_expired' });
-    await background.idle();
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(1);
-    expect(notifier.bookingCancelled).not.toHaveBeenCalled();
+    expect(recorded.kinds()).toEqual(['venue_booking_created', 'booking_expired', 'venue_booking_expired']);
   });
 });
 
 describe('redeeming bookings', () => {
   it('redeems the scanned QR code and logs the dish in the guest diary', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.advance(15 * MINUTE);
     const view = await service.redeem(OWNER, ` ${qrPayload(booking.code).toLowerCase()} `);
     expect(view.booking).toEqual({ ...booking, status: 'redeemed', resolvedAt: clock.now() });
@@ -619,12 +650,11 @@ describe('redeeming bookings', () => {
         eatenAt: clock.now(),
       }),
     ]);
-    await background.idle();
-    expect(notifier.bookingRedeemed).toHaveBeenCalledExactlyOnceWith({ booking: view.booking, venue });
+    expect(recorded.events.at(-1)).toEqual({ kind: 'booking_redeemed', booking: view.booking, venue });
   });
 
   it('redeems a booking only once', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await service.redeem(OWNER, booking.code);
     await expect(service.redeem(OWNER, booking.code)).rejects.toMatchObject({
       status: 409,
@@ -634,8 +664,8 @@ describe('redeeming bookings', () => {
   });
 
   it('refuses expired and cancelled bookings', async () => {
-    const expiring = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
-    const cancelled = await service.create(GUEST, { menuItemId: tart.id });
+    const expiring = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    const cancelled = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
     await service.cancel(GUEST, cancelled.booking.id);
     clock.set(expiring.booking.expiresAt);
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -657,7 +687,7 @@ describe('redeeming bookings', () => {
   });
 
   it('finds codes only among the bookings of the own venue', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await seedVenue(pool, OTHER_OWNER);
     for (const [ownerId, code] of [
       [OTHER_OWNER, booking.code],
@@ -685,21 +715,21 @@ describe('redeeming bookings', () => {
       createdAt: later(-2 * HOUR),
     });
     const generateCode = vi.fn(() => 'ABC234');
-    const { booking } = await createService({ generateCode }).create(GUEST, { menuItemId: eclair.id });
+    const { booking } = await createService({ generateCode }).create(GUEST, { menuItemId: eclair.id }, 'bot');
     const view = await service.redeem(OWNER, 'abc 234');
     expect(view.booking.id).toBe(booking.id);
     expect(view.booking.id).not.toBe(old);
   });
 
   it('redeems after the venue closes and the deal is withdrawn', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     await venues.update(pool, venue.id, { opensAt: '06:00', closesAt: '07:00' }, clock.now());
     await deals.cancelLiveInVenue(pool, venue.id, deal.id, clock.now());
     expect((await service.redeem(OWNER, booking.code)).booking.status).toBe('redeemed');
   });
 
   it('keeps no diary entry for a deleted account', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await users.remove(pool, GUEST);
     const view = await service.redeem(OWNER, booking.code);
     expect(view.booking).toMatchObject({ status: 'redeemed', userId: null });
@@ -715,10 +745,10 @@ describe('venue bookings', () => {
       startsAt: later(-HOUR),
       endsAt: later(30 * MINUTE),
     });
-    const first = await service.create(GUEST, { menuItemId: eclair.id });
-    const second = await service.create(SECOND_GUEST, { menuItemId: tart.id, dealId: short.id });
+    const first = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
+    const second = await service.create(SECOND_GUEST, { menuItemId: tart.id, dealId: short.id }, 'bot');
     const foreignItem = await seedMenuItem(pool, (await seedVenue(pool, OTHER_OWNER)).id);
-    await service.create(THIRD_GUEST, { menuItemId: foreignItem.id });
+    await service.create(THIRD_GUEST, { menuItemId: foreignItem.id }, 'bot');
     const listed = await service.listForVenue(OWNER, { status: 'active' });
     expect(listed.map((view) => view.booking.id)).toEqual([second.booking.id, first.booking.id]);
     expect(listed[0]).toMatchObject({ item: tart, venue });
@@ -746,7 +776,7 @@ describe('venue bookings', () => {
       status: 'redeemed',
       createdAt: later(-HOUR),
     });
-    const due = await service.create(SECOND_GUEST, { menuItemId: eclair.id });
+    const due = await service.create(SECOND_GUEST, { menuItemId: eclair.id }, 'bot');
     clock.advance(HOUR);
     const history = await service.listForVenue(OWNER, { status: 'history' });
     expect(history.map((view) => [view.booking.id, view.booking.status])).toEqual([
