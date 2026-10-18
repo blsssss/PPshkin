@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+cd {{ backup_app_dir }}
+metrics="{{ backup_metrics_dir }}/restore_check.prom"
+check_db=ppshkin_restore_check
+latest=$(ls -1t backups/*.dump 2>/dev/null | head -n 1)
+if [ -z "$latest" ]; then
+  echo "restore check failed: no backups in {{ backup_app_dir }}/backups" >&2
+  exit 1
+fi
+db() {
+  docker compose -f compose.prod.yaml exec -T db "$@"
+}
+query() {
+  db sh -c 'psql -U "$POSTGRES_USER" -d "$1" -tAc "$2"' sh "$check_db" "$1"
+}
+drop() {
+  db sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$1"' sh "$check_db"
+}
+drop
+trap drop EXIT
+db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$check_db"
+db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$1" --no-owner --exit-on-error' sh "$check_db" < "$latest"
+users=$(query 'select count(*) from users')
+bookings=$(query 'select count(*) from bookings')
+version=$(query 'select max(version) from schema_migrations')
+if [ -z "$version" ]; then
+  echo "restore check failed: $latest has no applied migrations" >&2
+  exit 1
+fi
+echo "restore check passed: $latest users=$users bookings=$bookings schema_version=$version"
+cat > "$metrics.partial" <<EOF
+ppshkin_restore_check_success_timestamp_seconds $(date +%s)
+ppshkin_restore_check_users $users
+ppshkin_restore_check_bookings $bookings
+EOF
+chmod 644 "$metrics.partial"
+mv "$metrics.partial" "$metrics"

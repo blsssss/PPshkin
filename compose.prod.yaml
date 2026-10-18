@@ -128,9 +128,11 @@ services:
     image: prom/node-exporter:v1.12.1
     command:
       - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
     pid: host
     volumes:
       - /:/host:ro,rslave
+      - ./metrics:/textfile:ro
     expose:
       - "9100"
     restart: unless-stopped

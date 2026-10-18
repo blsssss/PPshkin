@@ -45,7 +45,7 @@ flowchart LR
 | `docker` | `bootstrap.yml`, от root, один раз | Docker Engine и плагин Compose из официального репозитория Docker |
 | `base` | `bootstrap.yml`, от root, один раз | пользователь `deploy` с ключом CI, вход по SSH только по ключам, `ufw`, автоматические обновления безопасности, каталог `/opt/ppshkin` |
 | `app` | `site.yml`, от `deploy`, каждый выкат | `.env` из секретов GitHub, `compose.prod.yaml` и `Caddyfile` коммита, копия базы, `pull` и `up --wait`, откат, перезапуск Caddy при изменении `Caddyfile` |
-| `backup` | `site.yml`, от `deploy`, каждый выкат | скрипт `/opt/ppshkin/backup.sh` и ежедневный запуск по cron |
+| `backup` | `site.yml`, от `deploy`, каждый выкат | скрипты `/opt/ppshkin/backup.sh` (ежедневная копия, шифрование и выгрузка во внешнее хранилище) и `/opt/ppshkin/restore-check.sh` (еженедельная проверка восстановления), их запуск по cron и метрики для node-exporter |
 
 Версии Ansible и ansible-lint закреплены в [deploy/ansible/requirements.txt](../deploy/ansible/requirements.txt) и обновляются Dependabot.
 
@@ -123,6 +123,7 @@ rm deploy_key known_hosts
 | `CHADGPT_API_KEY` | ключ ChadGPT |
 | `DEMO_GUEST_TOKEN`, `DEMO_VENUE_TOKEN` | `openssl rand -hex 24`, на период проверки хакатона |
 | `ALERT_BOT_TOKEN`, `ALERT_CHAT_ID` | токен Telegram-бота для алертов и id чата команды, раздел 11 |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | ключ доступа к бакету копий во внешнем хранилище, раздел 10 |
 
 Переменные репозитория (Settings, Secrets and variables, Actions, вкладка Variables):
 
@@ -133,6 +134,8 @@ rm deploy_key known_hosts
 | `PUBLIC_BASE_URL` | `https://<домен>` | живые проверки |
 | `MINI_APP_ENABLED` | `true` после регистрации мини-приложения (раздел 7) | кнопки открытия мини-приложения в сообщениях бота |
 | `PROACTIVE_OFFERS`, `LOG_LEVEL` | необязательные | значения по умолчанию backend: `false` и `info` |
+| `BACKUP_AGE_RECIPIENT` | открытый ключ `age` команды, `age1...` | шифрование копий перед выгрузкой, раздел 10 |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET` | адрес S3-хранилища в России, регион и бакет | выгрузка копий, раздел 10 |
 
 `DOMAIN` и хост задаёт [deploy/ansible/inventory.yml](../deploy/ansible/inventory.yml), `IMAGE_TAG` плейбук берёт из коммита. `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`, `TRUST_PROXY=1`, `PUBLIC_BASE_URL=https://${DOMAIN}`, `DATABASE_URL=postgres://${POSTGRES_USER}@db:5432/${POSTGRES_DB}`, `PGPASSWORD=${POSTGRES_PASSWORD}` и `BOT_MODE=${BOT_MODE:-webhook}` зафиксированы в `environment` в `compose.prod.yaml`.
 
@@ -238,11 +241,55 @@ docker compose -f compose.prod.yaml exec backend node -e "fetch('https://platfor
 
 ## 10. Резервные копии
 
-Роль `backup` ставит скрипт `/opt/ppshkin/backup.sh` и запускает его из cron пользователя `deploy` каждый день в 03:30: копия `backups/ppshkin-<дата>.dump`. Перед каждым выкатом роль `app` делает копию `backups/predeploy-<время>.dump`. Копии старше 7 дней скрипт удаляет. Незаконченная копия пишется в файл `.partial` и не подменяет готовую.
+Цели восстановления: RPO 24 часа (теряется не больше суток данных: ежедневная копия и копия перед каждым выкатом), RTO 1 час (за час сервис поднимается на новом сервере из внешней копии).
 
-Копии на том же сервере не спасают от потери сервера, поэтому выгружайте их и в объектное хранилище в России (например, S3-совместимое хранилище Selectel, Yandex Object Storage или VK Cloud), например через `rclone copy /opt/ppshkin/backups <хранилище>:ppshkin-backups`.
+Роль `backup` ставит скрипт `/opt/ppshkin/backup.sh` и запускает его из cron пользователя `deploy` каждый день в 03:30: копия `backups/ppshkin-<дата>.dump`. Перед каждым выкатом роль `app` делает копию `backups/predeploy-<время>.dump`. Локальные копии старше 7 дней скрипт удаляет. Незаконченная копия пишется в файл `.partial` и не подменяет готовую. Вывод скриптов пишется в системный журнал: `journalctl -t ppshkin-backup` и `journalctl -t ppshkin-restore-check`.
 
-Восстановление в рабочую базу (backend на это время останавливается):
+### Внешняя копия
+
+Копии на том же сервере не спасают от потери сервера, поэтому после `pg_dump` скрипт шифрует копию [age](https://age-encryption.org) открытым ключом команды и выгружает `ppshkin-<дата>.dump.age` через `rclone` в S3-совместимое хранилище в России (Selectel, Yandex Object Storage или VK Cloud). Файлы старше 30 дней скрипт удаляет из хранилища сам. На сервере есть только открытый ключ, поэтому даже с доступом к серверу и хранилищу копию не расшифровать; закрытый ключ хранится вне сервера у двух участников команды.
+
+- `age` роль скачивает с GitHub в `/opt/ppshkin/bin` и сверяет контрольную сумму, `rclone` запускается из образа `rclone/rclone` с точной версией; ставить их на сервер вручную не нужно.
+- Ключи хранилища приходят в роль из секретов репозитория через `deploy.yml`, роль пишет их в `/opt/ppshkin/rclone.conf` с правами `600`. В `.env` контейнеров они не попадают.
+- Пока не заданы `BACKUP_AGE_RECIPIENT` и параметры хранилища (раздел 4), внешняя копия не делается: локальная копия и метрики пишутся как раньше, в журнале `off-site upload skipped`, метрика `ppshkin_backup_offsite` равна 0. Так выкаты не ломаются до появления секретов. Если задана только часть переменных, плейбук останавливается до обращения к серверу и называет их все.
+
+Настройка, один раз:
+
+```bash
+age-keygen -o ppshkin-backup.key
+gh variable set BACKUP_AGE_RECIPIENT --body "$(age-keygen -y ppshkin-backup.key)"
+gh variable set BACKUP_S3_ENDPOINT --body https://s3.ru-1.storage.selcloud.ru
+gh variable set BACKUP_S3_REGION --body ru-1
+gh variable set BACKUP_S3_BUCKET --body ppshkin-backups
+gh secret set BACKUP_S3_ACCESS_KEY_ID
+gh secret set BACKUP_S3_SECRET_ACCESS_KEY
+```
+
+Адрес и регион выше для Selectel, у других провайдеров свои. Бакет создайте заранее, приватным; ключ доступа выдайте только на этот бакет. Файл `ppshkin-backup.key` передайте второму участнику команды по защищённому каналу, сохраните у обоих вне сервера и удалите из рабочего каталога. Потеря закрытого ключа делает все внешние копии бесполезными. Затем запустите выкат текущего коммита `main` (раздел 9) и проверьте выгрузку:
+
+```bash
+cd /opt/ppshkin
+./backup.sh
+docker run --rm -v "$PWD/rclone.conf:/config/rclone/rclone.conf:ro" rclone/rclone:1.75.2 ls offsite:ppshkin-backups
+```
+
+### Свежесть копий и проверка восстановления
+
+`backup.sh` пишет в `/opt/ppshkin/metrics/backup.prom` время последней успешной копии `ppshkin_backup_last_success_timestamp_seconds`, её размер `ppshkin_backup_size_bytes` и размер предыдущей `ppshkin_backup_previous_size_bytes`. Раз в неделю, в воскресенье в 05:00 по времени сервера, `restore-check.sh` разворачивает самую свежую локальную копию в отдельную базу `ppshkin_restore_check` на том же PostgreSQL, проверяет число строк `users` и `bookings` и последнюю версию в `schema_migrations`, удаляет базу и пишет `ppshkin_restore_check_success_timestamp_seconds` в `/opt/ppshkin/metrics/restore_check.prom`. Каталог `metrics` подключён в node-exporter как каталог текстовых метрик. При первом выкате роль сразу делает копию и проверку, чтобы метрики появились до первой ночи.
+
+Ручной запуск и проверка метрики:
+
+```bash
+cd /opt/ppshkin
+./restore-check.sh
+cat metrics/backup.prom metrics/restore_check.prom
+```
+
+Алерты `BackupStale`, `BackupShrunk` и `RestoreCheckStale` описаны в разделе 11.
+
+### Восстановление в рабочую базу
+
+Backend на это время останавливается:
 
 ```bash
 cd /opt/ppshkin
@@ -251,15 +298,32 @@ docker compose -f compose.prod.yaml exec -T db pg_restore -U ppshkin -d ppshkin 
 docker compose -f compose.prod.yaml up -d --wait
 ```
 
-Один раз после настройки проверьте восстановление на отдельной базе, не трогая рабочую:
+### Расшифровка внешней копии
+
+Выполняется на машине участника команды с закрытым ключом, ключ на сервер не копируется:
 
 ```bash
-cd /opt/ppshkin
-docker compose -f compose.prod.yaml exec -T db createdb -U ppshkin ppshkin_restore_check
-docker compose -f compose.prod.yaml exec -T db pg_restore -U ppshkin -d ppshkin_restore_check --clean --if-exists < backups/ppshkin-<дата>.dump
-docker compose -f compose.prod.yaml exec -T db psql -U ppshkin -d ppshkin_restore_check -c 'select count(*) from users'
-docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore_check
+rclone copy <хранилище>:ppshkin-backups/ppshkin-<дата>.dump.age .
+age --decrypt --identity ppshkin-backup.key --output ppshkin-<дата>.dump ppshkin-<дата>.dump.age
+docker run -d --name ppshkin-restore -e POSTGRES_PASSWORD=restore postgres:18.6-alpine3.24
+docker exec ppshkin-restore sh -c 'until pg_isready -U postgres; do sleep 1; done; createdb -U postgres ppshkin'
+docker exec -i ppshkin-restore pg_restore -U postgres -d ppshkin --no-owner --exit-on-error < ppshkin-<дата>.dump
+docker exec ppshkin-restore psql -U postgres -d ppshkin -c 'select count(*) from users' -c 'select max(version) from schema_migrations'
+docker rm -f ppshkin-restore
 ```
+
+`rclone` на своей машине настройте тем же ключом доступа (`rclone config`, тип `s3`, провайдер `Other`). Чистая база в контейнере нужна, чтобы проверить копию, не трогая продакшен. Расшифрованный файл содержит персональные данные: после проверки удалите его.
+
+### Восстановление на новый сервер
+
+Порядок рассчитан на RTO 1 час:
+
+1. Создайте сервер по разделу 1 и выполните `bootstrap.yml` (раздел 3). Ключ CI можно сгенерировать новый: тогда обновите `DEPLOY_SSH_KEY`.
+2. Перенаправьте A-запись домена на новый IP (раздел 2) и обновите `DEPLOY_KNOWN_HOSTS` отпечатком нового сервера.
+3. Запустите выкат последнего рабочего коммита `main` (раздел 9). Сервис поднимется с пустой базой: миграции применятся при старте backend. Секреты прежние, `POSTGRES_PASSWORD` и `SESSION_SECRET` не меняйте.
+4. Расшифруйте последнюю внешнюю копию на своей машине (подраздел выше) и скопируйте файл `.dump` на сервер: `scp ppshkin-<дата>.dump deploy@<домен>:/opt/ppshkin/backups/`.
+5. Восстановите её в рабочую базу командами подраздела «Восстановление в рабочую базу» и удалите расшифрованный файл со своей машины.
+6. Проверьте `https://<домен>/ready`, вход в мини-приложение и живые проверки ([smoke.md](smoke.md)). Подписку webhook MAX backend восстановит сам (раздел 6).
 
 ## 11. Мониторинг и алерты
 
@@ -271,7 +335,7 @@ docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore
 |---|---|
 | backend, `/metrics` | время ответа по шаблону маршрута и коду (`http_request_duration_seconds`), метрики Node (память, event loop, GC), продуктовые показатели: пользователи без демо-учёток, записи дневника за сутки, живые горящие позиции, брони и предложения по статусам; запуски, длительность и время последнего успеха фоновых задач |
 | blackbox-exporter | ответ `https://<домен>/ready` снаружи через Caddy и срок действия сертификата |
-| node-exporter | CPU, память, диск и сеть сервера |
+| node-exporter | CPU, память, диск и сеть сервера; текстовые метрики копий и проверки восстановления из `/opt/ppshkin/metrics` (раздел 10) |
 
 `/metrics` не маршрутизируется Caddy и снаружи недоступен, это проверяет CI. Сырые пути в метки не попадают: неизвестные адреса считаются как `unmatched`.
 
@@ -291,6 +355,9 @@ docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore
 | `AvailabilityBudgetBurnSlow`, `BookingsBudgetBurnSlow` | бюджет ошибок SLO сгорает в 6 раз быстрее нормы и за 6 часов, и за 30 минут |
 | `JobFailing` | фоновая задача падает 3 запуска подряд |
 | `JobStale` | ни один экземпляр не выполнил задачу успешно: `expire_bookings` 5 минут, `fail_stale_imports` 15 минут, `purge_processed_updates` 3 часа, `deliver_notifications` 2 минуты |
+| `BackupStale` | нет успешной ночной копии 26 часов |
+| `BackupShrunk` | последняя копия меньше половины предыдущей |
+| `RestoreCheckStale` | проверка восстановления не проходила больше 8 дней |
 
 ### Целевые уровни (SLO)
 
@@ -320,6 +387,9 @@ docker compose -f compose.prod.yaml exec -T db dropdb -U ppshkin ppshkin_restore
 | `TargetDown` | контейнер цели остановлен или не отвечает: `docker compose -f compose.prod.yaml ps`, затем `up -d --wait` |
 | `CertificateExpiresSoon` | журнал `caddy`: чаще всего закрыт порт 80 или изменилась A-запись |
 | `DiskAlmostFull`, `MemoryHigh`, `CpuHigh` | `df -h`, `docker system df`, `docker stats`; старые образы удаляет каждый выкат, копии базы старше срока удаляет `backup.sh` |
+| `BackupStale` | `journalctl -t ppshkin-backup` покажет ошибку; частые причины - остановлена база, кончился диск, неверные ключи хранилища. Исправьте и запустите `./backup.sh` вручную, метрика обновится сразу |
+| `BackupShrunk` | сравните число строк основных таблиц с прошлой неделей (`restore-check.sh` пишет `users` и `bookings` в журнал и метрики). Если данные пропали, не удаляйте старые копии и восстановите базу по разделу 10 |
+| `RestoreCheckStale` | `journalctl -t ppshkin-restore-check` и ручной запуск `./restore-check.sh`: ошибка `pg_restore` значит, что копия повреждена, и нужно срочно проверить ночные копии |
 
 Правила покрыты юнит-тестами `promtool test rules` ([deploy/monitoring/rules.test.yml](../deploy/monitoring/rules.test.yml)), их запускает CI.
 

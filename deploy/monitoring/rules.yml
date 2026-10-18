@@ -162,6 +162,34 @@ groups:
           summary: "Фоновая задача {{ $labels.name }} не выполнялась {{ $value | humanizeDuration }}"
           description: "Ни один экземпляр backend не выполнил {{ $labels.name }} успешно дольше допустимого: проверьте журнал backend и блокировки задач в базе."
 
+      - alert: BackupStale
+        expr: >-
+          time() - max(ppshkin_backup_last_success_timestamp_seconds) > 26 * 3600
+          or absent_over_time(ppshkin_backup_last_success_timestamp_seconds[26h])
+        labels:
+          severity: critical
+        annotations:
+          summary: "Нет успешной копии базы больше 26 часов"
+          description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+      - alert: BackupShrunk
+        expr: ppshkin_backup_size_bytes < 0.5 * ppshkin_backup_previous_size_bytes
+        labels:
+          severity: warning
+        annotations:
+          summary: "Копия базы уменьшилась больше чем вдвое"
+          description: "Последняя копия весит {{ $value | humanize1024 }}B, меньше половины предыдущей: проверьте, не потеряны ли данные."
+
+      - alert: RestoreCheckStale
+        expr: >-
+          time() - max(ppshkin_restore_check_success_timestamp_seconds) > 8 * 86400
+          or absent_over_time(ppshkin_restore_check_success_timestamp_seconds[8d])
+        labels:
+          severity: warning
+        annotations:
+          summary: "Проверка восстановления не проходила больше 8 дней"
+          description: "Еженедельный restore-check.sh не отработал: смотрите journalctl -t ppshkin-restore-check на сервере."
+
       - alert: DiskAlmostFull
         expr: 1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.85
         for: 10m

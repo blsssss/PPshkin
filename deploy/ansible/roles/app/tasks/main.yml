@@ -23,6 +23,12 @@
     - "{{ app_dir }}/deploy"
     - "{{ app_dir }}/backups"
 
+- name: Create the node-exporter text metrics directory
+  ansible.builtin.file:
+    path: "{{ app_dir }}/metrics"
+    state: directory
+    mode: "0755"
+
 - name: Install the Compose file
   ansible.builtin.copy:
     src: "{{ app_source_dir }}/compose.prod.yaml"

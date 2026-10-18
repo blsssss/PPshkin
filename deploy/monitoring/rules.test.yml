@@ -220,3 +220,92 @@ tests:
       - eval_time: 6m
         alertname: JobStale
         exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_last_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x30
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Нет успешной копии базы больше 26 часов"
+              description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_last_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0+86400x2
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: BackupStale
+        exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'up{job="node",instance="node-exporter:9100"}'
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Нет успешной копии базы больше 26 часов"
+              description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 10485760 4194304
+      - series: 'ppshkin_backup_previous_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 10000000 10485760
+    alert_rule_test:
+      - eval_time: 0h
+        alertname: BackupShrunk
+        exp_alerts: []
+      - eval_time: 1h
+        alertname: BackupShrunk
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node
+              instance: node-exporter:9100
+            exp_annotations:
+              summary: "Копия базы уменьшилась больше чем вдвое"
+              description: "Последняя копия весит 4MiB, меньше половины предыдущей: проверьте, не потеряны ли данные."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 4194304
+      - series: 'ppshkin_backup_previous_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 0
+    alert_rule_test:
+      - eval_time: 0h
+        alertname: BackupShrunk
+        exp_alerts: []
+
+  - interval: 6h
+    input_series:
+      - series: 'ppshkin_restore_check_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 7d
+        alertname: RestoreCheckStale
+        exp_alerts: []
+      - eval_time: 8d6h
+        alertname: RestoreCheckStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Проверка восстановления не проходила больше 8 дней"
+              description: "Еженедельный restore-check.sh не отработал: смотрите journalctl -t ppshkin-restore-check на сервере."
