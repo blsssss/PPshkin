@@ -5,9 +5,11 @@ import { api, session, useSessionState } from './index.ts';
 
 export const PROFILE_KEY = ['me'] as const;
 export const CONSENTS_KEY = ['consents'] as const;
+export const NOTIFICATION_SETTINGS_KEY = ['notificationSettings'] as const;
 
 type ProfilePatch = Schemas['ProfilePatchInput'];
 type ConsentKind = Schemas['ConsentDocument']['kind'];
+type NotificationSettingsPatch = Schemas['NotificationSettingsPatchInput'];
 
 export function useProfile() {
   const state = useSessionState();
@@ -89,6 +91,25 @@ export function useSaveLocation() {
     },
     onSuccess: async () => {
       await queryClient.refetchQueries({ queryKey: PROFILE_KEY });
+    },
+  });
+}
+
+export function useNotificationSettings() {
+  return useQuery({
+    queryKey: NOTIFICATION_SETTINGS_KEY,
+    queryFn: async () => unwrap(await api.GET('/api/v1/me/notifications')),
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: NotificationSettingsPatch) =>
+      unwrap(await api.PATCH('/api/v1/me/notifications', { body: patch })),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(NOTIFICATION_SETTINGS_KEY, settings);
     },
   });
 }

@@ -49,8 +49,13 @@ export function useCancelDeal() {
   });
 }
 
-export function useVenueBookings(status: 'active' | 'history', date: string | null, poll = true) {
+export function useVenueBookings(
+  status: 'active' | 'history',
+  date: string | null,
+  { poll = true, enabled = true }: { poll?: boolean; enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: [...VENUE_BOOKINGS_KEY, status, date],
     queryFn: async () =>
       unwrap(

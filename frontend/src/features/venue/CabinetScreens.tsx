@@ -94,7 +94,7 @@ function VenueHome({ venue }: { venue: Venue }) {
   const navigate = useNavigate();
   const menu = useVenueMenu();
   const deals = useVenueDeals('active');
-  const bookings = useVenueBookings('active', null, false);
+  const bookings = useVenueBookings('active', null, { poll: false });
   const open = isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, new Date());
   const count = menu.data?.length;
   return (

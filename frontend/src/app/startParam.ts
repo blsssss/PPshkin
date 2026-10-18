@@ -12,6 +12,10 @@ export const START_ROUTES: readonly { prefix: string; path: (id: string) => stri
   { prefix: 'import_', path: (id) => `/venue/menu/import/${id}` },
 ];
 
+export const START_PAGES: Readonly<Record<string, string>> = {
+  notifications: '/profile/notifications',
+};
+
 export interface StartTarget {
   path: string;
   recognized: boolean;
@@ -19,6 +23,8 @@ export interface StartTarget {
 
 export function resolveStartParam(value: string | null): StartTarget {
   if (value === null || value.length === 0) return { path: HOME_PATH, recognized: true };
+  const page = Object.hasOwn(START_PAGES, value) ? START_PAGES[value] : undefined;
+  if (page !== undefined) return { path: page, recognized: true };
   for (const route of START_ROUTES) {
     if (!value.startsWith(route.prefix)) continue;
     const id = value.slice(route.prefix.length);
