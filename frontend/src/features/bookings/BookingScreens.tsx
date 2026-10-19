@@ -324,12 +324,12 @@ function FullscreenQr({ booking, onClose }: { booking: Booking; onClose: () => v
   );
 }
 
-function ProblemButton({ booking }: { booking: Booking }) {
+function ProblemButton({ booking, compact = false }: { booking: Booking; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button
-        size="large"
+        size={compact ? 'medium' : 'large'}
         variant="secondary"
         stretched
         onClick={() => {
@@ -583,6 +583,11 @@ function BookingRow({ booking }: { booking: Booking }) {
           {booking.status !== 'active' && `, ${formatPrice(booking.priceRub)}`}
         </span>
       </button>
+      {booking.status !== 'active' && (
+        <div className={styles.rowAction}>
+          <ProblemButton booking={booking} compact />
+        </div>
+      )}
     </li>
   );
 }

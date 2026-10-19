@@ -103,6 +103,26 @@ describe('complaint about a booking', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('lets the guest report a problem from a history list item without opening the booking', async () => {
+    await start();
+    server.on('GET', '/api/v1/bookings', (call) =>
+      json({ items: call.search.includes('history') ? [BOOKING] : [] }),
+    );
+    server.on('POST', '/api/v1/complaints', () => json(COMPLAINT, 201));
+    await renderApp('/bookings');
+    fireEvent.click(await screen.findByRole('button', { name: 'История' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Проблема с бронью' }));
+    const sheet = await screen.findByRole('dialog');
+    fireEvent.click(within(sheet).getByLabelText('Другое'));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Отправить' }));
+    expect(await screen.findByText('Спасибо, разберёмся')).toBeTruthy();
+    expect(server.callsTo('POST', '/api/v1/complaints')[0]?.body).toEqual({
+      venueId: VENUE.id,
+      bookingId: BOOKING.id,
+      reason: 'other',
+    });
+  });
+
   it('offers every reason from the list', async () => {
     await start();
     await renderApp('/bookings/5');

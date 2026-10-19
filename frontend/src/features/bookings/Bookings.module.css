@@ -108,6 +108,11 @@
   cursor: pointer;
 }
 
+.rowAction {
+  padding: 8px 16px 12px;
+  background: var(--ppsh-panel);
+}
+
 .rowHead {
   display: flex;
   justify-content: space-between;
