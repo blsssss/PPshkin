@@ -43,6 +43,7 @@ const HOUR = 60 * MINUTE;
 const config = testConfig();
 const background = createBackgroundTasks({ error: () => undefined });
 const sendToUser = vi.fn<Messenger['sendToUser']>();
+const uploadFile = vi.fn<Messenger['uploadFile']>();
 const menus = { fromPhoto: vi.fn<MenuParser['fromPhoto']>(), fromText: vi.fn<MenuParser['fromText']>() };
 const stats = createNotificationStats();
 let live = true;
@@ -51,9 +52,14 @@ function outboxFor(send: Messenger['sendToUser'] = sendToUser): Outbox {
   return createOutbox({
     pool,
     clock,
-    bot: () => (live ? { messenger: fakeMessenger({ sendToUser: send }), username: 'ppshkin_bot' } : null),
+    bot: () =>
+      live ? { messenger: fakeMessenger({ sendToUser: send, uploadFile }), username: 'ppshkin_bot' } : null,
     miniAppEnabled: true,
     diaryDay: (userId) => services.diary.day(userId),
+    reports: {
+      build: (venue, from, to) => services.reports.build(venue, from, to),
+      file: (venue, report, format) => services.reports.file(venue, report, format),
+    },
     background,
     logger: fakeLogger(),
     stats,
@@ -112,6 +118,8 @@ beforeEach(async () => {
   live = true;
   sequence = 0;
   sendToUser.mockReset();
+  uploadFile.mockReset();
+  uploadFile.mockResolvedValue('file-token');
   sendToUser.mockImplementation(() => {
     sequence += 1;
     return Promise.resolve({ messageId: `mid.${String(sequence)}` });
@@ -662,6 +670,115 @@ describe('notification settings', () => {
     expect(await statusesOf('venue_report_ready')).toMatchObject([
       { status: 'pending', silent: false, sendAfter: new Date('2026-09-26T09:00:00+03:00') },
     ]);
+  });
+});
+
+describe('venue reports', () => {
+  async function finishedDay() {
+    clock.set('2026-09-25T15:00:00Z');
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue, period: 'day', date: '2026-09-25' },
+      clock.now(),
+    );
+    await outbox.deliverDue(clock.now());
+  }
+
+  it('sends the day close with the buttons to mark the write-off', async () => {
+    await finishedDay();
+
+    const [[userId, message]] = sendToUser.mock.calls as [[number, OutgoingMessage]];
+    expect(userId).toBe(OWNER);
+    expect(message.text).toBe(
+      [
+        '**Итоги дня, Кофейня «Зерно», 25 сентября**',
+        'Выставлено 2, продано по броням 0 (0%), выручка 0 ₽',
+        'Отметьте, сколько списали:',
+        'Эклер: не продано 2',
+      ].join('\n'),
+    );
+    expect(message.buttons?.[0]?.map((button) => button.kind === 'callback' && button.payload)).toEqual([
+      `vn:co:${String(deal.id)}:all:${String(venue.id)}`,
+      `vn:co:${String(deal.id)}:0:${String(venue.id)}`,
+      `vn:co:${String(deal.id)}:n:${String(venue.id)}`,
+    ]);
+    expect(uploadFile).not.toHaveBeenCalled();
+    expect(await statusesOf('venue_report_ready')).toMatchObject([{ userId: OWNER, status: 'sent' }]);
+  });
+
+  it('skips the day close when the day was closed before it went out', async () => {
+    clock.set('2026-09-25T15:00:00Z');
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue, period: 'day', date: '2026-09-25' },
+      clock.now(),
+    );
+    await services.reports.closeOut({ userId: OWNER }, deal.id, 0, 'bot');
+    await outbox.deliverDue(clock.now());
+
+    expect(sendToUser).not.toHaveBeenCalled();
+    expect(await statusesOf('venue_report_ready')).toMatchObject([
+      { status: 'skipped', lastError: 'the day is already closed' },
+    ]);
+  });
+
+  it('sends the week report with the CSV file attached', async () => {
+    await seedDeal(pool, tart, {
+      priceRub: 150,
+      quantity: 4,
+      startsAt: new Date('2026-09-16T07:00:00Z'),
+      endsAt: new Date('2026-09-16T12:00:00Z'),
+    });
+    clock.set('2026-09-21T06:00:00Z');
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue, period: 'week', date: '2026-09-14' },
+      clock.now(),
+    );
+    await outbox.deliverDue(clock.now());
+
+    expect(uploadFile).toHaveBeenCalledWith(expect.any(Buffer), 'report-2026-09-14_2026-09-20.csv');
+    const [[userId, message]] = sendToUser.mock.calls as [[number, OutgoingMessage]];
+    expect(userId).toBe(OWNER);
+    expect(message.text).toContain('**Отчёт за неделю 14-20 сентября готов**');
+    expect(message.text).toContain('Выставлено 4');
+    expect(message.fileTokens).toEqual(['file-token']);
+    expect(message.buttons).toEqual([
+      [{ kind: 'app', text: 'Открыть в приложении', payload: 'report_20260914' }],
+      [{ kind: 'callback', text: 'PDF', payload: `vn:rp:pdf:20260914:${String(venue.id)}` }],
+    ]);
+  });
+
+  it('retries the week report when the file upload fails', async () => {
+    uploadFile.mockRejectedValueOnce(new MaxApiError(502, 'bad.gateway', 'down'));
+    clock.set('2026-09-21T06:00:00Z');
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue, period: 'week', date: '2026-09-14' },
+      clock.now(),
+    );
+    await outbox.deliverDue(clock.now());
+
+    expect(sendToUser).not.toHaveBeenCalled();
+    expect(await statusesOf('venue_report_ready')).toMatchObject([{ status: 'pending', attempts: 1 }]);
+  });
+
+  it('sends the day close only to staff with the deal.edit permission', async () => {
+    const company = await seedCompany(pool, 400);
+    const place = await seedCompanyVenue(pool, company.id);
+    await seedMember(pool, company.id, 401, 'cashier');
+    await seedMember(pool, company.id, 402, 'manager');
+    const item = await seedMenuItem(pool, place.id);
+    await seedDeal(pool, item, { startsAt: later(-HOUR), endsAt: later(HOUR) });
+    clock.set(later(3 * HOUR));
+    await outbox.enqueue(
+      pool,
+      { kind: 'venue_report_ready', venue: place, period: 'day', date: '2026-09-25' },
+      clock.now(),
+    );
+    await outbox.deliverDue(clock.now());
+
+    expect(sendToUser.mock.calls.map(([id]) => id).sort()).toEqual([400, 402]);
   });
 });
 

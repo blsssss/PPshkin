@@ -37,6 +37,10 @@ function realVenueChat() {
     bot: () => ({ messenger: fakeMessenger({ sendToUser }), username: 'ppshkin_bot' }),
     miniAppEnabled: false,
     diaryDay: (userId) => services.diary.day(userId),
+    reports: {
+      build: (venue, from, to) => services.reports.build(venue, from, to),
+      file: (venue, report, format) => services.reports.file(venue, report, format),
+    },
     background: recognitionTasks,
     logger: fakeLogger(),
   });

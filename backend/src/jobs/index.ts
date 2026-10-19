@@ -20,6 +20,8 @@ import { purgeProcessedUpdatesJob } from './purge-processed-updates.ts';
 import { purgeRetentionJob } from './purge-retention.ts';
 import { refreshDemoDataJob, type DemoDataRefresher } from './refresh-demo-data.ts';
 import type { Job } from './scheduler.ts';
+import { venueDayCloseJob } from './venue-day-close.ts';
+import { weeklyReportsJob } from './weekly-reports.ts';
 
 export interface JobsDependencies {
   config: Pick<
@@ -29,7 +31,7 @@ export interface JobsDependencies {
   db: Queryable;
   services: Pick<
     Services,
-    'account' | 'bookings' | 'insights' | 'menuImports' | 'moderation' | 'recommendations'
+    'account' | 'bookings' | 'insights' | 'menuImports' | 'moderation' | 'recommendations' | 'reports'
   >;
   messenger: () => Messenger | null;
   logger: MaxLogger;
@@ -62,7 +64,13 @@ export function createJobs({
       logger,
     }),
     ...(outbox
-      ? [deliverNotificationsJob(outbox), bookingRemindersJob(db, outbox), dealEndingRemindersJob(db, outbox)]
+      ? [
+          deliverNotificationsJob(outbox),
+          bookingRemindersJob(db, outbox),
+          dealEndingRemindersJob(db, outbox),
+          venueDayCloseJob(services.reports),
+          weeklyReportsJob(services.reports),
+        ]
       : []),
     ...(config.ADMIN_USER_IDS.length > 0
       ? [

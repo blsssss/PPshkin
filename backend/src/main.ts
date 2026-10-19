@@ -78,6 +78,10 @@ const outbox = botSettings
       },
       miniAppEnabled: config.MINI_APP_ENABLED,
       diaryDay: (userId) => services.diary.day(userId),
+      reports: {
+        build: (venue, from, to) => services.reports.build(venue, from, to),
+        file: (venue, report, format) => services.reports.file(venue, report, format),
+      },
       background,
       logger: botLogger,
       stats: notificationStats,
@@ -92,6 +96,7 @@ const services = createServices({
   notifications: outbox ?? silentNotifications,
   demoDataset: config.DEMO_MODE ? await loadDemoDataset() : null,
   botUsername: () => botRuntime?.username() ?? null,
+  messenger: botMessenger,
 });
 const botRuntime =
   botSettings &&

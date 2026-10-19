@@ -54,6 +54,8 @@ describe('createJobs', () => {
       deliver_notifications: { everyMs: 15_000 },
       booking_reminders: { everyMs: 60_000 },
       deal_ending_reminders: { everyMs: 300_000 },
+      venue_day_close: { everyMs: 300_000 },
+      weekly_reports: { everyMs: 900_000 },
     });
 
     const now = new Date('2026-09-26T09:00:00Z');
@@ -112,6 +114,29 @@ describe('createJobs', () => {
     ).find((job) => job.name === 'max_webhook_guard');
 
     await expect(guard?.run(new Date('2026-09-26T09:00:00Z'))).rejects.toBe(failure);
+  });
+
+  it('queues the day close and the weekly report through the reports service', async () => {
+    const outbox = {
+      enqueue: vi.fn(() => Promise.resolve()),
+      flush: vi.fn(),
+      deliverDue: vi.fn(() =>
+        Promise.resolve({ sent: 0, skipped: 0, unreachable: 0, failed: 0, expired: 0, retried: 0 }),
+      ),
+    };
+    const queueDayClose = vi.fn(() => Promise.resolve(0));
+    const queueWeekly = vi.fn(() => Promise.resolve(0));
+    const services = fakeServices({
+      reports: { ...fakeServices().reports, queueDayClose, queueWeekly },
+    });
+    const list = jobs({}, { outbox, services });
+    const now = new Date('2026-10-19T06:00:00Z');
+
+    await list.find((job) => job.name === 'venue_day_close')?.run(now);
+    await list.find((job) => job.name === 'weekly_reports')?.run(now);
+
+    expect(queueDayClose).toHaveBeenCalledWith(now);
+    expect(queueWeekly).toHaveBeenCalledWith(now);
   });
 
   it('expires bookings across all guests and venues', async () => {

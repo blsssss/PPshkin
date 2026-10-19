@@ -37,6 +37,10 @@ const outbox = createOutbox({
   bot: () => ({ messenger: fakeMessenger({ sendToUser }), username: 'ppshkin_bot' }),
   miniAppEnabled: true,
   diaryDay: () => Promise.reject(new Error('the diary is not used here')),
+  reports: {
+    build: () => Promise.reject(new Error('reports are not used here')),
+    file: () => Promise.reject(new Error('reports are not used here')),
+  },
   background,
   logger: fakeLogger(),
 });

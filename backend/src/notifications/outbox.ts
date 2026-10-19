@@ -1,4 +1,5 @@
 import { importScreen } from '../bot/venue/menu.ts';
+import { dayCloseScreen, weekReportScreen } from '../bot/venue/reports.ts';
 import type { Pool, Queryable } from '../db/pool.ts';
 import type { Venue } from '../domain/models.ts';
 import {
@@ -16,6 +17,7 @@ import {
   type NotificationEvent,
   type NotificationSubject,
 } from '../domain/notifications.ts';
+import { closeableRows } from '../domain/reports.ts';
 import type { Permission } from '../domain/roles.ts';
 import { MaxApiError, UserUnreachableError } from '../integrations/max/errors.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
@@ -34,8 +36,10 @@ import * as notifications from '../repositories/notifications.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
 import type { DiaryDay } from '../services/diary.ts';
+import type { ReportFile, ReportsService } from '../services/reports.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
+import { addDays } from '../shared/time.ts';
 import type { NotificationStats } from './stats.ts';
 import {
   accountInactiveMessage,
@@ -71,6 +75,7 @@ export interface OutboxDependencies {
   bot: () => LiveBot | null;
   miniAppEnabled: boolean;
   diaryDay: (userId: number) => Promise<DiaryDay>;
+  reports: Pick<ReportsService, 'build' | 'file'>;
   background: BackgroundTasks;
   logger: MaxLogger;
   stats?: NotificationStats;
@@ -89,7 +94,7 @@ export interface Outbox extends Notifications {
   deliverDue(now: Date): Promise<DeliveryReport>;
 }
 
-type Composed = { message: OutgoingMessage } | { skip: string };
+type Composed = { message: OutgoingMessage; files?: ReportFile[] } | { skip: string };
 
 const SECOND_MS = 1000;
 
@@ -139,6 +144,7 @@ export function createOutbox({
   bot,
   miniAppEnabled,
   diaryDay,
+  reports,
   background,
   logger,
   stats,
@@ -219,6 +225,23 @@ export function createOutbox({
     if (found.status === 'applied') return skip('menu import is already applied');
     if (found.status === 'processing') return skip('menu import is still processing');
     return send(importScreen(found, { botUsername: username, miniAppEnabled }));
+  }
+
+  async function composeReport(subject: NotificationSubject): Promise<Composed> {
+    const id = idOf(subject, 'venueId');
+    const venue = id === null ? null : await findVenue(id);
+    if (!venue || !('period' in subject)) return skip('venue is gone');
+    if (subject.period === 'day') {
+      const report = await reports.build(venue, subject.date, subject.date);
+      return closeableRows(report.rows).length === 0
+        ? skip('the day is already closed')
+        : send(dayCloseScreen(venue, report));
+    }
+    const report = await reports.build(venue, subject.date, addDays(subject.date, 6));
+    return {
+      message: weekReportScreen(venue, report, miniAppEnabled),
+      files: [await reports.file(venue, report, 'csv')],
+    };
   }
 
   async function composeInactiveWarning(subject: NotificationSubject, createdAt: Date): Promise<Composed> {
@@ -308,7 +331,7 @@ export function createOutbox({
       case 'menu_import_done':
         return composeImport(subject, username);
       case 'venue_report_ready':
-        return Promise.resolve(skip('venue reports are not available yet'));
+        return composeReport(subject);
       case 'account_inactive_warning':
         return composeInactiveWarning(subject, createdAt);
       case 'booking_venue_blocked':
@@ -354,7 +377,15 @@ export function createOutbox({
         logger.debug({ ...context, reason: composed.skip }, 'notification skipped');
         return;
       }
-      const sent = await live.messenger.sendToUser(row.userId, { ...composed.message, notify: !row.silent });
+      const fileTokens: string[] = [];
+      for (const file of composed.files ?? []) {
+        fileTokens.push(await live.messenger.uploadFile(file.data, file.filename));
+      }
+      const sent = await live.messenger.sendToUser(row.userId, {
+        ...composed.message,
+        ...(fileTokens.length > 0 ? { fileTokens } : {}),
+        notify: !row.silent,
+      });
       const sentAt = clock.now();
       await notifications.markSent(pool, row.id, sent.messageId, sentAt);
       stats?.delivered(row.kind, (sentAt.getTime() - row.createdAt.getTime()) / SECOND_MS);

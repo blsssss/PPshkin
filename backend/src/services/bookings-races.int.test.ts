@@ -25,6 +25,10 @@ const notifications = createOutbox({
   bot: () => null,
   miniAppEnabled: false,
   diaryDay: () => Promise.reject(new Error('diary is not used here')),
+  reports: {
+    build: () => Promise.reject(new Error('reports are not used here')),
+    file: () => Promise.reject(new Error('reports are not used here')),
+  },
   background: createBackgroundTasks({ error: () => undefined }),
   logger: fakeLogger(),
 });
