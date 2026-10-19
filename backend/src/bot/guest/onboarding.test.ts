@@ -178,7 +178,9 @@ describe('onboarding', () => {
   });
 
   it('keeps a start link that came before the consent and opens it right after', async () => {
-    const venue = vi.fn(() => Promise.resolve({ venue: sampleVenue, openNow: true, menu: [], deals: [] }));
+    const venue = vi.fn(() =>
+      Promise.resolve({ venue: sampleVenue, seller: null, openNow: true, menu: [], deals: [] }),
+    );
     const chat = botChat();
     chat.world.services.catalog.venue = venue;
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { answers, payloads, sent, texts } from '../../../test/bot.ts';
-import { OWNER_ID, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
+import { OWNER_ID, venueChat, type VenueChat, OWNER_ACTOR } from '../../../test/venue-bot.ts';
 import type { MenuItem } from '../../domain/models.ts';
 
 const REDEEM_CODE = { type: 'callback', text: 'Погасить код', payload: 'vn:redeem' };
@@ -46,8 +46,8 @@ describe('venue bookings', () => {
     );
     expect(reply?.message?.buttons).toEqual([
       [
-        { type: 'callback', text: 'Погасить K7M2QX', payload: 'vn:rd:K7M2QX' },
-        { type: 'callback', text: 'Погасить P4X9ZZ', payload: 'vn:rd:P4X9ZZ' },
+        { type: 'callback', text: 'Погасить K7M2QX', payload: 'vn:rd:K7M2QX:7' },
+        { type: 'callback', text: 'Погасить P4X9ZZ', payload: 'vn:rd:P4X9ZZ:7' },
       ],
       [REDEEM_CODE],
       [HOME],
@@ -73,7 +73,7 @@ describe('venue bookings', () => {
     const [question] = answers(await chat.press('vn:rd:K7M2QX', 'mid.notice'));
     expect(question?.message).toEqual({
       text: 'Погасить бронь K7M2QX: Эклер, 120 ₽? Сверьте код с экраном гостя.',
-      buttons: [[{ type: 'callback', text: 'Погасить', payload: 'vn:rd_ok:K7M2QX' }, CANCEL]],
+      buttons: [[{ type: 'callback', text: 'Погасить', payload: 'vn:rd_ok:K7M2QX:7' }, CANCEL]],
       images: [],
     });
 
@@ -84,7 +84,7 @@ describe('venue bookings', () => {
       images: [],
     });
     expect(sent(redeemed)[0]).toMatchObject({ text: REDEEMED, buttons: AFTER_REDEEM });
-    expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX', 'bot');
+    expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ACTOR, 'K7M2QX', 'bot');
     expect(chat.fake.state.bookings[0]?.status).toBe('redeemed');
   });
 
@@ -191,7 +191,7 @@ describe('redeeming a typed code', () => {
       const [reply] = sent(await chat.send(input));
 
       expect(reply).toMatchObject({ text: REDEEMED, buttons: AFTER_REDEEM });
-      expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ID, 'K7M2QX', 'bot');
+      expect(chat.fake.services.bookings.redeem).toHaveBeenCalledWith(OWNER_ACTOR, 'K7M2QX', 'bot');
       expect(chat.states.peek(OWNER_ID).flow).toBeNull();
     },
   );
@@ -257,7 +257,7 @@ describe('staff start link', () => {
     const [reply] = sent(await chat.start('r_k7m2qx'));
 
     expect(reply?.text).toBe('Погасить бронь K7M2QX: Эклер, 120 ₽? Сверьте код с экраном гостя.');
-    expect(payloads(reply)).toEqual(['vn:rd_ok:K7M2QX', 'vn:rd_no']);
+    expect(payloads(reply)).toEqual(['vn:rd_ok:K7M2QX:7', 'vn:rd_no']);
   });
 
   it('accepts the link typed as a start command', async () => {
@@ -275,13 +275,26 @@ describe('staff start link', () => {
     expect(payloads(reply)).toEqual(['cmd:eat', 'cmd:today', 'cmd:profile']);
   });
 
-  it('opens the link after the personal data consent', async () => {
+  it('opens the link for staff without the guest consent', async () => {
     const chat = ownerChat();
     chat.world.consents.clear();
 
+    const [reply] = sent(await chat.start('r_K7M2QX'));
+
+    expect(reply?.text).toBe('Погасить бронь K7M2QX: Эклер, 120 ₽? Сверьте код с экраном гостя.');
+    expect(chat.states.peek(OWNER_ID).pendingStart).toBeNull();
+  });
+
+  it('keeps the link of a guest without a venue until the consent', async () => {
+    const chat = venueChat();
+    chat.world.consents.clear();
+
     await chat.start('r_K7M2QX');
+    expect(chat.states.peek(OWNER_ID).pendingStart).toBe('r_K7M2QX');
     const replies = await chat.press('cs:pd:ok');
 
-    expect(texts(replies)).toContain('Погасить бронь K7M2QX: Эклер, 120 ₽? Сверьте код с экраном гостя.');
+    expect(texts(replies).some((text) => text.startsWith('Эта ссылка для сотрудников заведения.'))).toBe(
+      true,
+    );
   });
 });

@@ -6,6 +6,7 @@ import {
   venueChat,
   withImportResult,
   type VenueChat,
+  OWNER_ACTOR,
 } from '../../../test/venue-bot.ts';
 import { DownloadTooLargeError } from '../../integrations/max/errors.ts';
 import { conflict } from '../../shared/errors.ts';
@@ -122,7 +123,7 @@ describe('menu import', () => {
 
     const [started, summary] = sent(await withImportResult(chat, chat.send(MENU_TEXT)));
     expect(started?.text).toBe('Разбираю меню, это несколько секунд.');
-    expect(chat.fake.services.menuImports.fromText).toHaveBeenCalledWith(OWNER_ID, MENU_TEXT);
+    expect(chat.fake.services.menuImports.fromText).toHaveBeenCalledWith(OWNER_ACTOR, MENU_TEXT);
     expect(chat.world.recognizeText).not.toHaveBeenCalled();
     expect(chat.states.peek(OWNER_ID).flow).toBeNull();
 
@@ -165,7 +166,7 @@ describe('menu import', () => {
       ],
     });
     expect(chat.fake.services.menuImports.apply).toHaveBeenCalledWith(
-      OWNER_ID,
+      OWNER_ACTOR,
       importId,
       [parsedItem()],
       'bot',
@@ -257,7 +258,7 @@ describe('menu import', () => {
     expect(chat.api.sendAction).toHaveBeenCalledWith(CHAT_ID, 'typing_on');
     expect(chat.api.download).toHaveBeenCalledWith('https://files.max.example/photo-0.jpg', 15 * 1024 * 1024);
     expect(chat.fake.services.menuImports.fromPhoto).toHaveBeenCalledWith(
-      OWNER_ID,
+      OWNER_ACTOR,
       Buffer.from('jpeg bytes'),
     );
     expect(chat.world.recognizePhoto).not.toHaveBeenCalled();
@@ -289,7 +290,10 @@ describe('menu import', () => {
     await withImportResult(chat, chat.send('Сырники 250 г 350 ₽'));
 
     expect(chat.fake.services.menuImports.fromText).toHaveBeenCalledTimes(2);
-    expect(chat.fake.services.menuImports.fromText).toHaveBeenLastCalledWith(OWNER_ID, 'Сырники 250 г 350 ₽');
+    expect(chat.fake.services.menuImports.fromText).toHaveBeenLastCalledWith(
+      OWNER_ACTOR,
+      'Сырники 250 г 350 ₽',
+    );
     expect(chat.world.recognizeText).not.toHaveBeenCalled();
   });
 

@@ -75,6 +75,18 @@ export const VENUE_BUTTONS = {
   redeemMore: 'Погасить ещё',
   today: 'Сегодня',
   week: '7 дней',
+  switchVenue: 'Сменить заведение',
+  team: 'Сотрудники',
+  inviteCashier: 'Пригласить кассира',
+  inviteManager: 'Пригласить управляющего',
+  accept: 'Принять',
+  decline: 'Отказаться',
+} as const;
+
+export const ROLE_LABELS = {
+  owner: 'владелец',
+  manager: 'управляющий',
+  cashier: 'кассир',
 } as const;
 
 export const VENUE_ERROR_TEXTS = {
@@ -93,12 +105,29 @@ export const VENUE_ERROR_TEXTS = {
   menu_item_unavailable: 'Позиция скрыта от гостей, включите её в кабинете',
   menu_item_not_found: 'Позиция уже удалена, обновите список',
   deal_not_found: 'Позиция уже удалена, обновите список',
+  venue_forbidden: 'Это действие доступно владельцу или управляющему.',
+  invite_not_found: 'Приглашение не найдено или отозвано. Попросите новое',
+  invite_expired: 'Срок приглашения вышел. Попросите новое',
+  invite_used: 'Это приглашение уже принято',
+  already_member: 'Вы уже работаете в этой компании: кабинет в /venue',
+  invite_limit: 'Действующих приглашений уже 20, отзовите лишние в кабинете',
+  company_required:
+    'Вы владеете несколькими компаниями: подключите заведение в кабинете, там можно выбрать компанию',
+  company_forbidden: 'Это действие доступно владельцу или управляющему.',
   booking_not_found: 'Бронь с таким кодом не найдена в вашем заведении',
   booking_expired: 'Срок брони истёк. Гость может оформить новую',
   booking_not_active: 'Бронь уже погашена или отменена',
 } as const;
 
 export type VenueErrorCode = keyof typeof VENUE_ERROR_TEXTS;
+
+export const PICK_VENUE = 'Выберите заведение';
+export const TEAM_EMPTY = 'Пока вы здесь одни. Пригласите сотрудника ссылкой.';
+export const INVITE_DECLINED = 'Хорошо, приглашение не принято.';
+export const INVITE_ACCEPTED = [
+  'Готово, кабинет в /venue.',
+  'Для работы в кабинете мы обрабатываем ваш id и имя в MAX, вашу роль и ваши действия в кабинете. Согласие гостя на дневник питания для этого не нужно.',
+].join('\n');
 
 export const WIZARD_STALE = 'Мастер устарел, начните заново';
 
@@ -162,6 +191,10 @@ export const CODE_PROMPT = 'Введите код с экрана гостя: 6 
 export const CODE_INVALID = 'Код состоит из 6 латинских букв и цифр, попробуйте ещё раз';
 export const CODE_RETRY = 'Проверьте код и введите его ещё раз.';
 export const REDEEM_KEPT = 'Хорошо, бронь не погашена.';
+export function whichVenueText(code: string): string {
+  return `Бронь ${code} есть в нескольких ваших заведениях. В каком погасить?`;
+}
+
 export const STAFF_ONLY = 'Эта ссылка для сотрудников заведения.';
 
 function itemName(name: string): string {

@@ -12,6 +12,7 @@ import {
   BUTTONS,
   calendarDate,
   DELETE_QUESTION,
+  soleOwnerWarning,
   GOAL_QUESTION,
   KCAL_PROMPT,
   kcalQuestion,
@@ -59,9 +60,9 @@ export async function profileMessage(profile: ProfileService, userId: number): P
   return renderProfile(await profile.get(userId));
 }
 
-function deleteQuestion(): OutgoingMessage {
+function deleteQuestion(soleOwned: readonly { name: string }[]): OutgoingMessage {
   return {
-    text: DELETE_QUESTION,
+    text: [DELETE_QUESTION, ...soleOwned.map(({ name }) => soleOwnerWarning(name))].join('\n'),
     buttons: [
       [
         callback(BUTTONS.confirmDelete, payload('ac', 'del_ok')),
@@ -138,7 +139,7 @@ export function createProfileModule({ services, states }: BotKit): BotModule {
         await ctx.reply(await profileMessage(profile, ctx.user.id));
       },
       delete: async (ctx) => {
-        await ctx.reply(deleteQuestion());
+        await ctx.reply(deleteQuestion(await account.soleOwnerships(ctx.user.id)));
       },
     },
     callbacks: {
@@ -161,7 +162,7 @@ export function createProfileModule({ services, states }: BotKit): BotModule {
       }),
       ac: byAction({
         del: async (ctx) => {
-          await ctx.answer({ message: deleteQuestion() });
+          await ctx.answer({ message: deleteQuestion(await account.soleOwnerships(ctx.user.id)) });
         },
         del_ok: async (ctx) => {
           await account.deleteAccount(ctx.user.id);

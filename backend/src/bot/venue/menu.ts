@@ -3,6 +3,7 @@ import { MAX_IMAGE_BYTES } from '../../http/uploads.ts';
 import { DownloadTooLargeError } from '../../integrations/max/errors.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
+import type { Venue } from '../../domain/models.ts';
 import type { AppliedMenuImport } from '../../services/menu-imports.ts';
 import { answerStale, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit } from '../context.ts';
@@ -10,7 +11,7 @@ import { link, miniAppUrl } from '../keyboards.ts';
 import { BUTTONS, PHOTO_DOWNLOAD_FAILED } from '../texts.ts';
 import { looksLikeMenu, MENU_TEXT_LIMIT } from './input.ts';
 import { appRow, homeRow, newDealRow, uploadRow, venueButton } from './keyboards.ts';
-import { clearFlow, knownFailure, ownerCallback, ownerFlow, saveFlow } from './owner.ts';
+import { actorAt, clearFlow, knownFailure, saveFlow, venueCallback, venueFlow } from './owner.ts';
 import {
   hasPrice,
   IMPORT_FAILED,
@@ -85,7 +86,7 @@ export function importScreen(found: MenuImport, audience: ImportAudience): Outgo
 }
 
 export function createMenuScreens({ services, messenger, logger }: BotKit) {
-  const { venues, menu, menuImports } = services;
+  const { companies, menu, menuImports } = services;
 
   async function start(ctx: BotContext, run: () => Promise<MenuImport>, started: string): Promise<void> {
     try {
@@ -115,25 +116,25 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     return null;
   }
 
-  async function importPhoto(ctx: BotContext, url: string, several: boolean): Promise<void> {
+  async function importPhoto(ctx: BotContext, venue: Venue, url: string, several: boolean): Promise<void> {
     if (ctx.chatId !== null) await messenger.sendTyping(ctx.chatId);
     const image = await download(ctx, url);
     if (!image) return;
     const started = several ? `${MENU_FIRST_PHOTO_ONLY}\n${RECOGNIZING_PHOTO}` : RECOGNIZING_PHOTO;
-    await start(ctx, () => menuImports.fromPhoto(ctx.user.id, image), started);
+    await start(ctx, () => menuImports.fromPhoto(actorAt(ctx, venue), image), started);
   }
 
-  async function importText(ctx: BotContext, text: string): Promise<void> {
+  async function importText(ctx: BotContext, venue: Venue, text: string): Promise<void> {
     if (text.length > MENU_TEXT_LIMIT) await ctx.reply(uploadPrompt(MENU_TEXT_TOO_LONG));
     else if (!looksLikeMenu(text)) await ctx.reply(uploadPrompt(MENU_TEXT_WITHOUT_PRICES));
-    else await start(ctx, () => menuImports.fromText(ctx.user.id, text), RECOGNIZING_TEXT);
+    else await start(ctx, () => menuImports.fromText(actorAt(ctx, venue), text), RECOGNIZING_TEXT);
   }
 
-  const show = ownerCallback(venues, async (ctx) => {
-    await ctx.answer({ message: menuScreen(await menu.list(ctx.user.id), ctx.miniAppEnabled) });
+  const show = venueCallback(companies, 'menu.edit', async (ctx, venue) => {
+    await ctx.answer({ message: menuScreen(await menu.list(actorAt(ctx, venue)), ctx.miniAppEnabled) });
   });
 
-  const upload = ownerCallback(venues, async (ctx) => {
+  const upload = venueCallback(companies, 'menu.edit', async (ctx) => {
     await saveFlow(ctx, { name: 'menu_upload' });
     await ctx.answer({ message: uploadPrompt(UPLOAD_PROMPT) });
   });
@@ -143,7 +144,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     await ctx.answer({ message: { text: UPLOAD_CANCELLED, buttons: [menuRow()] } });
   }
 
-  const apply = ownerCallback(venues, async (ctx, _venue, [value]) => {
+  const apply = venueCallback(companies, 'menu.edit', async (ctx, venue, [value]) => {
     const importId = parseId(value);
     if (importId === null) {
       await answerStale(ctx);
@@ -151,7 +152,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     }
     let found: MenuImport;
     try {
-      found = await menuImports.get(ctx.user.id, importId);
+      found = await menuImports.get(actorAt(ctx, venue), importId);
     } catch (error) {
       knownFailure(error, ['import_not_found']);
       await ctx.answer({ message: { text: VENUE_ERROR_TEXTS.import_not_found, buttons: [uploadRow()] } });
@@ -169,7 +170,7 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     }
     let applied: AppliedMenuImport;
     try {
-      applied = await menuImports.apply(ctx.user.id, importId, priced, 'bot');
+      applied = await menuImports.apply(actorAt(ctx, venue), importId, priced, 'bot');
     } catch (error) {
       const failure = knownFailure(error, APPLY_FAILURES);
       await ctx.reply({ text: VENUE_ERROR_TEXTS[failure], buttons: [menuRow()] });
@@ -186,13 +187,14 @@ export function createMenuScreens({ services, messenger, logger }: BotKit) {
     });
   });
 
-  const onUpload = ownerFlow(
-    venues,
+  const onUpload = venueFlow(
+    companies,
+    'menu.edit',
     (flow, message) => flow.name === 'menu_upload' && (message.photos.length > 0 || message.text !== null),
-    async (ctx, _venue, message) => {
+    async (ctx, venue, message) => {
       const [photo] = message.photos;
-      if (photo) await importPhoto(ctx, photo.url, message.photos.length > 1);
-      else if (message.text !== null) await importText(ctx, message.text);
+      if (photo) await importPhoto(ctx, venue, photo.url, message.photos.length > 1);
+      else if (message.text !== null) await importText(ctx, venue, message.text);
       return true;
     },
   );

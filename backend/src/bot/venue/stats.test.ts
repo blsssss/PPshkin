@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { answers } from '../../../test/bot.ts';
-import { analyticsFor, OWNER_ID, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
+import { analyticsFor, OWNER_ACTOR, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
 
 const PERIOD_BUTTONS = [
   { type: 'callback', text: 'Сегодня', payload: 'vn:stats:today' },
@@ -20,7 +20,7 @@ describe('venue statistics', () => {
 
     const [reply] = answers(await chat.press('vn:stats:today', 'mid.home'));
 
-    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ID, {
+    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ACTOR, {
       from: '2026-09-26',
       to: '2026-09-26',
     });
@@ -42,7 +42,7 @@ describe('venue statistics', () => {
 
     const [reply] = answers(await chat.press('vn:stats:week', 'mid.stats'));
 
-    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ID, {});
+    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ACTOR, {});
     expect(reply?.message?.text).toMatch(/^\*\*Статистика за 7 дней, 20-26 сентября\*\*\n/);
     expect(reply?.message?.buttons).toEqual([
       PERIOD_BUTTONS,

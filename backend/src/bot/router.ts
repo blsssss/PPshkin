@@ -37,10 +37,14 @@ interface Session {
   answered(): boolean;
   hasPlaceholder(): boolean;
   consented(): Promise<boolean>;
+  staff(): Promise<boolean>;
 }
 
 const OPEN_COMMANDS = new Set(['start', 'help', 'delete']);
-const OPEN_CALLBACKS = ['cs:pd', 'ac', 'nt', `${COMMAND_PREFIX}:help`];
+const OPEN_CALLBACKS = ['cs:pd', 'ac', 'nt', 'vn:inv', `${COMMAND_PREFIX}:help`];
+const STAFF_COMMANDS = new Set(['venue']);
+const STAFF_CALLBACK_PREFIX = 'vn';
+const STAFF_FLOWS = new Set<string>(['venue_create', 'menu_upload', 'deal_wizard', 'redeem_input']);
 const COMMAND = /^\/([a-z_]+)(?:@\S+)?(?:\s+([\s\S]*))?$/i;
 const RETIRED_KEYBOARDS_LIMIT = 10_000;
 
@@ -81,6 +85,7 @@ export function createRouter(options: RouterOptions): UpdateHandler {
     let answered = false;
     let placeholderId: string | null = null;
     let consent: Promise<boolean> | undefined;
+    let staff: Promise<boolean> | undefined;
     const pressed = event.type === 'callback' ? event.messageId : null;
 
     const ctx: BotContext = {
@@ -138,6 +143,10 @@ export function createRouter(options: RouterOptions): UpdateHandler {
         consent ??= services.consents.status(user.id).then(({ personalData }) => personalData.granted);
         return consent;
       },
+      staff() {
+        staff ??= services.companies.workplaces(user.id).then((places) => places.length > 0);
+        return staff;
+      },
     };
   }
 
@@ -154,7 +163,8 @@ export function createRouter(options: RouterOptions): UpdateHandler {
       await session.ctx.reply(helpMessage());
       return;
     }
-    if (!OPEN_COMMANDS.has(name) && !(await passesConsent(session))) return;
+    const open = OPEN_COMMANDS.has(name) || (STAFF_COMMANDS.has(name) && (await session.staff()));
+    if (!open && !(await passesConsent(session))) return;
     await handler(session.ctx, args);
   }
 
@@ -165,8 +175,9 @@ export function createRouter(options: RouterOptions): UpdateHandler {
       await runCommand(session, command.name, command.args);
       return;
     }
-    if (!(await passesConsent(session))) return;
     const flow = ctx.state.flow;
+    const staffFlow = flow !== null && STAFF_FLOWS.has(flow.name) && (await session.staff());
+    if (!staffFlow && !(await passesConsent(session))) return;
     const flowHandler = flow ? registry.flow(flow.name) : undefined;
     if (flowHandler && (await flowHandler(ctx, message))) return;
     const { location, photos, text } = registry.messages();
@@ -187,7 +198,9 @@ export function createRouter(options: RouterOptions): UpdateHandler {
       await ctx.answer({ notification: NOTICES.staleButton });
       return;
     }
-    if (!isOpenCallback(event.payload) && !(await passesConsent(session))) return;
+    const open =
+      isOpenCallback(event.payload) || (route.prefix === STAFF_CALLBACK_PREFIX && (await session.staff()));
+    if (!open && !(await passesConsent(session))) return;
     if (route.prefix === COMMAND_PREFIX) {
       const command = registry.command(route.args[0] ?? '');
       if (!command) {

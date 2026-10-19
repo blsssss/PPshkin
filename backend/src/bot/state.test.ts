@@ -100,6 +100,7 @@ describe('chat state', () => {
       offerQueue: null,
       pendingStart: null,
       contextualOfferOn: null,
+      activeVenueId: null,
     });
   });
 

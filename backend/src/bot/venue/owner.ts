@@ -1,14 +1,17 @@
 import type { Venue } from '../../domain/models.ts';
+import { can, type Permission, type Role } from '../../domain/roles.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
-import type { VenuesService } from '../../services/venues.ts';
+import type { VenueActor, Workplace } from '../../services/access.ts';
+import type { CompaniesService } from '../../services/companies.ts';
 import { AppError } from '../../shared/errors.ts';
 import { byAction } from '../callbacks.ts';
 import type { BotContext, CallbackHandler, FlowHandler, MessageInput } from '../context.ts';
 import { startFlow, type Flow } from '../state.ts';
 import { NOTICES } from '../texts.ts';
-import { VENUE_ERROR_TEXTS, type VenueErrorCode } from './texts.ts';
+import { venueButton } from './keyboards.ts';
+import { PICK_VENUE, ROLE_LABELS, VENUE_ERROR_TEXTS, type VenueErrorCode } from './texts.ts';
 
-type VenueCallback = (ctx: BotContext, venue: Venue, args: string[]) => Promise<void>;
+type VenueCallback = (ctx: BotContext, venue: Venue, args: string[], role: Role) => Promise<void>;
 type VenueFlowHandler = (ctx: BotContext, venue: Venue, message: MessageInput) => Promise<boolean>;
 
 interface WizardFlow {
@@ -28,13 +31,63 @@ export function knownFailure<Code extends VenueErrorCode>(error: unknown, codes:
   return code;
 }
 
-export async function findVenue(venues: VenuesService, ownerId: number): Promise<Venue | null> {
-  try {
-    return await venues.get(ownerId);
-  } catch (error) {
-    knownFailure(error, ['venue_not_found']);
-    return null;
-  }
+export interface VenueScope {
+  place: Workplace;
+  actor: VenueActor;
+}
+
+type Resolution =
+  | { kind: 'ok'; scope: VenueScope }
+  | { kind: 'none' }
+  | { kind: 'pick'; places: Workplace[] }
+  | { kind: 'forbidden' };
+
+export function actorAt(ctx: BotContext, venue: Venue): VenueActor {
+  return { userId: ctx.user.id, venueId: venue.id };
+}
+
+export function activeVenueIn(
+  places: readonly Workplace[],
+  activeVenueId: number | null,
+  explicitVenueId?: number,
+): Workplace | 'pick' | null {
+  if (explicitVenueId !== undefined)
+    return places.find((place) => place.venue.id === explicitVenueId) ?? null;
+  const [first, second] = places;
+  if (!first) return null;
+  if (!second) return first;
+  return places.find((place) => place.venue.id === activeVenueId) ?? 'pick';
+}
+
+export async function resolveScope(
+  companies: CompaniesService,
+  ctx: BotContext,
+  permission: Permission,
+  explicitVenueId?: number,
+): Promise<Resolution> {
+  const places = await companies.workplaces(ctx.user.id);
+  const found = activeVenueIn(places, ctx.state.activeVenueId, explicitVenueId);
+  if (found === null) return { kind: 'none' };
+  if (found === 'pick') return { kind: 'pick', places };
+  if (!can(found.role, permission)) return { kind: 'forbidden' };
+  return { kind: 'ok', scope: { place: found, actor: actorAt(ctx, found.venue) } };
+}
+
+export function pickScreen(places: readonly Workplace[]): OutgoingMessage {
+  return {
+    text: PICK_VENUE,
+    buttons: places.map(({ venue, role }) => [
+      venueButton(`${venue.name}, ${ROLE_LABELS[role]}`, 'pick', venue.id),
+    ]),
+  };
+}
+
+function refusal(resolution: Exclude<Resolution, { kind: 'ok' }>): OutgoingMessage {
+  if (resolution.kind === 'pick') return pickScreen(resolution.places);
+  return {
+    text:
+      resolution.kind === 'forbidden' ? VENUE_ERROR_TEXTS.venue_forbidden : VENUE_ERROR_TEXTS.venue_not_found,
+  };
 }
 
 export function withDefault(
@@ -45,26 +98,33 @@ export function withDefault(
   return (ctx, args) => (args.length === 0 ? fallback(ctx, args) : dispatch(ctx, args));
 }
 
-export function ownerCallback(venues: VenuesService, handler: VenueCallback): CallbackHandler {
+export function venueCallback(
+  companies: CompaniesService,
+  permission: Permission,
+  handler: VenueCallback,
+  explicitVenue?: (args: string[]) => number | undefined,
+): CallbackHandler {
   return async (ctx, args) => {
-    const venue = await findVenue(venues, ctx.user.id);
-    if (venue) await handler(ctx, venue, args);
-    else await ctx.answer({ message: { text: VENUE_ERROR_TEXTS.venue_not_found } });
+    const resolution = await resolveScope(companies, ctx, permission, explicitVenue?.(args));
+    if (resolution.kind === 'ok') {
+      await handler(ctx, resolution.scope.place.venue, args, resolution.scope.place.role);
+    } else await ctx.answer({ message: refusal(resolution) });
   };
 }
 
-export function ownerFlow(
-  venues: VenuesService,
+export function venueFlow(
+  companies: CompaniesService,
+  permission: Permission,
   accepts: (flow: Flow, message: MessageInput) => boolean,
   handler: VenueFlowHandler,
 ): FlowHandler {
   return async (ctx, message) => {
     const flow = ctx.state.flow;
     if (!flow || !accepts(flow, message)) return false;
-    const venue = await findVenue(venues, ctx.user.id);
-    if (venue) return handler(ctx, venue, message);
+    const resolution = await resolveScope(companies, ctx, permission);
+    if (resolution.kind === 'ok') return handler(ctx, resolution.scope.place.venue, message);
     await ctx.saveState({ ...ctx.state, flow: null });
-    await ctx.reply({ text: VENUE_ERROR_TEXTS.venue_not_found });
+    await ctx.reply(refusal(resolution));
     return true;
   };
 }

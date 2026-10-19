@@ -5,6 +5,7 @@ import { createDealScreens } from './deals.ts';
 import { createMenuScreens } from './menu.ts';
 import { withDefault } from './owner.ts';
 import { createStatsScreens } from './stats.ts';
+import { createTeamScreens } from './team.ts';
 import { createWorkspace } from './workspace.ts';
 
 export function createVenueModule(kit: BotKit): BotModule {
@@ -13,6 +14,7 @@ export function createVenueModule(kit: BotKit): BotModule {
   const deals = createDealScreens(kit);
   const bookings = createBookingScreens(kit);
   const stats = createStatsScreens(kit);
+  const team = createTeamScreens(kit);
 
   return {
     commands: { venue: workspace.open },
@@ -21,6 +23,10 @@ export function createVenueModule(kit: BotKit): BotModule {
         home: workspace.home,
         new: workspace.create,
         demo: workspace.claimDemo,
+        pick: workspace.pick,
+        switch: workspace.switchVenue,
+        team: team.team,
+        inv: team.invites,
         menu: withDefault(menu.show, { upload: menu.upload, cancel: menu.cancelUpload }),
         imp: byAction({ apply: menu.apply }),
         deals: deals.list,
@@ -39,6 +45,6 @@ export function createVenueModule(kit: BotKit): BotModule {
       deal_wizard: deals.onInput,
       redeem_input: bookings.onCode,
     },
-    startLinks: { r: bookings.staffLink },
+    startLinks: { r: bookings.staffLink, j: team.joinLink },
   };
 }

@@ -398,6 +398,9 @@ export function notificationToggle(label: string, enabled: boolean): string {
 
 export const DELETE_QUESTION =
   'Удалить аккаунт и все данные: дневник, настройки, согласия? Активные брони отменятся. Это необратимо.';
+export function soleOwnerWarning(companyName: string): string {
+  return `Вы единственный владелец «${companyName}». Передайте права другому сотруднику, иначе заведение останется без владельца.`;
+}
 export const ACCOUNT_DELETED = 'Данные удалены. Чтобы начать заново, отправьте /start.';
 export const ACCOUNT_KEPT = 'Хорошо, ничего не удаляю.';
 

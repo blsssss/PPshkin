@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { answers, labels, payloads, sent } from '../../../test/bot.ts';
-import { OWNER_ID, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
+import { OWNER_ID, venueChat, type VenueChat, OWNER_ACTOR } from '../../../test/venue-bot.ts';
 import type { MenuItem } from '../../domain/models.ts';
 import { unprocessable } from '../../shared/errors.ts';
 import { FLOW_TTL_MS } from '../state.ts';
@@ -120,7 +120,7 @@ describe('hot deals list', () => {
     const [stopped] = answers(await chat.press(`vn:dl:stop_ok:${deal.id}`));
     expect(stopped?.message?.text).toBe('Снято с продажи. Уже оформленные брони действуют.');
     expect(stopped?.message?.buttons).toEqual([[DEALS]]);
-    expect(chat.fake.services.deals.cancel).toHaveBeenCalledWith(OWNER_ID, deal.id, 'bot');
+    expect(chat.fake.services.deals.cancel).toHaveBeenCalledWith(OWNER_ACTOR, deal.id, 'bot');
     expect(chat.fake.state.deals[0]?.cancelledAt).not.toBeNull();
   });
 
@@ -244,7 +244,7 @@ describe('hot deal wizard', () => {
       buttons: [[DEALS, { type: 'callback', text: 'Ещё одно', payload: 'vn:dl:new' }]],
     });
     expect(chat.fake.services.deals.create).toHaveBeenCalledWith(
-      OWNER_ID,
+      OWNER_ACTOR,
       {
         menuItemId: last.id,
         priceRub: 120,
@@ -638,7 +638,7 @@ describe('hot deal wizard', () => {
 
     await chat.press('vn:dl:ok', 'mid.b');
     expect(chat.fake.services.deals.create).toHaveBeenCalledExactlyOnceWith(
-      OWNER_ID,
+      OWNER_ACTOR,
       {
         menuItemId: croissant.id,
         priceRub: 75,

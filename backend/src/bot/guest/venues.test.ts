@@ -15,6 +15,7 @@ function consentedChat(miniAppEnabled = false): BotChat {
 
 const details: VenueDetailsView = {
   venue: sampleVenue,
+  seller: null,
   openNow: true,
   menu: [sampleMenuItem],
   deals: [{ deal: sampleDeal, item: sampleMenuItem, status: 'active' }],

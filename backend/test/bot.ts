@@ -239,6 +239,7 @@ export function guestWorld(options: { now?: string; services?: Partial<Services>
       },
     },
     account: {
+      soleOwnerships: vi.fn(() => Promise.resolve([])),
       deleteAccount: vi.fn(() => {
         meals.splice(0);
         consents.clear();

@@ -228,6 +228,18 @@ describe('/delete', () => {
     expect(texts(await chat.send('Сырники 350'))).toEqual([expect.stringContaining('Чтобы вести дневник')]);
   });
 
+  it('warns the only owner of a company with venues', async () => {
+    const chat = consentedChat();
+    chat.world.services.account.soleOwnerships = () => Promise.resolve([{ id: 3, name: 'Кофейни' }]);
+
+    const [question] = sent(await chat.send('/delete'));
+
+    expect(question?.text).toBe(
+      `${QUESTION}\nВы единственный владелец «Кофейни». Передайте права другому сотруднику, иначе заведение останется без владельца.`,
+    );
+    expect(question?.buttons[0]?.[0]).toMatchObject({ payload: 'ac:del_ok' });
+  });
+
   it('keeps everything when the guest cancels', async () => {
     const chat = consentedChat();
     await chat.send('/delete');
