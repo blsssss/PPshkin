@@ -63,6 +63,8 @@ jobs:
           MINI_APP_ENABLED: ${{ vars.MINI_APP_ENABLED }}
           PROACTIVE_OFFERS: ${{ vars.PROACTIVE_OFFERS }}
           ADMIN_USER_IDS: ${{ vars.ADMIN_USER_IDS }}
+          DADATA_API_KEY: ${{ secrets.DADATA_API_KEY }}
+          VENUE_VERIFICATION_REQUIRED: ${{ vars.VENUE_VERIFICATION_REQUIRED }}
           CHADGPT_API_KEY: ${{ secrets.CHADGPT_API_KEY }}
           DEMO_MODE: ${{ vars.DEMO_MODE }}
           DEMO_GUEST_TOKEN: ${{ secrets.DEMO_GUEST_TOKEN }}
