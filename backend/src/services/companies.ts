@@ -422,7 +422,7 @@ export function createCompaniesService({
           client,
           companyId,
           userId,
-          'staff.update',
+          'staff.role_change',
           memberId,
           { role, venueId },
           now,

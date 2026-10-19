@@ -144,7 +144,7 @@ describe('venue audit log', () => {
         actor_user_id: OWNER,
         target_type: 'deal',
         target_id: deal.id,
-        details: { item: 'Эклер', changes: { quantityLeft: 3 }, channel: 'miniapp' },
+        details: { item: 'Эклер', priceRub: 120, changes: { quantityLeft: 3 }, channel: 'miniapp' },
       },
       {
         action: 'deal.cancel',
@@ -158,6 +158,39 @@ describe('venue audit log', () => {
           endsAt: endsAt.toISOString(),
           channel: 'bot',
         },
+      },
+    ]);
+  });
+
+  it('records the stopped deals when a menu item with a live deal is archived', async () => {
+    const endsAt = new Date(clock.now().getTime() + 2 * HOUR);
+    const { deal } = await deals.create(
+      { userId: OWNER },
+      { menuItemId: eclair.id, priceRub: 120, quantity: 5, endsAt },
+      'miniapp',
+    );
+    await menu.archive({ userId: OWNER }, eclair.id, 'bot');
+
+    expect((await events()).slice(1)).toEqual([
+      {
+        action: 'deal.cancel',
+        actor_user_id: OWNER,
+        target_type: 'deal',
+        target_id: deal.id,
+        details: {
+          item: 'Эклер',
+          priceRub: 120,
+          quantityLeft: 5,
+          endsAt: endsAt.toISOString(),
+          channel: 'bot',
+        },
+      },
+      {
+        action: 'menu_item.archive',
+        actor_user_id: OWNER,
+        target_type: 'menu_item',
+        target_id: eclair.id,
+        details: { name: 'Эклер', channel: 'bot' },
       },
     ]);
   });

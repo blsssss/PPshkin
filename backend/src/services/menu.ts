@@ -170,7 +170,26 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
         await menuItems.archive(client, item.id, now);
-        await deals.cancelLiveForItem(client, item.id, now);
+        const cancelled = await deals.cancelLiveForItem(client, item.id, now);
+        for (const deal of cancelled) {
+          await audit.record(
+            client,
+            {
+              venueId: venue.id,
+              actorUserId: actor.userId,
+              action: 'deal.cancel',
+              target: { type: 'deal', id: deal.id },
+              channel,
+              details: {
+                item: item.name,
+                priceRub: deal.priceRub,
+                quantityLeft: deal.quantityLeft,
+                endsAt: deal.endsAt.toISOString(),
+              },
+            },
+            now,
+          );
+        }
         await audit.record(
           client,
           {

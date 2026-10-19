@@ -323,7 +323,7 @@ describe('members', () => {
     });
 
     expect(promoted).toMatchObject({ userId: CASHIER, role: 'manager', venueId: null });
-    expect(await auditActions()).toEqual([`staff.update:${zerno.id}`, `staff.update:${kazan.id}`].sort());
+    expect(await auditActions()).toEqual([`staff.role_change:${zerno.id}`, `staff.role_change:${kazan.id}`].sort());
   });
 
   it('moves a cashier to another venue of the company', async () => {

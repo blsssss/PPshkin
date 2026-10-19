@@ -11,7 +11,7 @@ export type AuditAction =
   | 'staff.invite'
   | 'staff.invite_revoke'
   | 'staff.join'
-  | 'staff.update'
+  | 'staff.role_change'
   | 'staff.remove'
   | 'admin.company.verify'
   | 'admin.company.reject'

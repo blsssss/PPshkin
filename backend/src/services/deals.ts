@@ -222,7 +222,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
             action: 'deal.update',
             target: { type: 'deal', id: deal.id },
             channel,
-            details: { item: item.name, changes },
+            details: { item: item.name, priceRub: deal.priceRub, changes },
           },
           now,
         );

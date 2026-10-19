@@ -132,13 +132,15 @@ export async function cancelLiveInVenue(
   return rowCount === 1;
 }
 
-export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<void> {
-  await db.query(
+export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<Deal[]> {
+  const { rows } = await db.query<DealRow>(
     `update deals as d set cancelled_at = $2
        from venues v
-      where v.id = d.venue_id and d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2`,
+      where v.id = d.venue_id and d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2
+      returning ${DEAL_COLUMNS}`,
     [menuItemId, now],
   );
+  return rows.map(mapDeal);
 }
 
 export async function findById(db: Queryable, id: number): Promise<Deal | null> {
