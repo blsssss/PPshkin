@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { fakeLogger } from '../../test/max-api.ts';
-import { createScheduler, type Job, type JobLock, type JobSchedule } from './scheduler.ts';
+import {
+  createScheduler,
+  type Job,
+  type JobLock,
+  type JobMetrics,
+  type JobRun,
+  type JobSchedule,
+} from './scheduler.ts';
 
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
@@ -19,13 +26,26 @@ function memoryLock(busy: ReadonlySet<string> = new Set()) {
   });
 }
 
+function memoryMetrics() {
+  const runs: JobRun[] = [];
+  const metrics: JobMetrics = {
+    record: (run) => {
+      runs.push(run);
+    },
+  };
+  return { runs, metrics };
+}
+
 function setup(jobs: Job[], options: { at?: string; lock?: JobLock } = {}) {
   const clock = fixedClock(options.at ?? '2026-09-26T09:00:00Z');
   const logger = fakeLogger();
   const lock = options.lock ?? memoryLock();
-  const scheduler = createScheduler({ lock, clock, logger, jobs });
-  return { clock, logger, lock, scheduler };
+  const { runs, metrics } = memoryMetrics();
+  const scheduler = createScheduler({ lock, clock, logger, jobs, metrics });
+  return { clock, logger, lock, scheduler, runs };
 }
+
+const results = (runs: readonly JobRun[]) => runs.map(({ job, result }) => [job, result]);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -92,10 +112,14 @@ describe('scheduler runs', () => {
     const expire = job('expire', { everyMs: MINUTE });
     const purge = job('purge', { everyMs: MINUTE });
     const lock = memoryLock(new Set(['expire']));
-    const { clock, logger, scheduler } = setup([expire, purge], { lock });
+    const { clock, logger, scheduler, runs } = setup([expire, purge], { lock });
 
     expect(await scheduler.runDue()).toEqual(['purge']);
     expect(expire.run).not.toHaveBeenCalled();
+    expect(results(runs)).toEqual([
+      ['expire', 'locked'],
+      ['purge', 'ok'],
+    ]);
     expect(logger.debug).toHaveBeenCalledWith(
       { job: 'expire' },
       'job skipped: another instance is running it',
@@ -125,9 +149,13 @@ describe('scheduler runs', () => {
     const failure = new Error('database is gone');
     const broken = job('broken', { everyMs: MINUTE }, () => Promise.reject(failure));
     const healthy = job('healthy', { everyMs: MINUTE });
-    const { clock, logger, scheduler } = setup([broken, healthy]);
+    const { clock, logger, scheduler, runs } = setup([broken, healthy]);
 
     expect(await scheduler.runDue()).toEqual(['broken', 'healthy']);
+    expect(results(runs)).toEqual([
+      ['broken', 'failed'],
+      ['healthy', 'ok'],
+    ]);
     expect(logger.error).toHaveBeenCalledWith({ err: failure, job: 'broken' }, 'job failed');
     expect(logger.debug).toHaveBeenCalledWith(
       { job: 'healthy', durationMs: expect.any(Number) as unknown },
@@ -141,10 +169,11 @@ describe('scheduler runs', () => {
   it('logs a lock failure without running the job', async () => {
     const failure = new Error('too many clients');
     const expire = job('expire', { everyMs: MINUTE });
-    const { logger, scheduler } = setup([expire], { lock: () => Promise.reject(failure) });
+    const { logger, scheduler, runs } = setup([expire], { lock: () => Promise.reject(failure) });
 
     expect(await scheduler.runDue()).toEqual([]);
     expect(expire.run).not.toHaveBeenCalled();
+    expect(results(runs)).toEqual([['expire', 'failed']]);
     expect(logger.error).toHaveBeenCalledWith({ err: failure, job: 'expire' }, 'job failed');
   });
 
@@ -167,6 +196,41 @@ describe('scheduler runs', () => {
     clock.advance(MINUTE);
     expect(await scheduler.runDue()).toEqual([]);
     expect(slow.run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('scheduler metrics', () => {
+  it('records the finish time and duration of each run', async () => {
+    const gate = Promise.withResolvers<undefined>();
+    const slow = job('slow', { everyMs: MINUTE }, () => gate.promise);
+    const { clock, scheduler, runs } = setup([slow]);
+
+    const running = scheduler.runDue();
+    clock.advance(5 * SECOND);
+    gate.resolve(undefined);
+    await running;
+
+    expect(runs).toEqual([
+      {
+        job: 'slow',
+        result: 'ok',
+        durationSeconds: expect.any(Number) as unknown,
+        finishedAt: new Date('2026-09-26T09:00:05Z'),
+      },
+    ]);
+    expect(runs[0]?.durationSeconds).toBeGreaterThanOrEqual(0);
+  });
+
+  it('runs without a metrics sink', async () => {
+    const expire = job('expire', { everyMs: MINUTE });
+    const scheduler = createScheduler({
+      lock: memoryLock(),
+      clock: fixedClock('2026-09-26T09:00:00Z'),
+      logger: fakeLogger(),
+      jobs: [expire],
+    });
+
+    expect(await scheduler.runDue()).toEqual(['expire']);
   });
 });
 

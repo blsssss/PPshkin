@@ -1,12 +1,91 @@
-- name: Install the backup script
+- name: Check the off-site backup settings
+  ansible.builtin.assert:
+    that: backup_offsite_settings | select | list | length in [0, backup_offsite_settings | length]
+    fail_msg: >-
+      set all of BACKUP_AGE_RECIPIENT, BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_ACCESS_KEY_ID
+      and BACKUP_S3_SECRET_ACCESS_KEY or none of them
+    quiet: true
+  vars:
+    backup_offsite_settings:
+      - "{{ backup_age_recipient }}"
+      - "{{ backup_s3_endpoint }}"
+      - "{{ backup_s3_bucket }}"
+      - "{{ backup_s3_access_key_id }}"
+      - "{{ backup_s3_secret_access_key }}"
+
+- name: Decide whether backups leave the server
+  ansible.builtin.set_fact:
+    backup_offsite_enabled: "{{ backup_age_recipient | length > 0 }}"
+    backup_age_binary: "{{ backup_app_dir }}/bin/age-{{ backup_age_version }}/age"
+
+- name: Create the backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ backup_app_dir }}/bin/age-{{ backup_age_version }}"
+    - "{{ backup_metrics_dir }}"
+
+- name: Download age {{ backup_age_version }}
+  ansible.builtin.get_url:
+    url: https://github.com/FiloSottile/age/releases/download/{{ backup_age_version }}/age-{{ backup_age_version }}-linux-amd64.tar.gz
+    dest: "{{ backup_app_dir }}/bin/age-{{ backup_age_version }}.tar.gz"
+    checksum: sha256:{{ backup_age_sha256 }}
+    mode: "0644"
+
+- name: Unpack age {{ backup_age_version }}
+  ansible.builtin.unarchive:
+    src: "{{ backup_app_dir }}/bin/age-{{ backup_age_version }}.tar.gz"
+    dest: "{{ backup_app_dir }}/bin/age-{{ backup_age_version }}"
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: "{{ backup_age_binary }}"
+
+- name: Install the off-site storage credentials
   ansible.builtin.template:
-    src: backup.sh.j2
-    dest: "{{ backup_app_dir }}/backup.sh"
+    src: rclone.conf.j2
+    dest: "{{ backup_app_dir }}/rclone.conf"
+    mode: "0600"
+  no_log: true
+  when: backup_offsite_enabled | bool
+
+- name: Remove the off-site storage credentials
+  ansible.builtin.file:
+    path: "{{ backup_app_dir }}/rclone.conf"
+    state: absent
+  when: not backup_offsite_enabled | bool
+
+- name: Install the backup scripts
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ backup_app_dir }}/{{ item }}"
     mode: "0750"
+  loop:
+    - backup.sh
+    - restore-check.sh
 
 - name: Schedule the nightly database backup
   ansible.builtin.cron:
     name: ppshkin database backup
     minute: "{{ backup_minute }}"
     hour: "{{ backup_hour }}"
-    job: "{{ backup_app_dir }}/backup.sh"
+    job: "{{ backup_app_dir }}/backup.sh 2>&1 | logger -t ppshkin-backup"
+
+- name: Schedule the weekly restore check
+  ansible.builtin.cron:
+    name: ppshkin restore check
+    weekday: "{{ backup_restore_check_weekday }}"
+    minute: "{{ backup_restore_check_minute }}"
+    hour: "{{ backup_restore_check_hour }}"
+    job: "{{ backup_app_dir }}/restore-check.sh 2>&1 | logger -t ppshkin-restore-check"
+
+- name: Make the first backup when none is recorded
+  ansible.builtin.command:
+    cmd: "{{ backup_app_dir }}/backup.sh"
+    creates: "{{ backup_metrics_dir }}/backup.prom"
+
+- name: Run the first restore check when none is recorded
+  ansible.builtin.command:
+    cmd: "{{ backup_app_dir }}/restore-check.sh"
+    creates: "{{ backup_metrics_dir }}/restore_check.prom"

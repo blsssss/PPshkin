@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import type { Registry } from 'prom-client';
 import type { Config } from '../config.ts';
 import type { UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
@@ -25,6 +26,7 @@ export interface AppOptions {
   notificationStats?: NotificationStats;
   logger?: FastifyServerOptions['logger'];
   maxWebhook?: { secret: string; handler: UpdateHandler; background: BackgroundTasks };
+  metricsRegistry?: Registry;
 }
 
 const LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const;
@@ -55,7 +57,14 @@ export function trustProxyOption(
   return typeof setting === 'number' ? (_address, hop) => hop < setting : setting;
 }
 
-export async function buildApp({ config, services, logger, maxWebhook, notificationStats }: AppOptions) {
+export async function buildApp({
+  config,
+  services,
+  logger,
+  maxWebhook,
+  notificationStats,
+  metricsRegistry,
+}: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
     trustProxy: trustProxyOption(config.TRUST_PROXY),
@@ -87,7 +96,13 @@ export async function buildApp({ config, services, logger, maxWebhook, notificat
   await registerUploads(app);
   await registerOpenApi(app);
   const probeLogLevel = quietestLevel(config.LOG_LEVEL, 'warn');
-  const metrics = registerMetrics(app, services.metrics, probeLogLevel, notificationStats?.metrics ?? []);
+  const metrics = registerMetrics(
+    app,
+    services.metrics,
+    probeLogLevel,
+    notificationStats?.metrics ?? [],
+    metricsRegistry,
+  );
 
   await app.register(systemRoutes, {
     health: services.health,

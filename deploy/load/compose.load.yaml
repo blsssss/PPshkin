@@ -1,0 +1,48 @@
+services:
+  backend:
+    environment:
+      DEMO_MODE: "false"
+      DEMO_GUEST_TOKEN: ""
+      DEMO_VENUE_TOKEN: ""
+      BOT_MODE: webhook
+      PUBLIC_BASE_URL: https://load.invalid
+      MAX_API_BASE_URL: http://fake-max:8081
+      MAX_BOT_TOKEN: load-stand-bot-token-not-secret
+      MAX_WEBHOOK_SECRET: load-stand-webhook-secret
+      SESSION_SECRET: load-stand-session-secret-not-for-production
+      TRUST_PROXY: "1"
+      LOG_LEVEL: warn
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-300}
+    depends_on:
+      fake-max:
+        condition: service_healthy
+
+  fake-max:
+    image: node:24.21.0-alpine3.24
+    command: ["node", "/load/fake-max.mjs"]
+    environment:
+      PORT: 8081
+      PUBLIC_URL: http://fake-max:8081
+    volumes:
+      - ./deploy/load:/load:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    profiles: [frontend]
+
+  k6:
+    image: grafana/k6:1.8.2
+    profiles: [k6]
+    environment:
+      BASE_URL: http://backend:3000
+      BOT_TOKEN: load-stand-bot-token-not-secret
+      WEBHOOK_SECRET: load-stand-webhook-secret
+      PROFILE: ${PROFILE:-short}
+    volumes:
+      - ./deploy/load:/load:ro
+    working_dir: /load

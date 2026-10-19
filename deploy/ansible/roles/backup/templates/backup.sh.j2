@@ -1,7 +1,41 @@
 #!/bin/sh
 set -eu
 cd {{ backup_app_dir }}
-target="backups/ppshkin-$(date +%F).dump"
+name="ppshkin-$(date +%F).dump"
+target="backups/$name"
+metrics="{{ backup_metrics_dir }}/backup.prom"
 docker compose -f compose.prod.yaml exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$target.partial"
 mv "$target.partial" "$target"
+size=$(wc -c < "$target" | tr -d ' ')
+{% if backup_offsite_enabled | bool %}
+encrypted="backups/$name.age"
+trap 'rm -f "$encrypted"' EXIT
+{{ backup_age_binary }} --encrypt --recipient '{{ backup_age_recipient }}' --output "$encrypted" "$target"
+rclone() {
+  docker run --rm \
+    --volume "{{ backup_app_dir }}/rclone.conf:/config/rclone/rclone.conf:ro" \
+    --volume "{{ backup_app_dir }}/backups:/backups:ro" \
+    {{ backup_rclone_image }} "$@"
+}
+rclone copyto "/backups/$name.age" "offsite:{{ backup_s3_bucket }}/$name.age"
+rclone delete --min-age {{ backup_offsite_retention_days }}d "offsite:{{ backup_s3_bucket }}"
+newest=$(rclone lsl "offsite:{{ backup_s3_bucket }}" | sort -k2,3 | tail -n 1)
+newest_date=$(echo "$newest" | awk '{print $2" "substr($3,1,8)}')
+offsite_ts=$(date -u -d "$newest_date" +%s)
+echo "backup $name uploaded to offsite:{{ backup_s3_bucket }}"
+{% else %}
+echo "backup $name kept locally, off-site upload skipped: storage is not configured" >&2
+{% endif %}
+previous=$(sed -n 's/^ppshkin_backup_size_bytes \([0-9][0-9]*\)$/\1/p' "$metrics" 2>/dev/null || true)
+cat > "$metrics.partial" <<EOF
+ppshkin_backup_last_success_timestamp_seconds $(date +%s)
+ppshkin_backup_size_bytes $size
+ppshkin_backup_previous_size_bytes ${previous:-0}
+ppshkin_backup_offsite {{ 1 if backup_offsite_enabled | bool else 0 }}
+{% if backup_offsite_enabled | bool %}
+ppshkin_backup_offsite_last_object_timestamp_seconds $offsite_ts
+{% endif %}
+EOF
+chmod 644 "$metrics.partial"
+mv "$metrics.partial" "$metrics"
 find backups -name '*.dump' -mtime +{{ backup_retention_days }} -delete

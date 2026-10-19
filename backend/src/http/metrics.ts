@@ -1,9 +1,61 @@
 import type { FastifyInstance, LogLevel } from 'fastify';
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics, type Metric } from 'prom-client';
+import { JOB_RESULTS, type JobMetrics } from '../jobs/scheduler.ts';
 import type { MetricsService } from '../services/metrics.ts';
 
 const BOOKING_STATUSES = ['active', 'redeemed', 'cancelled', 'expired'] as const;
 const OFFER_STATUSES = ['shown', 'accepted', 'declined'] as const;
+
+export function createJobMetrics(
+  registry: Registry,
+  jobNames: readonly string[],
+  startedAt = Date.now() / 1000,
+): JobMetrics {
+  const runs = new Counter({
+    name: 'ppshkin_job_runs_total',
+    help: 'Background job runs by result: ok, failed or locked by another instance',
+    labelNames: ['name', 'result'] as const,
+    registers: [registry],
+  });
+  const duration = new Histogram({
+    name: 'ppshkin_job_duration_seconds',
+    help: 'Background job duration for runs this instance executed',
+    labelNames: ['name'] as const,
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 5, 15, 60, 300],
+    registers: [registry],
+  });
+  const lastSuccess = new Gauge({
+    name: 'ppshkin_job_last_success_timestamp_seconds',
+    help: 'Unix time of the last successful run of the job on this instance',
+    labelNames: ['name'] as const,
+    registers: [registry],
+  });
+  const consecutiveFailures = new Gauge({
+    name: 'ppshkin_job_consecutive_failures',
+    help: 'Failed runs of the job in a row on this instance',
+    labelNames: ['name'] as const,
+    registers: [registry],
+  });
+  for (const name of jobNames) {
+    for (const result of JOB_RESULTS) runs.inc({ name, result }, 0);
+    consecutiveFailures.set({ name }, 0);
+    lastSuccess.set({ name }, startedAt);
+  }
+
+  return {
+    record({ job, result, durationSeconds, finishedAt }) {
+      runs.inc({ name: job, result });
+      if (result === 'locked') return;
+      duration.observe({ name: job }, durationSeconds);
+      if (result === 'ok') {
+        lastSuccess.set({ name: job }, finishedAt.getTime() / 1000);
+        consecutiveFailures.set({ name: job }, 0);
+      } else {
+        consecutiveFailures.inc({ name: job });
+      }
+    },
+  };
+}
 
 export interface HttpMetrics {
   cspViolation(directive: string): void;
@@ -14,8 +66,8 @@ export function registerMetrics(
   metrics: MetricsService,
   logLevel: LogLevel,
   collectors: readonly Metric[] = [],
+  registry = new Registry(),
 ): HttpMetrics {
-  const registry = new Registry();
   collectDefaultMetrics({ register: registry });
   for (const collector of collectors) registry.registerMetric(collector);
 
@@ -30,7 +82,7 @@ export function registerMetrics(
     name: 'http_request_duration_seconds',
     help: 'HTTP request duration by route template and status code',
     labelNames: ['method', 'route', 'status_code'] as const,
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 45],
+    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 0.8, 1, 2.5, 5, 15, 45],
     registers: [registry],
   });
 

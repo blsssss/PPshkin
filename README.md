@@ -37,7 +37,8 @@
   <a href="#сценарий-проверки"><b>Сценарий&nbsp;проверки</b></a> ·
   <a href="docs/architecture.md"><b>Архитектура</b></a> ·
   <a href="docs/product.md"><b>Продукт</b></a> ·
-  <a href="docs/deploy.md"><b>Развёртывание</b></a>
+  <a href="docs/deploy.md"><b>Развёртывание</b></a> ·
+  <a href="docs/load.md"><b>Нагрузка</b></a>
 </p>
 
 <p align="center">

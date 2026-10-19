@@ -1,4 +1,101 @@
 groups:
+  - name: ppshkin_slo
+    rules:
+      - record: slo:availability_errors:ratio_rate5m
+        expr: 1 - avg(avg_over_time(probe_success{job="blackbox"}[5m]))
+      - record: slo:availability_errors:ratio_rate30m
+        expr: 1 - avg(avg_over_time(probe_success{job="blackbox"}[30m]))
+      - record: slo:availability_errors:ratio_rate1h
+        expr: 1 - avg(avg_over_time(probe_success{job="blackbox"}[1h]))
+      - record: slo:availability_errors:ratio_rate6h
+        expr: 1 - avg(avg_over_time(probe_success{job="blackbox"}[6h]))
+
+      - record: slo:booking_errors:ratio_rate5m
+        expr: >-
+          (sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem",status_code=~"5.."}[5m])) or vector(0))
+          / sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem"}[5m]))
+      - record: slo:booking_errors:ratio_rate30m
+        expr: >-
+          (sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem",status_code=~"5.."}[30m])) or vector(0))
+          / sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem"}[30m]))
+      - record: slo:booking_errors:ratio_rate1h
+        expr: >-
+          (sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem",status_code=~"5.."}[1h])) or vector(0))
+          / sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem"}[1h]))
+      - record: slo:booking_errors:ratio_rate6h
+        expr: >-
+          (sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem",status_code=~"5.."}[6h])) or vector(0))
+          / sum(rate(http_request_duration_seconds_count{job="backend",method="POST",
+          route=~"/api/v1/bookings|/api/v1/venue/bookings/redeem"}[6h]))
+
+      - record: slo:api_slow:ratio_rate5m
+        expr: >-
+          1 - sum(rate(http_request_duration_seconds_bucket{job="backend",le="0.8",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[5m]))
+          / sum(rate(http_request_duration_seconds_count{job="backend",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[5m]))
+      - record: slo:api_slow:ratio_rate30m
+        expr: >-
+          1 - sum(rate(http_request_duration_seconds_bucket{job="backend",le="0.8",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[30m]))
+          / sum(rate(http_request_duration_seconds_count{job="backend",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[30m]))
+      - record: slo:api_slow:ratio_rate1h
+        expr: >-
+          1 - sum(rate(http_request_duration_seconds_bucket{job="backend",le="0.8",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[1h]))
+          / sum(rate(http_request_duration_seconds_count{job="backend",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[1h]))
+      - record: slo:api_slow:ratio_rate6h
+        expr: >-
+          1 - sum(rate(http_request_duration_seconds_bucket{job="backend",le="0.8",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[6h]))
+          / sum(rate(http_request_duration_seconds_count{job="backend",
+          route!~"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*"}[6h]))
+
+      - alert: AvailabilityBudgetBurnFast
+        expr: slo:availability_errors:ratio_rate1h > 14.4 * 0.005 and slo:availability_errors:ratio_rate5m > 14.4 * 0.005
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Бюджет доступности сгорает в 14 раз быстрее нормы"
+          description: "За час не прошли {{ $value | humanizePercentage }} проверок /ready при цели 99,5%: в таком темпе бюджет на 28 дней кончится меньше чем за 2 дня."
+
+      - alert: AvailabilityBudgetBurnSlow
+        expr: slo:availability_errors:ratio_rate6h > 6 * 0.005 and slo:availability_errors:ratio_rate30m > 6 * 0.005
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Бюджет доступности сгорает в 6 раз быстрее нормы"
+          description: "За 6 часов не прошли {{ $value | humanizePercentage }} проверок /ready при цели 99,5%: в таком темпе бюджет на 28 дней кончится меньше чем за 5 дней."
+
+      - alert: BookingsBudgetBurnFast
+        expr: slo:booking_errors:ratio_rate1h > 14.4 * 0.001 and slo:booking_errors:ratio_rate5m > 14.4 * 0.001
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Бюджет ошибок броней сгорает в 14 раз быстрее нормы"
+          description: "За час {{ $value | humanizePercentage }} броней и погашений закончились ошибкой 5xx при цели 99,9%: в таком темпе бюджет на 28 дней кончится меньше чем за 2 дня."
+
+      - alert: BookingsBudgetBurnSlow
+        expr: slo:booking_errors:ratio_rate6h > 6 * 0.001 and slo:booking_errors:ratio_rate30m > 6 * 0.001
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Бюджет ошибок броней сгорает в 6 раз быстрее нормы"
+          description: "За 6 часов {{ $value | humanizePercentage }} броней и погашений закончились ошибкой 5xx при цели 99,9%: в таком темпе бюджет на 28 дней кончится меньше чем за 5 дней."
+
   - name: ppshkin
     rules:
       - alert: TargetDown
@@ -70,6 +167,73 @@ groups:
         annotations:
           summary: "Уведомление ждёт отправки {{ $value | humanizeDuration }}"
           description: "Готовые к отправке уведомления не уходят больше 5 минут: проверьте, запущен ли бот и задача deliver_notifications."
+
+      - alert: JobFailing
+        expr: max by (name) (ppshkin_job_consecutive_failures) >= 3
+        labels:
+          severity: critical
+        annotations:
+          summary: "Фоновая задача {{ $labels.name }} падает несколько запусков подряд"
+          description: "Запусков с ошибкой подряд: {{ $value }}. Причина в журнале backend по строке job failed."
+
+      - alert: JobStale
+        expr: >-
+          time() - max by (name) (ppshkin_job_last_success_timestamp_seconds{name="expire_bookings"}) > 300
+          or time() - max by (name) (ppshkin_job_last_success_timestamp_seconds{name="fail_stale_imports"}) > 900
+          or time() - max by (name) (ppshkin_job_last_success_timestamp_seconds{name="purge_processed_updates"}) > 10800
+          or time() - max by (name) (ppshkin_job_last_success_timestamp_seconds{name="deliver_notifications"}) > 120
+        labels:
+          severity: critical
+        annotations:
+          summary: "Фоновая задача {{ $labels.name }} не выполнялась {{ $value | humanizeDuration }}"
+          description: "Ни один экземпляр backend не выполнил {{ $labels.name }} успешно дольше допустимого: проверьте журнал backend и блокировки задач в базе."
+
+      - alert: BackupStale
+        expr: >-
+          time() - max(ppshkin_backup_last_success_timestamp_seconds) > 26 * 3600
+          or absent_over_time(ppshkin_backup_last_success_timestamp_seconds[26h])
+        labels:
+          severity: critical
+        annotations:
+          summary: "Нет успешной копии базы больше 26 часов"
+          description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+      - alert: BackupShrunk
+        expr: ppshkin_backup_size_bytes < 0.5 * ppshkin_backup_previous_size_bytes
+        labels:
+          severity: warning
+        annotations:
+          summary: "Копия базы уменьшилась больше чем вдвое"
+          description: "Последняя копия весит {{ $value | humanize1024 }}B, меньше половины предыдущей: проверьте, не потеряны ли данные."
+
+      - alert: OffsiteBackupNotUploaded
+        expr: ppshkin_backup_offsite == 0
+        for: 26h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Копии базы не уходят с сервера"
+          description: "Внешняя выгрузка не настроена больше 26 часов: копии лежат только на этом сервере. В dev и CI это ожидаемо, на продакшене задайте BACKUP_AGE_RECIPIENT и параметры хранилища."
+
+      - alert: OffsiteBackupStale
+        expr: >-
+          (time() - max(ppshkin_backup_offsite_last_object_timestamp_seconds) > 26 * 3600)
+          and on() max(ppshkin_backup_offsite) == 1
+        labels:
+          severity: critical
+        annotations:
+          summary: "Самый свежий объект во внешнем хранилище старше 26 часов"
+          description: "Новая зашифрованная копия не появилась в хранилище: проверьте доступ к S3 и журнал ppshkin-backup."
+
+      - alert: RestoreCheckStale
+        expr: >-
+          time() - max(ppshkin_restore_check_success_timestamp_seconds) > 8 * 86400
+          or absent_over_time(ppshkin_restore_check_success_timestamp_seconds[8d])
+        labels:
+          severity: warning
+        annotations:
+          summary: "Проверка восстановления не проходила больше 8 дней"
+          description: "Еженедельный restore-check.sh не отработал: смотрите journalctl -t ppshkin-restore-check на сервере."
 
       - alert: DiskAlmostFull
         expr: 1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.85
