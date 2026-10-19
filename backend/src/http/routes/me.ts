@@ -22,11 +22,12 @@ interface MeRoutesOptions {
   profile: ProfileService;
   account: AccountService;
   notificationSettings: NotificationSettingsService;
+  isAdmin: (userId: number) => boolean;
 }
 
 export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
   app,
-  { profile, account, notificationSettings },
+  { profile, account, notificationSettings, isAdmin },
   done,
 ) => {
   app.get(
@@ -47,7 +48,7 @@ export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
     },
     async (request) => {
       const { user, consents } = await profile.get(userId(request));
-      return toUserProfile(user, consents);
+      return toUserProfile(user, consents, isAdmin(user.id));
     },
   );
 
@@ -78,7 +79,7 @@ export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
     },
     async (request) => {
       const { user, consents } = await profile.update(userId(request), request.body);
-      return toUserProfile(user, consents);
+      return toUserProfile(user, consents, isAdmin(user.id));
     },
   );
 

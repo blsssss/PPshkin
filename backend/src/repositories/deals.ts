@@ -37,7 +37,7 @@ const WITH_VENUE = 'join venues v on v.id = d.venue_id';
 
 function visibleTo(nowParam: string): string {
   return `${LIVE} and d.starts_at <= ${nowParam} and ${OVER_AT} > ${nowParam}
-    and m.archived_at is null and m.is_available`;
+    and m.archived_at is null and m.is_available and v.blocked_at is null`;
 }
 
 function mapDeal(row: DealRow): Deal {

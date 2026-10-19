@@ -23,6 +23,7 @@ import { badRequest, conflict, notFound, unprocessable } from '../shared/errors.
 import { dayRange, isLocalDate, isOpenAt } from '../shared/time.ts';
 import type { ConsentsService } from './consents.ts';
 import { lockMenuItem } from './menu.ts';
+import { requireUnblockedUser } from './moderation.ts';
 import { requireOwnedVenue } from './venues.ts';
 import type { AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
@@ -175,6 +176,7 @@ export function createBookingsService({
     now: Date,
   ): Promise<Reservation> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
+    await requireUnblockedUser(client, userId);
     const { item, venue } = await lockBookableItem(client, input.menuItemId, userId);
     const deal =
       input.dealId === undefined ? null : await lockBookableDeal(client, item, venue, input.dealId, now);

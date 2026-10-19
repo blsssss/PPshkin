@@ -13,6 +13,7 @@ import type { InsightsService } from './insights.ts';
 import type { MenuImportsService } from './menu-imports.ts';
 import type { MenuService } from './menu.ts';
 import type { MetricsService } from './metrics.ts';
+import type { ModerationService } from './moderation.ts';
 import type { NotificationSettingsService } from './notification-settings.ts';
 import type { ProfileService } from './profile.ts';
 import type { RecommendationsService } from './recommendations.ts';
@@ -38,4 +39,5 @@ export interface Services {
   demo: DemoService;
   notificationSettings: NotificationSettingsService;
   audit: AuditService;
+  moderation: ModerationService;
 }

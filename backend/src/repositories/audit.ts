@@ -2,7 +2,7 @@ import { jsonb, type Queryable } from '../db/pool.ts';
 import type { AuditAction, AuditChannel, AuditTarget } from '../domain/audit.ts';
 
 export interface AuditEntry {
-  venueId: number;
+  venueId: number | null;
   actorUserId: number;
   action: AuditAction;
   target: { type: AuditTarget; id: number | null };
@@ -51,7 +51,7 @@ export async function listInVenue(db: Queryable, venueId: number, page: AuditPag
             a.created_at as "createdAt"
        from audit_events a
        left join users u on u.id = a.actor_user_id
-      where a.venue_id = $1 and a.created_at >= $2 and a.created_at < $3
+      where a.venue_id = $1 and a.action not like 'admin.%' and a.created_at >= $2 and a.created_at < $3
         and ($4::bigint is null or a.id < $4)
       order by a.id desc
       limit $5`,

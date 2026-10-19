@@ -119,6 +119,18 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       update: notStubbed('notificationSettings.update'),
     },
     audit: { list: notStubbed('audit.list') },
+    moderation: {
+      isAdmin: () => false,
+      createComplaint: notStubbed('moderation.createComplaint'),
+      listComplaints: notStubbed('moderation.listComplaints'),
+      listForReview: notStubbed('moderation.listForReview'),
+      resolveComplaint: notStubbed('moderation.resolveComplaint'),
+      blockVenue: notStubbed('moderation.blockVenue'),
+      unblockVenue: notStubbed('moderation.unblockVenue'),
+      blockUser: notStubbed('moderation.blockUser'),
+      unblockUser: notStubbed('moderation.unblockUser'),
+      signals: notStubbed('moderation.signals'),
+    },
     ...overrides,
   };
 }

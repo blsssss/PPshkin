@@ -143,7 +143,7 @@ export async function findByIds(db: Queryable, ids: readonly number[]): Promise<
 }
 
 export function visibleVenueCondition(alias: string, viewerParam: string): string {
-  return `case
+  return `${alias}.blocked_at is null and case
       when ${alias}.demo_source_id is not null or (${alias}.is_demo and ${alias}.owner_id > 0)
         then coalesce(${alias}.owner_id = ${viewerParam}, false)
       when ${alias}.is_demo then not exists (

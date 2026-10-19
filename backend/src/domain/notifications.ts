@@ -17,7 +17,15 @@ export const SETTINGS_KINDS = [
 ] as const;
 export type SettingsKind = (typeof SETTINGS_KINDS)[number];
 
-const NOTIFICATION_KINDS = [...SETTINGS_KINDS, 'account_inactive_warning'] as const;
+const NOTIFICATION_KINDS = [
+  ...SETTINGS_KINDS,
+  'account_inactive_warning',
+  'booking_venue_blocked',
+  'venue_blocked',
+  'venue_complaint',
+  'complaint_created',
+  'complaint_decided',
+] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export type NotificationStatus =
@@ -39,13 +47,20 @@ export type NotificationEvent =
   | { kind: VenueDealKind; deal: Deal; venue: Venue }
   | { kind: 'menu_import_done'; menuImport: MenuImport; venue: Venue }
   | { kind: 'venue_report_ready'; venue: Venue; period: ReportPeriod; date: string }
-  | { kind: 'account_inactive_warning'; user: { id: number; activeAt: Date } };
+  | { kind: 'account_inactive_warning'; user: { id: number; activeAt: Date } }
+  | { kind: 'booking_venue_blocked'; booking: Booking; venue: Venue }
+  | { kind: 'venue_blocked'; venue: Venue; blockedAt: Date }
+  | { kind: 'venue_complaint'; complaintId: number; venue: Venue }
+  | { kind: 'complaint_created'; complaintId: number; adminId: number }
+  | { kind: 'complaint_decided'; complaintId: number; reporterId: number | null };
 
 export type NotificationSubject =
   | { bookingId: number }
   | { dealId: number }
   | { importId: number }
   | { venueId: number; period: ReportPeriod; date: string }
+  | { venueId: number; blockedAt: string }
+  | { complaintId: number }
   | { userId: number };
 
 type NotificationAudience =
@@ -147,6 +162,41 @@ export function notificationTarget(event: NotificationEvent, now: Date): Notific
         subject: { venueId: event.venue.id, period: event.period, date: event.date },
         subjectKey: `${String(event.venue.id)}:${event.period}:${event.date}`,
         audience: { kind: 'venue', permission: REPORT_PERMISSIONS[event.period] },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'booking_venue_blocked':
+      return {
+        subject: { bookingId: event.booking.id },
+        subjectKey: String(event.booking.id),
+        audience: { kind: 'guest', userId: event.booking.userId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'venue_blocked':
+      return {
+        subject: { venueId: event.venue.id, blockedAt: event.blockedAt.toISOString() },
+        subjectKey: `${String(event.venue.id)}:${event.blockedAt.toISOString()}`,
+        audience: { kind: 'venue', permission: 'deal.edit' },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'venue_complaint':
+      return {
+        subject: { complaintId: event.complaintId },
+        subjectKey: String(event.complaintId),
+        audience: { kind: 'venue', permission: VENUE_BOOKING_PERMISSION },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'complaint_created':
+      return {
+        subject: { complaintId: event.complaintId },
+        subjectKey: String(event.complaintId),
+        audience: { kind: 'guest', userId: event.adminId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'complaint_decided':
+      return {
+        subject: { complaintId: event.complaintId },
+        subjectKey: String(event.complaintId),
+        audience: { kind: 'guest', userId: event.reporterId },
         expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
       };
   }
@@ -312,6 +362,41 @@ export const NOTIFICATION_KIND_DESCRIPTIONS: Record<NotificationKind, KindDescri
   account_inactive_warning: {
     label: 'Аккаунт скоро удалится',
     hint: 'За 14 дней до удаления давно неактивного аккаунта',
+    audience: 'guest',
+    editable: false,
+    urgent: false,
+  },
+  booking_venue_blocked: {
+    label: 'Бронь отменена',
+    hint: 'Заведение приостановлено администратором',
+    audience: 'guest',
+    editable: false,
+    urgent: true,
+  },
+  venue_blocked: {
+    label: 'Заведение приостановлено',
+    hint: 'Причина приостановки',
+    audience: 'venue',
+    editable: false,
+    urgent: true,
+  },
+  venue_complaint: {
+    label: 'Жалоба гостя',
+    hint: 'Причина, код брони и время',
+    audience: 'venue',
+    editable: false,
+    urgent: false,
+  },
+  complaint_created: {
+    label: 'Новая жалоба',
+    hint: 'Только для администраторов',
+    audience: 'guest',
+    editable: false,
+    urgent: true,
+  },
+  complaint_decided: {
+    label: 'Итог по жалобе',
+    hint: 'Решение администратора',
     audience: 'guest',
     editable: false,
     urgent: false,

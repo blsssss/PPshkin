@@ -7,11 +7,17 @@ export type AuditAction =
   | 'menu_item.update'
   | 'menu_item.archive'
   | 'menu_import.apply'
-  | 'venue.update';
+  | 'venue.update'
+  | 'admin.complaint.resolve'
+  | 'admin.venue.block'
+  | 'admin.venue.unblock'
+  | 'admin.user.block'
+  | 'admin.user.unblock';
 
-export type AuditTarget = 'booking' | 'deal' | 'menu_item' | 'menu_import' | 'venue' | 'staff';
+export type AuditTarget =
+  'booking' | 'deal' | 'menu_item' | 'menu_import' | 'venue' | 'staff' | 'complaint' | 'user';
 
-export type AuditChannel = 'bot' | 'miniapp';
+export type AuditChannel = 'bot' | 'miniapp' | 'api';
 
 export const AUDIT_PAGE_SIZE = 100;
 

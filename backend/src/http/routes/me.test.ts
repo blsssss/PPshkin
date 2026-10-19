@@ -37,6 +37,24 @@ function profileService(overrides: Partial<ProfileService>): { profile: ProfileS
   return { profile: { ...fakeServices().profile, ...overrides } };
 }
 
+describe('GET /api/v1/me', () => {
+  it('tells whether the user is an administrator', async () => {
+    for (const isAdmin of [true, false]) {
+      app = await buildTestApp({
+        services: {
+          ...profileService({ get: () => Promise.resolve({ user, consents }) }),
+          moderation: { ...fakeServices().moderation, isAdmin: () => isAdmin },
+        },
+      });
+      const response = await app.inject({ method: 'GET', url: '/api/v1/me', headers: bearer('guest-token') });
+      expect(response.statusCode).toBe(200);
+      expectContract(response, 'GET', '/api/v1/me');
+      expect(response.json<{ isAdmin: boolean }>().isAdmin).toBe(isAdmin);
+      await app.close();
+    }
+  });
+});
+
 describe('PATCH /api/v1/me', () => {
   it('applies the patch and returns the profile', async () => {
     const received: ProfilePatch[] = [];

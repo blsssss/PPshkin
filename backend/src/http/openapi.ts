@@ -87,6 +87,8 @@ export const API_TAGS = [
   { name: 'recommendations', description: 'Подбор блюд рядом и обратная связь' },
   { name: 'insights', description: 'Профиль пищевого поведения' },
   { name: 'bookings', description: 'Брони гостя' },
+  { name: 'complaints', description: 'Жалобы гостя на заведения и брони' },
+  { name: 'admin', description: 'Модерация: жалобы и блокировки, только для администраторов' },
 ];
 
 export async function registerOpenApi(app: FastifyInstance) {

@@ -269,6 +269,19 @@ export async function cancelActiveForUser(db: Queryable, userId: number, at: Dat
   return rows.map(mapBooking);
 }
 
+export async function cancelActiveInVenue(db: Queryable, venueId: number, at: Date): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
+    `with cancelled as (
+       update bookings as b set status = 'cancelled', resolved_at = $2
+        where b.venue_id = $1 and b.status = 'active'
+       returning ${BOOKING_COLUMNS}
+     ), restocked as (${restockDeals('cancelled', '$2')})
+     select ${BOOKING_COLUMNS} from cancelled b order by b.id`,
+    [venueId, at],
+  );
+  return rows.map(mapBooking);
+}
+
 export async function markRedeemed(db: Queryable, id: number, at: Date): Promise<Booking> {
   const row = await one<BookingRow>(
     db,

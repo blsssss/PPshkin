@@ -28,6 +28,66 @@ components:
         - lat
         - lon
       description: Координаты WGS 84
+    ComplaintRequestInput:
+      type: object
+      properties:
+        venueId:
+          type: integer
+          exclusiveMinimum: 0
+          description: Заведение, на которое жалоба
+        bookingId:
+          description: Бронь гостя в этом заведении; на одну бронь одна жалоба
+          type: integer
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          enum:
+            - not_served
+            - price_mismatch
+            - venue_closed
+            - item_missing
+            - quality
+            - wrong_info
+            - other
+          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
+            Цена на кассе другая; venue_closed - Заведение было закрыто;
+            item_missing - Блюда не было в наличии; quality - Качество блюда;
+            wrong_info - Неверные сведения о заведении или меню; other - Другое"
+        text:
+          description: Пояснение гостя, до 500 символов
+          type: string
+          maxLength: 500
+      required:
+        - venueId
+        - reason
+      description: Жалоба гостя на заведение или бронь
+    ComplaintResolutionInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - resolved
+            - rejected
+          description: resolved - решена, rejected - отклонена
+        resolution:
+          description: Комментарий, до 500 символов
+          type: string
+          maxLength: 500
+      required:
+        - status
+      description: Решение по жалобе
+    BlockRequestInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Причина блокировки, до 500 символов
+      required:
+        - reason
+      description: Причина блокировки
     ProfilePatchInput:
       type: object
       properties:
@@ -464,6 +524,174 @@ components:
         - lon
       additionalProperties: false
       description: Координаты WGS 84
+    Complaint:
+      type: object
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        bookingId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        reason:
+          type: string
+          enum:
+            - not_served
+            - price_mismatch
+            - venue_closed
+            - item_missing
+            - quality
+            - wrong_info
+            - other
+          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
+            Цена на кассе другая; venue_closed - Заведение было закрыто;
+            item_missing - Блюда не было в наличии; quality - Качество блюда;
+            wrong_info - Неверные сведения о заведении или меню; other - Другое"
+        status:
+          type: string
+          enum:
+            - open
+            - resolved
+            - rejected
+          description: open - ждёт решения, resolved - решена, rejected - отклонена
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+      required:
+        - id
+        - venueId
+        - bookingId
+        - reason
+        - status
+        - createdAt
+        - resolvedAt
+      additionalProperties: false
+      description: Жалоба гостя
+    ComplaintList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Complaint"
+          description: Жалобы гостя, сначала новые
+      required:
+        - items
+      additionalProperties: false
+    AdminComplaint:
+      type: object
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        bookingId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        reason:
+          type: string
+          enum:
+            - not_served
+            - price_mismatch
+            - venue_closed
+            - item_missing
+            - quality
+            - wrong_info
+            - other
+          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
+            Цена на кассе другая; venue_closed - Заведение было закрыто;
+            item_missing - Блюда не было в наличии; quality - Качество блюда;
+            wrong_info - Неверные сведения о заведении или меню; other - Другое"
+        status:
+          type: string
+          enum:
+            - open
+            - resolved
+            - rejected
+          description: open - ждёт решения, resolved - решена, rejected - отклонена
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+        text:
+          description: Пояснение гостя
+          type:
+            - string
+            - "null"
+        venueName:
+          type: string
+        bookingCode:
+          type:
+            - string
+            - "null"
+        itemName:
+          type:
+            - string
+            - "null"
+        resolution:
+          description: Комментарий администратора к решению
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - venueId
+        - bookingId
+        - reason
+        - status
+        - createdAt
+        - resolvedAt
+        - text
+        - venueName
+        - bookingCode
+        - itemName
+        - resolution
+      additionalProperties: false
+      description: Жалоба в очереди администратора
+    AdminComplaintList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminComplaint"
+      required:
+        - items
+      additionalProperties: false
+    BlockState:
+      type: object
+      properties:
+        blocked:
+          type: boolean
+          description: true - заблокировано, false - блокировка снята
+      required:
+        - blocked
+      additionalProperties: false
+      description: Состояние блокировки после действия
     ConsentState:
       type: object
       properties:
@@ -633,6 +861,9 @@ components:
           description: Когда передано местоположение
         consents:
           $ref: "#/components/schemas/ConsentStatus"
+        isAdmin:
+          type: boolean
+          description: Пользователь указан в ADMIN_USER_IDS и может модерировать
       required:
         - id
         - firstName
@@ -644,6 +875,7 @@ components:
         - location
         - locationUpdatedAt
         - consents
+        - isAdmin
       additionalProperties: false
       description: Профиль пользователя и состояние его согласий
     UserLocation:
@@ -6480,6 +6712,494 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/complaints:
+    post:
+      operationId: createComplaint
+      summary: Пожаловаться на заведение или бронь
+      tags:
+        - complaints
+      description: "Жалоба уходит администраторам. Заведение не видит, кто
+        пожаловался: после решения администратора сотрудники получают только
+        причину, код брони и время. Не больше 5 жалоб в сутки на гостя, одна
+        жалоба на бронь. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. venue_not_found (404): заведения нет или оно
+        скрыто от гостя. booking_not_found (404): брони нет, она чужая или
+        относится к другому заведению. complaint_exists (409): на эту бронь
+        жалоба уже подана. complaint_limit (409): уже 5 жалоб за последние
+        сутки, повторите позже."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplaintRequestInput"
+      security: *a4
+      responses:
+        "201":
+          description: Жалоба принята
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      operationId: listMyComplaints
+      summary: Мои жалобы
+      tags:
+        - complaints
+      description: Жалобы гостя и их статус, сначала новые.
+      security: *a4
+      responses:
+        "200":
+          description: Жалобы гостя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplaintList"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/complaints:
+    get:
+      operationId: listComplaintsForReview
+      summary: Жалобы на рассмотрении
+      tags:
+        - admin
+      description: "Не больше 50 жалоб, сначала новые. По умолчанию только открытые.
+        Коды ошибок: validation_failed (400): исправьте поля, перечисленные в
+        errors. not_found (404): вы не администратор, метод скрыт."
+      parameters:
+        - schema:
+            default: open
+            type: string
+            enum:
+              - open
+              - resolved
+              - rejected
+          in: query
+          name: status
+          required: false
+          description: Какие жалобы показать
+      security: *a4
+      responses:
+        "200":
+          description: Жалобы
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminComplaintList"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/complaints/{id}/resolution:
+    post:
+      operationId: resolveComplaint
+      summary: Решить жалобу
+      tags:
+        - admin
+      description: "Гость получает итог сообщением. При resolved сотрудники заведения
+        получают причину, код брони и время без данных гостя. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        not_found (404): вы не администратор, метод скрыт. complaint_not_found
+        (404): жалобы нет. already_resolved (409): решение уже принято."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplaintResolutionInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Жалоба
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminComplaint"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/venues/{id}/block:
+    post:
+      operationId: blockVenue
+      summary: Заблокировать заведение
+      tags:
+        - admin
+      description: "В одной транзакции: заведение пропадает из каталога, подбора и
+        броней, горящие позиции снимаются, активные брони отменяются с возвратом
+        порций, гости и сотрудники получают сообщения. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        not_found (404): вы не администратор, метод скрыт. venue_not_found
+        (404): заведения нет. already_blocked (409): заведение уже
+        заблокировано."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockRequestInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Заведение заблокировано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockState"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/venues/{id}/unblock:
+    post:
+      operationId: unblockVenue
+      summary: Снять блокировку заведения
+      tags:
+        - admin
+      description: "Возвращает заведение в каталог. Снятые горящие позиции и
+        отменённые брони не восстанавливаются. Коды ошибок: not_found (404): вы
+        не администратор, метод скрыт. venue_not_found (404): заведения нет.
+        not_blocked (409): заведение не заблокировано."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Блокировка снята
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockState"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/users/{id}/block:
+    post:
+      operationId: blockUser
+      summary: Заблокировать пользователя
+      tags:
+        - admin
+      description: "Брони и создание заведений запрещены (403 user_blocked), активные
+        брони отменяются. Дневник и удаление аккаунта работают. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        not_found (404): вы не администратор, метод скрыт. user_not_found (404):
+        пользователя нет. already_blocked (409): пользователь уже заблокирован.
+        cannot_block_admin (409): администратора заблокировать нельзя."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockRequestInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Пользователь заблокирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockState"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/users/{id}/unblock:
+    post:
+      operationId: unblockUser
+      summary: Снять блокировку пользователя
+      tags:
+        - admin
+      description: "Коды ошибок: not_found (404): вы не администратор, метод скрыт.
+        user_not_found (404): пользователя нет. not_blocked (409): пользователь
+        не заблокирован."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Блокировка снята
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockState"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 servers:
   - url: /
     description: Текущий хост
@@ -6504,3 +7224,7 @@ tags:
     description: Профиль пищевого поведения
   - name: bookings
     description: Брони гостя
+  - name: complaints
+    description: Жалобы гостя на заведения и брони
+  - name: admin
+    description: "Модерация: жалобы и блокировки, только для администраторов"

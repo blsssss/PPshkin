@@ -1,6 +1,7 @@
 import { withTransaction, type Pool } from '../db/pool.ts';
 import type { Notifications } from '../ports/notifier.ts';
 import * as account from '../repositories/account.ts';
+import * as complaints from '../repositories/complaints.ts';
 import * as bookings from '../repositories/bookings.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
@@ -37,6 +38,7 @@ export function createAccountService({ pool, clock, notifications }: AccountDepe
           if (venue)
             await notifications.enqueue(client, { kind: 'venue_booking_cancelled', booking, venue }, now);
         }
+        await complaints.eraseForReporter(client, userId);
         await account.eraseOfferExplanations(client, userId);
         await account.removeDemoVenueCopies(client, userId);
         await users.remove(client, userId);

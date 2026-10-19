@@ -12,6 +12,7 @@ import { deliverNotificationsJob } from './deliver-notifications.ts';
 import { expireBookingsJob } from './expire-bookings.ts';
 import { failStaleImportsJob } from './fail-stale-imports.ts';
 import { maxWebhookGuardJob } from './max-webhook-guard.ts';
+import { moderationSignalsJob } from './moderation-signals.ts';
 import { proactiveOffersJob } from './proactive-offers.ts';
 import { purgeDealImpressionsJob } from './purge-deal-impressions.ts';
 import { purgeNotificationsJob } from './purge-notifications.ts';
@@ -21,9 +22,15 @@ import { refreshDemoDataJob, type DemoDataRefresher } from './refresh-demo-data.
 import type { Job } from './scheduler.ts';
 
 export interface JobsDependencies {
-  config: Pick<Config, 'BOT_MODE' | 'DEMO_MODE' | 'PROACTIVE_OFFERS' | 'PURGE_INACTIVE_ACCOUNTS'>;
+  config: Pick<
+    Config,
+    'ADMIN_USER_IDS' | 'BOT_MODE' | 'DEMO_MODE' | 'PROACTIVE_OFFERS' | 'PURGE_INACTIVE_ACCOUNTS'
+  >;
   db: Queryable;
-  services: Pick<Services, 'account' | 'bookings' | 'insights' | 'menuImports' | 'recommendations'>;
+  services: Pick<
+    Services,
+    'account' | 'bookings' | 'insights' | 'menuImports' | 'moderation' | 'recommendations'
+  >;
   messenger: () => Messenger | null;
   logger: MaxLogger;
   demo?: DemoDataRefresher;
@@ -56,6 +63,16 @@ export function createJobs({
     }),
     ...(outbox
       ? [deliverNotificationsJob(outbox), bookingRemindersJob(db, outbox), dealEndingRemindersJob(db, outbox)]
+      : []),
+    ...(config.ADMIN_USER_IDS.length > 0
+      ? [
+          moderationSignalsJob({
+            moderation: services.moderation,
+            adminIds: config.ADMIN_USER_IDS,
+            messenger,
+            logger,
+          }),
+        ]
       : []),
     ...(config.BOT_MODE === 'webhook' && webhookGuard ? [maxWebhookGuardJob(webhookGuard)] : []),
     ...(config.DEMO_MODE && demo ? [refreshDemoDataJob(demo, logger)] : []),

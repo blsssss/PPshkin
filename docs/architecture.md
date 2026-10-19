@@ -247,6 +247,11 @@ sequenceDiagram
 | `venue_deal_ending` | заведение | до конца горящей позиции с остатком 30 минут |
 | `menu_import_done` | заведение | разбор меню закончился или закрыт по таймауту, когда бы это ни случилось |
 | `venue_report_ready` | заведение | итоги дня и недели, тексты добавляет отчёт заведения |
+| `booking_venue_blocked` | гость | администратор приостановил заведение, бронь отменена: «Бронь отменена: заведение временно недоступно» |
+| `venue_blocked` | заведение | «Заведение приостановлено: <причина>» |
+| `venue_complaint` | заведение | администратор признал жалобу обоснованной: причина, код брони и время, без данных гостя |
+| `complaint_created` | администратор | новая жалоба: заведение, бронь, позиция, причина, текст |
+| `complaint_decided` | гость | итог рассмотрения жалобы |
 
 В строке хранятся только идентификаторы, текст собирается при отправке по свежим данным. Перед отправкой проверяется актуальность: подтверждение и напоминание уходят только для активной брони, предупреждение о конце акции только для живой акции с остатком, иначе строка получает `skipped`. Статусы строки: `pending`, `sending`, `sent`, `skipped`, `unreachable` (пользователь заблокировал бота), `failed`, `expired`. Транспорт сам повторяет 429, 5xx и сетевые ошибки; если ошибка осталась, строка возвращается в очередь через 1, 5 и 15 минут, после 4-й попытки получает `failed`. Срок жизни: подтверждение и напоминание до конца брони, остальные события брони 2 часа, события акции до её конца, разбор меню и отчёт 24 часа. Получатели событий заведения вычисляются при постановке функцией `venueRecipients`, каждому своя строка. Проактивные предложения в очередь не входят и отправляются напрямую.
 
@@ -254,7 +259,7 @@ sequenceDiagram
 
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql), [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql), [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql), [0007_session_epoch.sql](../backend/migrations/0007_session_epoch.sql) и [0008_audit_retention.sql](../backend/migrations/0008_audit_retention.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql), [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql), [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql), [0007_session_epoch.sql](../backend/migrations/0007_session_epoch.sql), [0008_audit_retention.sql](../backend/migrations/0008_audit_retention.sql) и [0009_moderation.sql](../backend/migrations/0009_moderation.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
@@ -273,6 +278,9 @@ erDiagram
   venues ||--o{ menu_imports : "venue_id"
   venues ||--o{ deals : "venue_id"
   venues ||--o{ audit_events : "venue_id"
+  venues ||--o{ complaints : "venue_id"
+  users |o--o{ complaints : "reporter_id"
+  bookings |o--o{ complaints : "booking_id"
   users |o--o{ audit_events : "actor_user_id"
   venues ||--o{ offers : "venue_id"
   venues ||--o{ bookings : "venue_id"
@@ -429,6 +437,19 @@ erDiagram
     jsonb details
     timestamptz created_at
   }
+  complaints {
+    bigint id PK
+    bigint reporter_id FK
+    bigint venue_id FK
+    bigint booking_id FK
+    text reason
+    text text
+    text status
+    text resolution
+    bigint resolved_by FK
+    timestamptz created_at
+    timestamptz resolved_at
+  }
   deal_impressions {
     bigint deal_id FK
     bigint user_id FK
@@ -469,6 +490,7 @@ erDiagram
 - `deals`, `offers`, `bookings` ссылаются на позицию составным ключом `(venue_id, menu_item_id)`, поэтому позиция другого заведения не может попасть в акцию или бронь.
 - `bookings`: код из алфавита `[A-HJ-NP-Z2-9]{6}` уникален среди активных броней заведения; у гостя одна активная бронь на горящую позицию; `resolved_at` заполнен тогда и только тогда, когда бронь не активна.
 - `audit_events`: запись пишется в той же транзакции, что и действие в заведении (погашение брони, акции, меню, импорт, карточка заведения), с каналом `bot` или `miniapp` в `details`; данных гостя нет, только код брони. Читается через `GET /api/v1/venue/audit`. `users.last_seen_at` обновляется при входе в мини-приложение и событии бота не чаще раза в час.
+- `complaints`: жалобы гостей; одна жалоба на бронь (частичный уникальный индекс по `booking_id`), не больше 5 в сутки на гостя проверяется сервисом по часам. `venues.blocked_at`, `venues.blocked_reason`, `users.blocked_at`, `users.blocked_reason` хранят блокировки; `visibleVenueCondition` и видимость горящих позиций исключают заблокированные заведения. Действия администратора пишутся в `audit_events` с действиями `admin.*` (`venue_id` может быть пустым, `target_type` дополнен значениями `complaint` и `user`), владельцу в `GET /api/v1/venue/audit` они не показываются. Администраторы задаются `ADMIN_USER_IDS`, маршруты `/api/v1/admin/*` для остальных отвечают 404 `not_found`.
 - `deal_impressions`: не больше строки на гостя, акцию и день (уникальный индекс `deal_id, user_id, day`); показы пишутся внутри `GET /deals`, `GET /venues/{id}`, карточки акции и карточек бота, демо-учётки и демо-заведения не пишутся. `users.acquisition` и `users.acquired_at` заполняются один раз при создании пользователя, `bookings.channel` при создании брони, `deals.list_price_rub` при создании акции.
 - `notifications`: одна строка на событие и получателя (уникальный `dedup_key`); `subject` содержит только идентификаторы брони, акции, разбора или отчёта; `kind` проверяется в коде, чтобы новые типы не требовали миграции.
 - При удалении пользователя `consents`, `meals`, `chat_states`, `notifications` и `notification_settings` удаляются каскадно, а в `offers` и `bookings` `user_id` становится `NULL` (обезличивание для агрегатов заведения).
@@ -531,6 +553,7 @@ erDiagram
 | `purge_notifications` | ежедневно в 04:30 по Москве | удаление строк очереди старше 30 дней |
 | `purge_deal_impressions` | ежедневно в 04:40 по Москве | удаление показов горящих позиций старше 90 дней |
 | `purge_retention` | ежедневно в 04:50 по Москве | объяснения предложений старше 90 дней, состояния диалога без изменений 7 дней, журнал действий старше года; при `PURGE_INACTIVE_ACCOUNTS=true` предупреждение за 14 дней и удаление аккаунтов без входа 18 месяцев |
+| `moderation_signals` | ежедневно в 10:00 по Москве, только при непустом `ADMIN_USER_IDS` | администраторам список заведений с тремя и больше открытыми жалобами за 7 дней или `redeemRate` ниже 0,3 при десяти и больше бронях за 7 дней; пустой список не отправляется. Порог по `notClosed` не включён: отчёта с этим показателем пока нет |
 | `max_webhook_guard` | каждые 10 минут, только `BOT_MODE=webhook` | проверка подписки webhook и восстановление, если её нет или в ней не хватает типов обновлений |
 | `refresh_demo_data` | ежедневно в 06:00 по Москве, только `DEMO_MODE=true` | горящие позиции на сегодня, дневник демо-гостя, история аналитики |
 | `proactive_offers` | каждые 15 минут, только `PROACTIVE_OFFERS=true` | подсказки гостям с согласием на персональные предложения; в MVP выключена |
@@ -562,6 +585,6 @@ erDiagram
 - Местоположение округляется до сотых градуса (около 1 км) до записи в базу.
 - Удаление аккаунта (`/delete`, `DELETE /api/v1/me`) в одной транзакции отменяет активные брони, очищает объяснения показанных предложений, удаляет копии демо-заведений и пользователя; показы и брони остаются в статистике заведения обезличенными.
 - Демо-режим включается только явно, локальные демо-токены отклоняются в режиме `webhook`.
-- Журнал действий в заведении (`audit_events`) хранит, кто и когда погасил бронь или поменял акцию, меню и карточку, год; сроки хранения остальных данных в [privacy.md](privacy.md), раздел «Сроки хранения».
+- Журнал действий в заведении (`audit_events`) хранит, кто и когда погасил бронь или поменял акцию, меню и карточку, а также действия администратора (`admin.*`), год; сроки хранения остальных данных в [privacy.md](privacy.md), раздел «Сроки хранения».
 
 Подробности обработки персональных данных: [privacy.md](privacy.md).

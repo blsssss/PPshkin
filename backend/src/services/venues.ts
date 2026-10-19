@@ -7,6 +7,7 @@ import { conflict, notFound, unprocessable } from '../shared/errors.ts';
 import { isValidTimeZone } from '../shared/time.ts';
 import { changedFields, type AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
+import { requireUnblockedUser } from './moderation.ts';
 
 export interface VenueInput {
   name: string;
@@ -57,6 +58,7 @@ export function createVenuesService({ pool, clock }: VenuesDependencies): Venues
 
     async create(ownerId, input) {
       assertTimeZone(input.timezone);
+      await requireUnblockedUser(pool, ownerId);
       const venue = await venues.insert(
         pool,
         ownerId,

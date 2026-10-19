@@ -21,6 +21,7 @@ import { createInsightsService } from './services/insights.ts';
 import { createMenuImportsService } from './services/menu-imports.ts';
 import { createMenuService } from './services/menu.ts';
 import { createMetricsService } from './services/metrics.ts';
+import { createModerationService } from './services/moderation.ts';
 import { createNotificationSettingsService } from './services/notification-settings.ts';
 import { createProfileService } from './services/profile.ts';
 import { createRecommendationsService } from './services/recommendations.ts';
@@ -88,5 +89,6 @@ export function createServices({
     demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
     notificationSettings: createNotificationSettingsService({ pool, clock }),
     audit: createAuditService({ pool }),
+    moderation: createModerationService({ pool, clock, notifications, adminIds: config.ADMIN_USER_IDS }),
   };
 }

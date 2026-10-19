@@ -9,6 +9,7 @@ const db: Queryable = { query: () => Promise.reject(new Error('the database is n
 function jobs(flags: Partial<JobsDependencies['config']>, extra: Partial<JobsDependencies> = {}) {
   return createJobs({
     config: {
+      ADMIN_USER_IDS: [],
       BOT_MODE: 'polling',
       DEMO_MODE: false,
       PROACTIVE_OFFERS: false,
@@ -117,6 +118,7 @@ describe('createJobs', () => {
     const expireDue = vi.fn(() => Promise.resolve([]));
     const expire = createJobs({
       config: {
+        ADMIN_USER_IDS: [],
         BOT_MODE: 'polling',
         DEMO_MODE: false,
         PROACTIVE_OFFERS: false,

@@ -12,6 +12,15 @@ const commaList = z.string().transform((value) =>
     .filter((item) => item.length > 0),
 );
 
+const positiveIdList = commaList.pipe(
+  z.array(
+    z
+      .string()
+      .regex(/^[1-9]\d{0,14}$/, 'expected a positive whole user id')
+      .transform(Number),
+  ),
+);
+
 const emptyAsUndefined = (value: unknown) => (value === '' ? undefined : value);
 
 const IP_OR_CIDR = /^[0-9a-f:.]+(\/\d{1,3})?$/i;
@@ -42,6 +51,7 @@ const baseSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   LOG_PRETTY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
+  ADMIN_USER_IDS: z.preprocess(emptyAsUndefined, positiveIdList.default([])),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   TRUST_PROXY: z.preprocess(emptyAsUndefined, trustProxySetting.default(false)),
   DATABASE_URL: z.string().min(1),

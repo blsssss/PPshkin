@@ -22,6 +22,8 @@ import type { MaxLogger } from '../integrations/max/poller.ts';
 import type { Messenger, OutgoingMessage } from '../ports/messenger.ts';
 import type { Notifications } from '../ports/notifier.ts';
 import * as bookings from '../repositories/bookings.ts';
+import * as complaints from '../repositories/complaints.ts';
+import * as moderation from '../repositories/moderation.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
@@ -36,6 +38,11 @@ import type { NotificationStats } from './stats.ts';
 import {
   accountInactiveMessage,
   bookingCancelledMessage,
+  bookingVenueBlockedMessage,
+  complaintCreatedMessage,
+  complaintDecidedMessage,
+  venueBlockedMessage,
+  venueComplaintMessage,
   bookingConfirmedMessage,
   bookingCreatedMessage,
   bookingExpiredMessage,
@@ -112,7 +119,10 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function idOf(subject: NotificationSubject, field: 'bookingId' | 'dealId' | 'importId'): number | null {
+function idOf(
+  subject: NotificationSubject,
+  field: 'bookingId' | 'dealId' | 'importId' | 'complaintId' | 'venueId',
+): number | null {
   const value = (subject as Partial<Record<typeof field, unknown>>)[field];
   return typeof value === 'number' ? value : null;
 }
@@ -212,6 +222,39 @@ export function createOutbox({
     return activeAt > createdAt ? skip('user came back') : send(accountInactiveMessage());
   }
 
+  async function composeBookingBlocked(subject: NotificationSubject): Promise<Composed> {
+    const notice = await bookingNotice(subject);
+    return notice ? send(bookingVenueBlockedMessage(notice)) : skip('booking is gone');
+  }
+
+  async function composeVenueBlocked(subject: NotificationSubject): Promise<Composed> {
+    const id = idOf(subject, 'venueId');
+    const block = id === null ? null : await moderation.findVenueBlock(pool, id);
+    return block ? send(venueBlockedMessage(block.reason)) : skip('venue is not blocked');
+  }
+
+  async function composeComplaint(kind: string, subject: NotificationSubject): Promise<Composed> {
+    const id = idOf(subject, 'complaintId');
+    const found = id === null ? null : await complaints.findContext(pool, id);
+    if (!found) return skip('complaint is gone');
+    const { complaint } = found;
+    if (kind === 'complaint_decided') {
+      return complaint.status === 'open'
+        ? skip('complaint is still open')
+        : send(complaintDecidedMessage(complaint));
+    }
+    const venue = await findVenue(complaint.venueId);
+    if (!venue) return skip('venue is gone');
+    if (kind === 'venue_complaint') {
+      return complaint.status === 'resolved'
+        ? send(venueComplaintMessage(complaint, venue))
+        : skip('complaint is not confirmed');
+    }
+    return complaint.status === 'open'
+      ? send(complaintCreatedMessage(complaint, venue))
+      : skip('complaint is already decided');
+  }
+
   function compose(
     kind: string,
     subject: NotificationSubject,
@@ -238,6 +281,14 @@ export function createOutbox({
         return Promise.resolve(skip('venue reports are not available yet'));
       case 'account_inactive_warning':
         return composeInactiveWarning(subject, createdAt);
+      case 'booking_venue_blocked':
+        return composeBookingBlocked(subject);
+      case 'venue_blocked':
+        return composeVenueBlocked(subject);
+      case 'venue_complaint':
+      case 'complaint_created':
+      case 'complaint_decided':
+        return composeComplaint(kind, subject);
     }
   }
 

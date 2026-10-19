@@ -3,6 +3,15 @@ import { callback, command } from '../bot/keyboards.ts';
 import { bold, dayProgress, distance } from '../bot/texts.ts';
 import { dealOverAt } from '../domain/deals.ts';
 import type { Booking, Deal, Venue } from '../domain/models.ts';
+import {
+  COMPLAINT_REASON_TEXTS,
+  SIGNAL_OPEN_COMPLAINTS,
+  SIGNAL_REDEEM_RATE,
+  SIGNAL_WINDOW_DAYS,
+  VENUE_BLOCKED_GUEST_TEXT,
+  type AdminComplaint,
+  type VenueSignal,
+} from '../domain/moderation.ts';
 import { minutesLeft } from '../domain/notifications.ts';
 import { escapeMarkdown } from '../integrations/max/messenger.ts';
 import type { Button, OutgoingMessage } from '../ports/messenger.ts';
@@ -175,6 +184,87 @@ export function dealEndingMessage({ deal, venue, itemName }: DealNotice): Outgoi
 export function accountInactiveMessage(): OutgoingMessage {
   return message(
     ['Аккаунт удалится через 14 дней, потому что вы давно не заходили. Чтобы сохранить его, откройте бот.'],
+    [],
+  );
+}
+
+export function bookingVenueBlockedMessage({ booking }: BookingNotice): OutgoingMessage {
+  return message(
+    [
+      bold(VENUE_BLOCKED_GUEST_TEXT),
+      `Бронь ${booking.code}: ${escapeMarkdown(booking.itemName)}. Порция возвращена.`,
+    ],
+    [[command(NOTICE_BUTTONS.pickAnother, 'eat')]],
+  );
+}
+
+export function venueBlockedMessage(reason: string | null): OutgoingMessage {
+  return message(
+    [
+      bold(`Заведение приостановлено: ${escapeMarkdown(reason ?? 'причина не указана')}`),
+      'Горящие позиции сняты, активные брони отменены. Если считаете, что это ошибка, напишите в поддержку.',
+    ],
+    [],
+  );
+}
+
+export function venueComplaintMessage(complaint: AdminComplaint, venue: Venue): OutgoingMessage {
+  return message(
+    [
+      bold('Жалоба гостя'),
+      COMPLAINT_REASON_TEXTS[complaint.reason],
+      ...(complaint.bookingCode === null ? [] : [`Бронь ${complaint.bookingCode}`]),
+      formatLocalTime(complaint.createdAt, venue.timezone),
+    ],
+    [[venueBookingsButton()]],
+  );
+}
+
+export function complaintCreatedMessage(complaint: AdminComplaint, venue: Venue): OutgoingMessage {
+  return message(
+    [
+      bold(`Новая жалоба №${complaint.id}`),
+      `Заведение: ${escapeMarkdown(venue.name)}`,
+      ...(complaint.bookingCode === null
+        ? []
+        : [`Бронь ${complaint.bookingCode}: ${escapeMarkdown(complaint.itemName ?? '')}`]),
+      `Причина: ${COMPLAINT_REASON_TEXTS[complaint.reason]}`,
+      ...(complaint.text === null ? [] : [escapeMarkdown(complaint.text)]),
+      formatLocalTime(complaint.createdAt, venue.timezone),
+    ],
+    [],
+  );
+}
+
+export function complaintDecidedMessage(complaint: AdminComplaint): OutgoingMessage {
+  const verdict =
+    complaint.status === 'resolved'
+      ? `Мы разобрались с вашей жалобой на «${escapeMarkdown(complaint.venueName)}». Спасибо, что сообщили.`
+      : `Мы рассмотрели вашу жалобу на «${escapeMarkdown(complaint.venueName)}» и не нашли нарушения.`;
+  return message(
+    [verdict, ...(complaint.resolution === null ? [] : [escapeMarkdown(complaint.resolution)])],
+    [],
+  );
+}
+
+export function signalsMessage(signals: readonly VenueSignal[]): OutgoingMessage {
+  return message(
+    [
+      bold(`Заведения, на которые стоит посмотреть, за ${SIGNAL_WINDOW_DAYS} дней`),
+      ...signals.map((signal) => {
+        const facts = [
+          ...(signal.reasons.includes('open_complaints')
+            ? [`открытых жалоб: ${signal.openComplaints} (порог ${SIGNAL_OPEN_COMPLAINTS})`]
+            : []),
+          ...(signal.reasons.includes('low_redeem_rate') && signal.redeemRate !== null
+            ? [
+                `погашено ${Math.round(signal.redeemRate * 100)}% из ${signal.bookings} броней (порог ${Math.round(SIGNAL_REDEEM_RATE * 100)}%)`,
+              ]
+            : []),
+        ];
+        return `- ${escapeMarkdown(signal.name)}: ${facts.join(', ')}`;
+      }),
+    ],
     [],
   );
 }

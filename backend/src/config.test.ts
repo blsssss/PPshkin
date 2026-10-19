@@ -203,6 +203,15 @@ describe('loadConfig', () => {
     );
   });
 
+  it('reads administrator ids as positive whole numbers', () => {
+    expect(loadConfig(required).ADMIN_USER_IDS).toEqual([]);
+    expect(loadConfig({ ...required, ADMIN_USER_IDS: '' }).ADMIN_USER_IDS).toEqual([]);
+    expect(loadConfig({ ...required, ADMIN_USER_IDS: '12, 345 ,' }).ADMIN_USER_IDS).toEqual([12, 345]);
+    for (const bad of ['-5', '12,-3', '0', '1.5', 'abc', '12;13']) {
+      expect(() => loadConfig({ ...required, ADMIN_USER_IDS: bad })).toThrow(/ADMIN_USER_IDS/);
+    }
+  });
+
   it('keeps proactive offers off unless they are switched on', () => {
     expect(loadConfig(required).PROACTIVE_OFFERS).toBe(false);
     expect(loadConfig({ ...required, PROACTIVE_OFFERS: '' }).PROACTIVE_OFFERS).toBe(false);
