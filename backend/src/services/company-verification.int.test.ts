@@ -7,6 +7,7 @@ import { queuedNotifications } from '../../test/notifications.ts';
 import {
   seedCompany,
   seedCompanyVenue,
+  seedDeal,
   seedDemoVenue,
   seedMember,
   seedMenuItem,
@@ -16,6 +17,7 @@ import type { Company, Venue } from '../domain/models.ts';
 import { createOutbox } from '../notifications/outbox.ts';
 import type { CompanyRegistry, RegistryCompany } from '../ports/company-registry.ts';
 import type { Messenger, OutgoingMessage } from '../ports/messenger.ts';
+import * as meals from '../repositories/meals.ts';
 import { createBackgroundTasks } from '../shared/background.ts';
 import { createAccountService } from './account.ts';
 import { createBookingsService } from './bookings.ts';
@@ -23,6 +25,7 @@ import { createCatalogService } from './catalog.ts';
 import { createCompaniesService, type CompaniesService } from './companies.ts';
 import { createConsentsService } from './consents.ts';
 import { createModerationService, type ModerationService } from './moderation.ts';
+import { createRecommendationsService } from './recommendations.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-26T09:00:00Z');
@@ -174,6 +177,68 @@ describe('venue visibility with VENUE_VERIFICATION_REQUIRED', () => {
     await expect(book(true)).rejects.toMatchObject({ code: 'menu_item_not_found' });
     await pool.query(`update companies set verification = 'verified' where id = $1`, [company.id]);
     await expect(book(true)).resolves.toMatchObject({ booking: { menuItemId: item.id } });
+  });
+
+  it('lists live deals only of venues of verified companies while the flag is on', async () => {
+    const verified = await makeCompany('verified', 104, 'Проверенное');
+    const hiddenItem = await seedMenuItem(pool, venue.id, { name: 'Скрытый эклер', priceRub: 200 });
+    const shownItem = await seedMenuItem(pool, verified.venue.id, { name: 'Видимый эклер', priceRub: 200 });
+    const window = {
+      startsAt: new Date(clock.now().getTime() - HOUR),
+      endsAt: new Date(clock.now().getTime() + HOUR),
+    };
+    await seedDeal(pool, hiddenItem, { priceRub: 120, ...window });
+    await seedDeal(pool, shownItem, { priceRub: 120, ...window });
+    const names = async (required: boolean) =>
+      (
+        await createCatalogService({ pool, clock, demoMode: false, verificationRequired: required }).deals(
+          GUEST,
+          { point: null, radiusM: 3000 },
+        )
+      ).items
+        .map((entry) => entry.deal.item.name)
+        .sort();
+    expect(await names(false)).toEqual(['Видимый эклер', 'Скрытый эклер']);
+    expect(await names(true)).toEqual(['Видимый эклер']);
+  });
+
+  it('recommends dishes only of verified companies while the flag is on', async () => {
+    const verified = await makeCompany('verified', 104, 'Проверенное');
+    await seedMenuItem(pool, venue.id, { name: 'Скрытый сырник', priceRub: 200, kcal: 300 });
+    await seedMenuItem(pool, verified.venue.id, { name: 'Видимый сырник', priceRub: 200, kcal: 300 });
+    for (const [eatenAt, title] of [
+      ['2026-09-24T06:00:00Z', 'Овсянка'],
+      ['2026-09-25T10:00:00Z', 'Суп'],
+      ['2026-09-26T06:00:00Z', 'Сырники'],
+    ] as const) {
+      await meals.insert(pool, {
+        userId: GUEST,
+        title,
+        kcalMin: 350,
+        kcalMax: 350,
+        proteinG: null,
+        fatG: null,
+        carbsG: null,
+        tags: [],
+        source: 'manual',
+        confidence: null,
+        eatenAt: new Date(eatenAt),
+      });
+    }
+    const names = async (required: boolean) =>
+      (
+        await createRecommendationsService({
+          pool,
+          clock,
+          consents,
+          demoMode: false,
+          verificationRequired: required,
+        }).recommend(GUEST, { location: null, limit: 10, channel: 'miniapp' })
+      ).items
+        .map((offer) => offer.item.name)
+        .sort();
+    expect(await names(false)).toEqual(['Видимый сырник', 'Скрытый сырник']);
+    expect(await names(true)).toEqual(['Видимый сырник']);
   });
 
   it('marks workplaces hidden until the verification, only while the flag is on', async () => {
