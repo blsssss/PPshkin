@@ -390,8 +390,9 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 | `prom-client` | 15.1.3 | метрики Prometheus на `/metrics` |
 | `sharp` | 0.35.4 | перекодирование фото в JPEG до 1024 px без метаданных |
 | `qrcode` | 1.5.4 | PNG с QR-кодом брони |
+| `pdfkit` | 0.20.2 | PDF отчёта заведения «выставлено / продано / списано»; шрифт PT Sans (лицензия SIL OFL) лежит в `backend/assets/fonts/` и копируется в образ |
 
-Точные версии всех зависимостей: [backend/package-lock.json](backend/package-lock.json). Инструменты разработки backend: `typescript` 6.0.3, `vitest` 4.1.11, `@vitest/coverage-v8` 4.1.11, `eslint` 10.11.0, `typescript-eslint` 8.70.1, `@eslint/js` 10.0.1, `prettier` 3.9.9, `ajv` 8.20.0 и `ajv-formats` 3.0.1 (проверка ответов по контракту), `@apidevtools/swagger-parser` 13.1.0, `openapi-types` 12.1.3, `yaml` 2.9.1, `pino-pretty` 13.1.3, `@types/node` 24.13.6, `@types/pg` 8.23.1, `@types/qrcode` 1.5.6.
+Точные версии всех зависимостей: [backend/package-lock.json](backend/package-lock.json). Инструменты разработки backend: `typescript` 6.0.3, `vitest` 4.1.11, `@vitest/coverage-v8` 4.1.11, `eslint` 10.11.0, `typescript-eslint` 8.70.1, `@eslint/js` 10.0.1, `prettier` 3.9.9, `ajv` 8.20.0 и `ajv-formats` 3.0.1 (проверка ответов по контракту), `@apidevtools/swagger-parser` 13.1.0, `openapi-types` 12.1.3, `yaml` 2.9.1, `pino-pretty` 13.1.3, `@types/node` 24.13.6, `@types/pg` 8.23.1, `@types/qrcode` 1.5.6, `@types/pdfkit` 0.17.6.
 
 </details>
 
@@ -678,6 +679,20 @@ curl -s -X POST -H "Authorization: Bearer local-demo-guest-token-not-secret" \
 Бронь K7M2QX действует ещё 10 минут, до 18:40: Круассан, Кофейня «Зерно», ул. Баумана, 36.
 [Показать QR] [Отменить]
 ```
+
+Закрытие дня. Через 15 минут после закрытия заведения (у круглосуточного в 23:45), если есть закончившиеся горящие позиции без отметки списания, владельцу и управляющему приходит сообщение; «Другое число» просит написать число сообщением:
+
+```text
+Итоги дня, Кофейня «Зерно», 18 октября
+Выставлено 15, продано по броням 9 (60%), выручка 1620 ₽
+Отметьте, сколько списали:
+Круассан: не продано 3
+[Списали 3] [Не списывали] [Другое число]
+Эклер: не продано 3
+[Списали 3] [Не списывали] [Другое число]
+```
+
+Когда все позиции дня отмечены: «День закрыт: списано 2 из 15 (13%). Отчёт за неделю придёт в понедельник.» В понедельник после 09:00 по времени заведения приходит «Отчёт за неделю 12-18 октября готов» с итогами, файлом CSV и кнопками [Открыть в приложении] и [PDF].
 
 ## Известные ограничения
 
