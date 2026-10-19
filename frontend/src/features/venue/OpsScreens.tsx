@@ -1,6 +1,6 @@
 import { Button } from '@maxhub/max-ui';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { isApiError } from '../../api/errors.ts';
 import { userMessage } from '../../api/messages.ts';
 import { canScanQr, haptic, scanQrCode } from '../../max/bridge.ts';
@@ -23,6 +23,8 @@ import { cleanCodeInput, formatRate, normalizeBookingCode, venueClock } from './
 import { useRedeem, useVenueAnalytics, useVenueBookings } from './dealQueries.ts';
 import type { Venue } from './model.ts';
 import { useVenue, useVenueNotFoundRedirect } from './queries.ts';
+import { ReportTab } from './ReportScreens.tsx';
+import { parseWeekParam } from './reportModel.ts';
 import styles from './Venue.module.css';
 import { useOnline } from '../../shared/useOnline.ts';
 
@@ -498,12 +500,32 @@ function Analytics({ venue }: { venue: Venue }) {
 export function AnalyticsScreen() {
   const venue = useVenue();
   useVenueNotFoundRedirect();
+  const [params] = useSearchParams();
+  const week = parseWeekParam(params.get('week'));
+  const [tab, setTab] = useState<'stats' | 'report'>(
+    params.get('tab') === 'report' || week !== null ? 'report' : 'stats',
+  );
   const data = venue.data;
   return (
     <Page>
       <ScreenHeader title="Статистика" back="/venue" />
       {venue.isPending && <Skeleton height={72} count={4} />}
-      {data !== undefined && data !== null && <Analytics venue={data} />}
+      {data !== undefined && data !== null && (
+        <>
+          <div className={styles.group}>
+            <SegmentedControl
+              label="Раздел"
+              options={[
+                { value: 'stats', label: 'Показатели' },
+                { value: 'report', label: 'Отчёт' },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
+          </div>
+          {tab === 'stats' ? <Analytics venue={data} /> : <ReportTab venue={data} week={week} />}
+        </>
+      )}
     </Page>
   );
 }

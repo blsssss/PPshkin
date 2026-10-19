@@ -10,6 +10,7 @@ export const START_ROUTES: readonly { prefix: string; path: (id: string) => stri
   { prefix: 'deal_', path: (id) => `/deals?highlight=${id}` },
   { prefix: 'booking_', path: (id) => `/bookings/${id}` },
   { prefix: 'import_', path: (id) => `/venue/menu/import/${id}` },
+  { prefix: 'report_', path: (id) => `/venue/analytics?tab=report&week=${id}` },
 ];
 
 export const START_PAGES: Readonly<Record<string, string>> = {
