@@ -29,7 +29,6 @@ interface AdminComplaintRow extends ComplaintRow {
 export interface ComplaintContext {
   complaint: AdminComplaint;
   reporterId: number | null;
-  venueOwnerId: number | null;
 }
 
 export interface NewComplaint {
@@ -152,14 +151,12 @@ export async function findAdminView(db: Queryable, id: number): Promise<AdminCom
 }
 
 export async function findContext(db: Queryable, id: number): Promise<ComplaintContext | null> {
-  const row = await maybeOne<AdminComplaintRow & { reporter_id: number | null; owner_id: number | null }>(
+  const row = await maybeOne<AdminComplaintRow & { reporter_id: number | null }>(
     db,
-    `select ${ADMIN_COLUMNS}, c.reporter_id, v.owner_id from ${ADMIN_FROM} where c.id = $1`,
+    `select ${ADMIN_COLUMNS}, c.reporter_id from ${ADMIN_FROM} where c.id = $1`,
     [id],
   );
-  return row
-    ? { complaint: mapAdminComplaint(row), reporterId: row.reporter_id, venueOwnerId: row.owner_id }
-    : null;
+  return row ? { complaint: mapAdminComplaint(row), reporterId: row.reporter_id } : null;
 }
 
 export async function lockStatus(db: Queryable, id: number): Promise<{ status: ComplaintStatus } | null> {

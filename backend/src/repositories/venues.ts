@@ -2,9 +2,10 @@ import { maybeOne, one, type Queryable } from '../db/pool.ts';
 import type { GeoPoint, Venue } from '../domain/models.ts';
 import type { VenueCategory } from '../domain/vocabulary.ts';
 
-interface VenueRow {
+export interface VenueRow {
   id: number;
   owner_id: number | null;
+  company_id: number | null;
   name: string;
   address: string;
   category: VenueCategory;
@@ -18,13 +19,14 @@ interface VenueRow {
   updated_at: Date;
 }
 
-const VENUE_COLUMNS = `id, owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
+export const VENUE_COLUMNS = `id, owner_id, company_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
   created_at, updated_at`;
 
-function mapVenue(row: VenueRow): Venue {
+export function mapVenue(row: VenueRow): Venue {
   return {
     id: row.id,
     ownerId: row.owner_id,
+    companyId: row.company_id,
     name: row.name,
     address: row.address,
     category: row.category,
@@ -59,19 +61,18 @@ export interface GeoBox {
 
 export async function insert(
   db: Queryable,
-  ownerId: number,
+  companyId: number,
   fields: VenueFields,
   now: Date,
-): Promise<Venue | null> {
-  const row = await maybeOne<VenueRow>(
+): Promise<Venue> {
+  const row = await one<VenueRow>(
     db,
-    `insert into venues (owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone,
+    `insert into venues (company_id, name, address, category, lat, lon, opens_at, closes_at, timezone,
                          created_at, updated_at)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-     on conflict (owner_id) where owner_id is not null do nothing
      returning ${VENUE_COLUMNS}`,
     [
-      ownerId,
+      companyId,
       fields.name,
       fields.address,
       fields.category,
@@ -83,7 +84,7 @@ export async function insert(
       now,
     ],
   );
-  return row ? mapVenue(row) : null;
+  return mapVenue(row);
 }
 
 export async function update(db: Queryable, id: number, changes: VenueChanges, now: Date): Promise<Venue> {
@@ -117,19 +118,10 @@ export async function update(db: Queryable, id: number, changes: VenueChanges, n
   return mapVenue(row);
 }
 
-export async function findByOwner(db: Queryable, ownerId: number): Promise<Venue | null> {
-  const row = await maybeOne<VenueRow>(db, `select ${VENUE_COLUMNS} from venues where owner_id = $1`, [
-    ownerId,
+export async function lockById(db: Queryable, id: number): Promise<Venue | null> {
+  const row = await maybeOne<VenueRow>(db, `select ${VENUE_COLUMNS} from venues where id = $1 for update`, [
+    id,
   ]);
-  return row ? mapVenue(row) : null;
-}
-
-export async function lockByOwner(db: Queryable, ownerId: number): Promise<Venue | null> {
-  const row = await maybeOne<VenueRow>(
-    db,
-    `select ${VENUE_COLUMNS} from venues where owner_id = $1 for update`,
-    [ownerId],
-  );
   return row ? mapVenue(row) : null;
 }
 

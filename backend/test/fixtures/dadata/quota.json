@@ -1,0 +1,5 @@
+{
+  "family": "TOO_MANY_REQUESTS",
+  "reason": "Too Many Requests",
+  "message": "Daily limit exceeded"
+}

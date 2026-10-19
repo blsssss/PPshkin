@@ -1,0 +1,23 @@
+{
+  "suggestions": [
+    {
+      "value": "ООО \"СТАРАЯ ПЕКАРНЯ\"",
+      "data": {
+        "inn": "7707083893",
+        "kpp": "770701001",
+        "ogrn": "1027700132195",
+        "type": "LEGAL",
+        "okved": "10.71",
+        "state": {
+          "status": "LIQUIDATED"
+        },
+        "management": {
+          "name": "Сидоров Сидор"
+        },
+        "address": {
+          "value": "г Москва"
+        }
+      }
+    }
+  ]
+}

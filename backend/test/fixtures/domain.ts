@@ -34,6 +34,7 @@ export function buildVenue(overrides: Partial<Venue> = {}): Venue {
   return {
     id: 1,
     ownerId: 202,
+    companyId: null,
     name: 'Зерно',
     address: 'Казань, улица Баумана, 1',
     category: 'coffee',

@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { BAUMANA, KAZAN_ARENA, KREMLIN, seedDemoCopy, seedDemoVenue, seedUser } from '../../test/venues.ts';
+import {
+  BAUMANA,
+  KAZAN_ARENA,
+  KREMLIN,
+  seedCompany,
+  seedDemoCopy,
+  seedDemoVenue,
+  seedUser,
+} from '../../test/venues.ts';
 import * as venues from './venues.ts';
 
 const pool = testPool();
@@ -26,12 +34,19 @@ afterAll(async () => {
   await closeTestPool();
 });
 
+async function insertFor(userId: number, input: venues.VenueFields, now: Date) {
+  const company = await seedCompany(pool, userId);
+  return venues.insert(pool, company.id, input, now);
+}
+
 describe('venues repository', () => {
   it('stores a venue and returns its hours as HH:MM', async () => {
-    const venue = await venues.insert(pool, 1, fields, createdAt);
+    const company = await seedCompany(pool, 1);
+    const venue = await venues.insert(pool, company.id, fields, createdAt);
     expect(venue).toEqual({
       id: expect.any(Number) as number,
-      ownerId: 1,
+      ownerId: null,
+      companyId: company.id,
       ...fields,
       isDemo: false,
       createdAt,
@@ -39,38 +54,38 @@ describe('venues repository', () => {
     });
     const { rows } = await pool.query<{ opens_at: string }>('select opens_at from venues');
     expect(rows[0]?.opens_at).toBe('07:30:00');
-    expect(await venues.findByIds(pool, [venue!.id])).toEqual([venue]);
-    expect(await venues.findByOwner(pool, 1)).toEqual(venue);
-    expect(await venues.lockByOwner(pool, 1)).toEqual(venue);
+    expect(await venues.findByIds(pool, [venue.id])).toEqual([venue]);
+    expect(await venues.lockById(pool, venue.id)).toEqual(venue);
   });
 
-  it('returns null instead of a second venue for the same owner', async () => {
-    await venues.insert(pool, 1, fields, createdAt);
-    expect(await venues.insert(pool, 1, { ...fields, name: 'Второе' }, createdAt)).toBeNull();
-    expect(await venues.insert(pool, 2, { ...fields, name: 'Второе' }, createdAt)).not.toBeNull();
+  it('keeps several venues in one company', async () => {
+    const company = await seedCompany(pool, 1);
+    const first = await venues.insert(pool, company.id, fields, createdAt);
+    const second = await venues.insert(pool, company.id, { ...fields, name: 'Второе' }, createdAt);
+    expect(second.id).not.toBe(first.id);
+    expect(await venues.lockById(pool, 404)).toBeNull();
   });
 
   it('changes only the given fields', async () => {
-    const venue = await venues.insert(pool, 1, fields, createdAt);
+    const venue = await insertFor(1, fields, createdAt);
     const updatedAt = new Date('2026-09-25T10:00:00Z');
-    const updated = await venues.update(pool, venue!.id, { location: KREMLIN, opensAt: '09:00' }, updatedAt);
+    const updated = await venues.update(pool, venue.id, { location: KREMLIN, opensAt: '09:00' }, updatedAt);
     expect(updated).toEqual({ ...venue, location: KREMLIN, opensAt: '09:00', updatedAt });
   });
 
   it('lists venues inside a bounding box', async () => {
-    const baumana = await venues.insert(pool, 1, fields, createdAt);
-    const arena = await venues.insert(pool, 2, { ...fields, location: KAZAN_ARENA }, createdAt);
+    const baumana = await insertFor(1, fields, createdAt);
+    const arena = await insertFor(2, { ...fields, location: KAZAN_ARENA }, createdAt);
     const box = { minLat: 55.78, maxLat: 55.8, minLon: 49.1, maxLon: 49.13 };
     expect(await venues.listVisibleWithin(pool, box, 1)).toEqual([baumana]);
     expect(await venues.listVisible(pool, 1)).toEqual([baumana, arena]);
-    expect(await venues.findByOwner(pool, 404)).toBeNull();
     expect(await venues.findByIds(pool, [404])).toEqual([]);
   });
 
   it('finds venues by ids in id order', async () => {
-    const baumana = await venues.insert(pool, 1, fields, createdAt);
-    const arena = await venues.insert(pool, 2, { ...fields, location: KAZAN_ARENA }, createdAt);
-    expect(await venues.findByIds(pool, [arena!.id, 404, baumana!.id])).toEqual([baumana, arena]);
+    const baumana = await insertFor(1, fields, createdAt);
+    const arena = await insertFor(2, { ...fields, location: KAZAN_ARENA }, createdAt);
+    expect(await venues.findByIds(pool, [arena.id, 404, baumana.id])).toEqual([baumana, arena]);
     expect(await venues.findByIds(pool, [])).toEqual([]);
   });
 });
@@ -82,10 +97,10 @@ describe('demo venue visibility', () => {
     (await venues.listVisible(pool, viewer)).map((venue) => venue.id);
 
   it('shows regular and seeded demo venues to everyone', async () => {
-    const regular = await venues.insert(pool, 1, fields, createdAt);
+    const regular = await insertFor(1, fields, createdAt);
     await seedDemoVenue(pool, seeded, { name: 'Кофейня «Зерно»' }, -1002);
-    expect(await visibleIds(2)).toEqual([regular!.id, seeded]);
-    expect(await visibleIds(-1001)).toEqual([regular!.id, seeded]);
+    expect(await visibleIds(2)).toEqual([regular.id, seeded]);
+    expect(await visibleIds(-1001)).toEqual([regular.id, seeded]);
     expect(await venues.findVisible(pool, seeded, 2)).toMatchObject({
       id: seeded,
       isDemo: true,
@@ -143,13 +158,13 @@ describe('demo venue visibility', () => {
   });
 
   it('finds only seeded demo venues as copy sources', async () => {
-    const regular = await venues.insert(pool, 1, fields, createdAt);
+    const regular = await insertFor(1, fields, createdAt);
     await seedDemoVenue(pool, seeded, {}, -1002);
     await seedDemoVenue(pool, 900002);
     const copy = await seedDemoCopy(pool, 900002, 7);
     expect((await venues.findSeededDemo(pool, seeded))?.id).toBe(seeded);
     expect((await venues.findSeededDemo(pool, 900002))?.id).toBe(900002);
-    expect(await venues.findSeededDemo(pool, regular!.id)).toBeNull();
+    expect(await venues.findSeededDemo(pool, regular.id)).toBeNull();
     expect(await venues.findSeededDemo(pool, copy.id)).toBeNull();
     expect(await venues.findSeededDemo(pool, 404)).toBeNull();
   });

@@ -1,4 +1,5 @@
 import { jsonb, type Queryable } from '../db/pool.ts';
+import type { Role } from '../domain/roles.ts';
 import type { AuditAction, AuditChannel, AuditTarget } from '../domain/audit.ts';
 
 export interface AuditEntry {
@@ -14,6 +15,7 @@ export interface AuditRow {
   id: number;
   actorUserId: number | null;
   actorName: string | null;
+  actorRole: Role;
   action: string;
   targetType: string;
   targetId: number | null;
@@ -47,10 +49,13 @@ export async function record(db: Queryable, entry: AuditEntry, now: Date): Promi
 export async function listInVenue(db: Queryable, venueId: number, page: AuditPage): Promise<AuditRow[]> {
   const { rows } = await db.query<AuditRow>(
     `select a.id, a.actor_user_id as "actorUserId", u.first_name as "actorName",
+            coalesce(m.role, case when v.company_id is null then 'owner' else 'cashier' end) as "actorRole",
             a.action, a.target_type as "targetType", a.target_id as "targetId", a.details,
             a.created_at as "createdAt"
        from audit_events a
        left join users u on u.id = a.actor_user_id
+       join venues v on v.id = a.venue_id
+       left join memberships m on m.company_id = v.company_id and m.user_id = a.actor_user_id
       where a.venue_id = $1 and a.action not like 'admin.%' and a.created_at >= $2 and a.created_at < $3
         and ($4::bigint is null or a.id < $4)
       order by a.id desc

@@ -282,13 +282,18 @@ export async function cancelActiveInVenue(db: Queryable, venueId: number, at: Da
   return rows.map(mapBooking);
 }
 
-export async function markRedeemed(db: Queryable, id: number, at: Date): Promise<Booking> {
+export async function markRedeemed(
+  db: Queryable,
+  id: number,
+  redeemedBy: number,
+  at: Date,
+): Promise<Booking> {
   const row = await one<BookingRow>(
     db,
-    `update bookings as b set status = 'redeemed', resolved_at = $2
+    `update bookings as b set status = 'redeemed', resolved_at = $2, redeemed_by = $3
       where b.id = $1 and b.status = 'active'
       returning ${BOOKING_COLUMNS}`,
-    [id, at],
+    [id, at, redeemedBy],
   );
   return mapBooking(row);
 }

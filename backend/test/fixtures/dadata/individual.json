@@ -1,0 +1,21 @@
+{
+  "suggestions": [
+    {
+      "value": "ИП Петров Пётр Петрович",
+      "data": {
+        "inn": "500100732259",
+        "kpp": null,
+        "ogrn": "304500116000157",
+        "type": "INDIVIDUAL",
+        "okved": "56.10",
+        "state": {
+          "status": "ACTIVE"
+        },
+        "management": null,
+        "address": {
+          "value": "Московская обл"
+        }
+      }
+    }
+  ]
+}

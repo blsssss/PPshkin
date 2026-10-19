@@ -81,6 +81,7 @@ const baseSchema = z.object({
   DEMO_MODE: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   DEMO_GUEST_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
   DEMO_VENUE_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
+  DADATA_API_KEY: z.preprocess(emptyAsUndefined, z.string().trim().min(1).optional()),
   CHADGPT_API_KEY: z.preprocess(emptyAsUndefined, z.string().trim().min(1).optional()),
   CHADGPT_BASE_URL: z.preprocess(
     emptyAsUndefined,

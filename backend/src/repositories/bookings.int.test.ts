@@ -229,11 +229,16 @@ describe('bookings repository', () => {
       dealId: deal.id,
       createdAt: now,
     });
-    expect(await bookings.markRedeemed(pool, id, now)).toMatchObject({
+    expect(await bookings.markRedeemed(pool, id, 202, now)).toMatchObject({
       id,
       status: 'redeemed',
       resolvedAt: now,
     });
+    const { rows } = await pool.query<{ redeemed_by: number }>(
+      'select redeemed_by from bookings where id = $1',
+      [id],
+    );
+    expect(rows).toEqual([{ redeemed_by: 202 }]);
     expect(await quantityLeft()).toBe(1);
     expect(await bookings.listActiveItemIds(pool, GUEST)).toEqual([]);
   });

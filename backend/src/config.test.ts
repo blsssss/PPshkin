@@ -100,6 +100,12 @@ describe('loadConfig', () => {
     ).toThrow(/SESSION_SECRET_PREVIOUS must differ/);
   });
 
+  it('reads the DaData key and treats an empty one as missing', () => {
+    expect(loadConfig(required).DADATA_API_KEY).toBeUndefined();
+    expect(loadConfig({ ...required, DADATA_API_KEY: '' }).DADATA_API_KEY).toBeUndefined();
+    expect(loadConfig({ ...required, DADATA_API_KEY: ' dadata-key ' }).DADATA_API_KEY).toBe('dadata-key');
+  });
+
   it('configures ChadGPT with safe defaults and no key', () => {
     const config = loadConfig({
       ...required,

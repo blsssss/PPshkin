@@ -137,6 +137,7 @@ rm deploy_key known_hosts
 |---|---|
 | `MAX_BOT_TOKEN` | токен бота от организаторов |
 | `CHADGPT_API_KEY` | ключ ChadGPT |
+| `DADATA_API_KEY` | ключ DaData для проверки компании по ИНН, необязательный |
 | `DEMO_GUEST_TOKEN`, `DEMO_VENUE_TOKEN` | `openssl rand -hex 24`, на период проверки хакатона |
 | `ALERT_BOT_TOKEN`, `ALERT_CHAT_ID` | токен Telegram-бота для алертов и id чата команды, раздел 11 |
 
