@@ -246,7 +246,7 @@ describe('blocking a venue', () => {
       target_type: 'venue',
       target_id: venue.id,
     });
-    expect((await audit.list(OWNER, {})).items).toEqual([]);
+    expect((await audit.list({ userId: OWNER }, {})).items).toEqual([]);
   });
 });
 

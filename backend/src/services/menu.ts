@@ -5,7 +5,7 @@ import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound, unprocessable } from '../shared/errors.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
 import { changedFields, type AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
 
@@ -26,10 +26,10 @@ export interface MenuItemInput {
 export type MenuItemPatch = Partial<MenuItemInput>;
 
 export interface MenuService {
-  list(ownerId: number): Promise<MenuItem[]>;
-  create(ownerId: number, input: MenuItemInput, channel: AuditChannel): Promise<MenuItem>;
-  update(ownerId: number, itemId: number, patch: MenuItemPatch, channel: AuditChannel): Promise<MenuItem>;
-  archive(ownerId: number, itemId: number, channel: AuditChannel): Promise<void>;
+  list(actor: VenueActor): Promise<MenuItem[]>;
+  create(actor: VenueActor, input: MenuItemInput, channel: AuditChannel): Promise<MenuItem>;
+  update(actor: VenueActor, itemId: number, patch: MenuItemPatch, channel: AuditChannel): Promise<MenuItem>;
+  archive(actor: VenueActor, itemId: number, channel: AuditChannel): Promise<void>;
 }
 
 interface MenuDependencies {
@@ -104,13 +104,13 @@ export async function lockMenuItem(db: Queryable, venueId: number, itemId: numbe
 
 export function createMenuService({ pool, clock }: MenuDependencies): MenuService {
   return {
-    async list(ownerId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async list(actor) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       return (await menuItems.listOnMenu(pool, venue.id)).sort(byMenuOrder);
     },
 
-    async create(ownerId, input, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async create(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       return withTransaction(pool, async (client) => {
         const now = clock.now();
         const item = await menuItems.insert(client, venue.id, menuItemFields(input, 'venue'), now);
@@ -118,7 +118,7 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'menu_item.create',
             target: { type: 'menu_item', id: item.id },
             channel,
@@ -130,8 +130,8 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
       });
     },
 
-    async update(ownerId, itemId, patch, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async update(actor, itemId, patch, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
@@ -149,7 +149,7 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'menu_item.update',
             target: { type: 'menu_item', id: item.id },
             channel,
@@ -164,8 +164,8 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
       });
     },
 
-    async archive(ownerId, itemId, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async archive(actor, itemId, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       await withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
@@ -175,7 +175,7 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'menu_item.archive',
             target: { type: 'menu_item', id: item.id },
             channel,

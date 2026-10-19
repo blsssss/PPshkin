@@ -11,9 +11,9 @@ import {
 import type { User } from '../domain/models.ts';
 import * as settings from '../repositories/notification-settings.ts';
 import * as users from '../repositories/users.ts';
-import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound, unprocessable } from '../shared/errors.ts';
+import { listWorkplaces } from './access.ts';
 
 export interface NotificationKindSetting {
   kind: SettingsKind;
@@ -57,7 +57,7 @@ function present(user: User, preferences: NotificationPreferences, hasVenue: boo
 }
 
 async function hasVenue(db: Queryable, userId: number): Promise<boolean> {
-  return (await venues.findByOwner(db, userId)) !== null;
+  return (await listWorkplaces(db, userId)).length > 0;
 }
 
 function editableFor(kind: SettingsKind, withVenue: boolean): boolean {

@@ -54,9 +54,20 @@ export const VenueCardListSchema = z.object({
   demoCenterUsed: DemoCenterUsed,
 });
 
+const SellerSchema = z
+  .object({
+    name: z.string().describe('Наименование продавца из ЕГРЮЛ или ЕГРИП'),
+    ogrn: z.string().nullable().describe('ОГРН или ОГРНИП'),
+    address: z.string().nullable().describe('Адрес продавца'),
+  })
+  .meta({ id: 'Seller', description: 'Продавец: компания, которая ведёт заведение' });
+
 export const VenueDetailsSchema = z
   .object({
     venue: VenueSchema,
+    seller: SellerSchema.nullable().describe(
+      'Реквизиты продавца; null, если у компании нет проверенного ИНН или заявка отклонена',
+    ),
     openNow: OpenNow,
     menu: z.array(MenuItemSchema).describe('Доступные гостю позиции по категориям и названию'),
     deals: z.array(DealSchema).describe('Горящие предложения, которые можно забронировать сейчас'),
@@ -87,6 +98,35 @@ export const VenueBody = z.object({
     'Время закрытия ЧЧ:ММ, по умолчанию 22:00; раньше opensAt - закрытие после полуночи, равно opensAt - круглосуточно',
   ),
   timezone: z.string().min(1).max(64).optional().describe('Часовой пояс IANA, по умолчанию Europe/Moscow'),
+});
+
+export const VenueCreateBody = VenueBody.extend({
+  companyId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Компания, к которой подключается заведение; обязателен, если пользователь владеет несколькими',
+    ),
+  newCompany: z
+    .boolean()
+    .optional()
+    .describe('true: создать новую компанию для заведения, даже если у пользователя уже есть другие'),
+}).refine((body) => body.companyId === undefined || body.newCompany !== true, {
+  message: 'companyId and newCompany cannot be used together',
+  path: ['newCompany'],
+});
+
+export const VenueQuery = z.object({
+  venueId: z.coerce
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Заведение, с которым работает сотрудник; обязателен, если у пользователя несколько рабочих мест',
+    ),
 });
 
 export const VenuePatchBody = VenueBody.partial()
@@ -128,6 +168,7 @@ export function toVenueCard(card: VenueCardView): z.infer<typeof VenueCardSchema
 export function toVenueDetails(details: VenueDetailsView): z.infer<typeof VenueDetailsSchema> {
   return {
     venue: toVenue(details.venue),
+    seller: details.seller,
     openNow: details.openNow,
     menu: details.menu.map(toMenuItem),
     deals: details.deals.map(toDeal),

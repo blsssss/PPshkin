@@ -43,7 +43,7 @@ afterAll(async () => {
 
 describe('creating deals', () => {
   it('starts a deal now with the whole quantity left', async () => {
-    const view = await service.create(OWNER, input(), 'miniapp');
+    const view = await service.create({ userId: OWNER }, input(), 'miniapp');
     expect(view.status).toBe('active');
     expect(view.item).toEqual(item);
     expect(view.deal).toMatchObject({
@@ -61,38 +61,46 @@ describe('creating deals', () => {
 
   it('only sells available items of the own menu', async () => {
     const hidden = await seedMenuItem(pool, venue.id, { name: 'Скрытый', isAvailable: false });
-    await expect(service.create(OWNER, input({ menuItemId: hidden.id }), 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.create({ userId: OWNER }, input({ menuItemId: hidden.id }), 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'menu_item_unavailable',
     });
-    await menu.archive(OWNER, item.id, 'miniapp');
-    await expect(service.create(OWNER, input(), 'miniapp')).rejects.toMatchObject({
+    await menu.archive({ userId: OWNER }, item.id, 'miniapp');
+    await expect(service.create({ userId: OWNER }, input(), 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
     const foreign = await seedMenuItem(pool, (await seedVenue(pool, OTHER_OWNER)).id);
-    await expect(service.create(OWNER, input({ menuItemId: foreign.id }), 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.create({ userId: OWNER }, input({ menuItemId: foreign.id }), 'miniapp'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
-    await expect(service.create(OWNER, input({ menuItemId: 999_999 }), 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.create({ userId: OWNER }, input({ menuItemId: 999_999 }), 'miniapp'),
+    ).rejects.toMatchObject({
       code: 'menu_item_not_found',
     });
   });
 
   it('needs a price strictly below the menu price', async () => {
     for (const priceRub of [200, 250]) {
-      await expect(service.create(OWNER, input({ priceRub }), 'miniapp')).rejects.toMatchObject({
+      await expect(service.create({ userId: OWNER }, input({ priceRub }), 'miniapp')).rejects.toMatchObject({
         status: 422,
         code: 'deal_price_not_lower',
       });
     }
-    expect((await service.create(OWNER, input({ priceRub: 199 }), 'miniapp')).deal.priceRub).toBe(199);
+    expect((await service.create({ userId: OWNER }, input({ priceRub: 199 }), 'miniapp')).deal.priceRub).toBe(
+      199,
+    );
   });
 
   it('needs an end in the future and within 24 hours', async () => {
     for (const endsAt of [clock.now(), inHours(-1), new Date(inHours(24).getTime() + 1)]) {
-      await expect(service.create(OWNER, input({ endsAt }), 'miniapp')).rejects.toMatchObject({
+      await expect(service.create({ userId: OWNER }, input({ endsAt }), 'miniapp')).rejects.toMatchObject({
         status: 422,
         code: 'deal_window_invalid',
       });
@@ -100,30 +108,32 @@ describe('creating deals', () => {
     const allDay = await seedVenue(pool, OTHER_OWNER, { opensAt: '00:00', closesAt: '00:00' });
     const coffee = await seedMenuItem(pool, allDay.id, { priceRub: 200 });
     const longest = input({ menuItemId: coffee.id, endsAt: inHours(24) });
-    expect((await service.create(OTHER_OWNER, longest, 'miniapp')).status).toBe('active');
+    expect((await service.create({ userId: OTHER_OWNER }, longest, 'miniapp')).status).toBe('active');
   });
 
   it('allows one live deal per item and a new one after it sells out, ends or is cancelled', async () => {
-    const first = await service.create(OWNER, input(), 'miniapp');
-    await expect(service.create(OWNER, input(), 'miniapp')).rejects.toMatchObject({
+    const first = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await expect(service.create({ userId: OWNER }, input(), 'miniapp')).rejects.toMatchObject({
       status: 409,
       code: 'deal_exists',
     });
 
-    await service.update(OWNER, first.deal.id, { quantityLeft: 0 }, 'miniapp');
-    const second = await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp');
+    await service.update({ userId: OWNER }, first.deal.id, { quantityLeft: 0 }, 'miniapp');
+    const second = await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp');
 
-    await service.cancel(OWNER, second.deal.id, 'miniapp');
-    const third = await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp');
+    await service.cancel({ userId: OWNER }, second.deal.id, 'miniapp');
+    const third = await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp');
 
     clock.advance(HOUR);
-    expect((await service.create(OWNER, input(), 'miniapp')).deal.id).toBeGreaterThan(third.deal.id);
+    expect((await service.create({ userId: OWNER }, input(), 'miniapp')).deal.id).toBeGreaterThan(
+      third.deal.id,
+    );
   });
 
   it('serializes concurrent deals on the same item', async () => {
     const results = await Promise.allSettled([
-      service.create(OWNER, input(), 'miniapp'),
-      service.create(OWNER, input(), 'miniapp'),
+      service.create({ userId: OWNER }, input(), 'miniapp'),
+      service.create({ userId: OWNER }, input(), 'miniapp'),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
@@ -134,23 +144,34 @@ describe('creating deals', () => {
 
 describe('changing deals', () => {
   it('changes the quantity left and the end time', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
     clock.advance(10 * MINUTE);
-    const updated = await service.update(OWNER, deal.id, { quantityLeft: 2, endsAt: inHours(3) }, 'miniapp');
+    const updated = await service.update(
+      { userId: OWNER },
+      deal.id,
+      { quantityLeft: 2, endsAt: inHours(3) },
+      'miniapp',
+    );
     expect(updated.deal).toMatchObject({ quantityLeft: 2, quantityTotal: 5, endsAt: inHours(3) });
     expect(updated.status).toBe('active');
-    expect((await service.update(OWNER, deal.id, { quantityLeft: 0 }, 'miniapp')).status).toBe('sold_out');
-    expect((await service.update(OWNER, deal.id, { quantityLeft: 5 }, 'miniapp')).status).toBe('active');
+    expect((await service.update({ userId: OWNER }, deal.id, { quantityLeft: 0 }, 'miniapp')).status).toBe(
+      'sold_out',
+    );
+    expect((await service.update({ userId: OWNER }, deal.id, { quantityLeft: 5 }, 'miniapp')).status).toBe(
+      'active',
+    );
   });
 
   it('rejects a quantity above the total and a bad end time', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 6 }, 'miniapp')).rejects.toMatchObject({
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 6 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'deal_quantity_invalid',
     });
     for (const endsAt of [clock.now(), new Date(inHours(24).getTime() + 1)]) {
-      await expect(service.update(OWNER, deal.id, { endsAt }, 'miniapp')).rejects.toMatchObject({
+      await expect(service.update({ userId: OWNER }, deal.id, { endsAt }, 'miniapp')).rejects.toMatchObject({
         status: 422,
         code: 'deal_window_invalid',
       });
@@ -160,25 +181,27 @@ describe('changing deals', () => {
   it('keeps an end time after the start of a scheduled deal', async () => {
     const scheduled = await seedDeal(pool, item, { startsAt: inHours(2), endsAt: inHours(4) });
     await expect(
-      service.update(OWNER, scheduled.id, { endsAt: inHours(1) }, 'miniapp'),
+      service.update({ userId: OWNER }, scheduled.id, { endsAt: inHours(1) }, 'miniapp'),
     ).rejects.toMatchObject({
       code: 'deal_window_invalid',
     });
-    const moved = await service.update(OWNER, scheduled.id, { endsAt: inHours(3) }, 'miniapp');
+    const moved = await service.update({ userId: OWNER }, scheduled.id, { endsAt: inHours(3) }, 'miniapp');
     expect(moved.status).toBe('scheduled');
   });
 
   it('refuses to change cancelled and ended deals', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await service.cancel(OWNER, deal.id, 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 1 }, 'miniapp')).rejects.toMatchObject({
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await service.cancel({ userId: OWNER }, deal.id, 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 1 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 409,
       code: 'deal_finished',
     });
-    const ending = await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp');
+    const ending = await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp');
     clock.advance(HOUR);
     await expect(
-      service.update(OWNER, ending.deal.id, { endsAt: inHours(2) }, 'miniapp'),
+      service.update({ userId: OWNER }, ending.deal.id, { endsAt: inHours(2) }, 'miniapp'),
     ).rejects.toMatchObject({
       status: 409,
       code: 'deal_finished',
@@ -186,90 +209,109 @@ describe('changing deals', () => {
   });
 
   it('refuses to change a sold out deal after its end time', async () => {
-    const { deal } = await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp');
-    await service.update(OWNER, deal.id, { quantityLeft: 0 }, 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp');
+    await service.update({ userId: OWNER }, deal.id, { quantityLeft: 0 }, 'miniapp');
     clock.advance(2 * HOUR);
     for (const patch of [
       { quantityLeft: 3, endsAt: inHours(3) },
       { quantityLeft: 3 },
       { endsAt: inHours(3) },
     ]) {
-      await expect(service.update(OWNER, deal.id, patch, 'miniapp')).rejects.toMatchObject({
+      await expect(service.update({ userId: OWNER }, deal.id, patch, 'miniapp')).rejects.toMatchObject({
         status: 409,
         code: 'deal_finished',
       });
     }
-    const [finished] = await service.list(OWNER, 'finished');
+    const [finished] = await service.list({ userId: OWNER }, 'finished');
     expect(finished).toMatchObject({ status: 'sold_out', deal: { id: deal.id, quantityLeft: 0 } });
   });
 
   it('checks the menu price and availability again before bringing back a sold out deal', async () => {
-    const { deal } = await service.create(OWNER, input({ priceRub: 150 }), 'miniapp');
-    await service.update(OWNER, deal.id, { quantityLeft: 0 }, 'miniapp');
-    await menu.update(OWNER, item.id, { priceRub: 100 }, 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 }, 'miniapp')).rejects.toMatchObject({
+    const { deal } = await service.create({ userId: OWNER }, input({ priceRub: 150 }), 'miniapp');
+    await service.update({ userId: OWNER }, deal.id, { quantityLeft: 0 }, 'miniapp');
+    await menu.update({ userId: OWNER }, item.id, { priceRub: 100 }, 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 3 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'deal_price_not_lower',
     });
-    await menu.update(OWNER, item.id, { priceRub: 150 }, 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 }, 'miniapp')).rejects.toMatchObject({
+    await menu.update({ userId: OWNER }, item.id, { priceRub: 150 }, 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 3 }, 'miniapp'),
+    ).rejects.toMatchObject({
       code: 'deal_price_not_lower',
     });
-    expect((await service.update(OWNER, deal.id, { endsAt: inHours(3) }, 'miniapp')).status).toBe('sold_out');
+    expect((await service.update({ userId: OWNER }, deal.id, { endsAt: inHours(3) }, 'miniapp')).status).toBe(
+      'sold_out',
+    );
 
-    await menu.update(OWNER, item.id, { priceRub: 300, isAvailable: false }, 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 3 }, 'miniapp')).rejects.toMatchObject({
+    await menu.update({ userId: OWNER }, item.id, { priceRub: 300, isAvailable: false }, 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 3 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'menu_item_unavailable',
     });
-    await menu.update(OWNER, item.id, { isAvailable: true }, 'miniapp');
-    const revived = await service.update(OWNER, deal.id, { quantityLeft: 3 }, 'miniapp');
+    await menu.update({ userId: OWNER }, item.id, { isAvailable: true }, 'miniapp');
+    const revived = await service.update({ userId: OWNER }, deal.id, { quantityLeft: 3 }, 'miniapp');
     expect(revived).toMatchObject({ status: 'active', deal: { quantityLeft: 3, priceRub: 150 } });
   });
 
   it('keeps a live deal editable while its item is hidden from guests', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await menu.update(OWNER, item.id, { isAvailable: false }, 'miniapp');
-    const updated = await service.update(OWNER, deal.id, { quantityLeft: 2, endsAt: inHours(3) }, 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await menu.update({ userId: OWNER }, item.id, { isAvailable: false }, 'miniapp');
+    const updated = await service.update(
+      { userId: OWNER },
+      deal.id,
+      { quantityLeft: 2, endsAt: inHours(3) },
+      'miniapp',
+    );
     expect(updated).toMatchObject({ status: 'active', deal: { quantityLeft: 2, endsAt: inHours(3) } });
   });
 
   it('does not bring back a sold out deal while a newer one is live or the item is archived', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await service.update(OWNER, deal.id, { quantityLeft: 0 }, 'miniapp');
-    const newer = await service.create(OWNER, input(), 'miniapp');
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 2 }, 'miniapp')).rejects.toMatchObject({
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await service.update({ userId: OWNER }, deal.id, { quantityLeft: 0 }, 'miniapp');
+    const newer = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 2 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 409,
       code: 'deal_exists',
     });
-    expect((await service.update(OWNER, deal.id, { endsAt: inHours(5) }, 'miniapp')).status).toBe('sold_out');
+    expect((await service.update({ userId: OWNER }, deal.id, { endsAt: inHours(5) }, 'miniapp')).status).toBe(
+      'sold_out',
+    );
 
-    await service.cancel(OWNER, newer.deal.id, 'miniapp');
+    await service.cancel({ userId: OWNER }, newer.deal.id, 'miniapp');
     await menuItems.archive(pool, item.id, clock.now());
-    await expect(service.update(OWNER, deal.id, { quantityLeft: 2 }, 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { quantityLeft: 2 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 409,
       code: 'deal_finished',
     });
   });
 
   it('cancels a deal idempotently', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
     clock.advance(MINUTE);
-    await service.cancel(OWNER, deal.id, 'miniapp');
+    await service.cancel({ userId: OWNER }, deal.id, 'miniapp');
     const cancelledAt = clock.now();
     clock.advance(MINUTE);
-    await service.cancel(OWNER, deal.id, 'miniapp');
-    const [finished] = await service.list(OWNER, 'finished');
+    await service.cancel({ userId: OWNER }, deal.id, 'miniapp');
+    const [finished] = await service.list({ userId: OWNER }, 'finished');
     expect(finished).toMatchObject({ status: 'cancelled', deal: { id: deal.id, cancelledAt } });
   });
 
   it('keeps the final status of sold out and ended deals when they are cancelled', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await service.update(OWNER, deal.id, { quantityLeft: 0 }, 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await service.update({ userId: OWNER }, deal.id, { quantityLeft: 0 }, 'miniapp');
     const ended = await seedDeal(pool, item, { startsAt: inHours(-3), endsAt: inHours(-1) });
-    await service.cancel(OWNER, deal.id, 'miniapp');
-    await service.cancel(OWNER, ended.id, 'miniapp');
-    const finished = await service.list(OWNER, 'finished');
+    await service.cancel({ userId: OWNER }, deal.id, 'miniapp');
+    await service.cancel({ userId: OWNER }, ended.id, 'miniapp');
+    const finished = await service.list({ userId: OWNER }, 'finished');
     expect(finished.map((view) => [view.deal.id, view.status, view.deal.cancelledAt])).toEqual([
       [deal.id, 'sold_out', null],
       [ended.id, 'ended', null],
@@ -283,12 +325,16 @@ describe('deals and opening hours', () => {
   it('ends a deal no later than the venue closes', async () => {
     clock.set('2026-09-25T18:48:00Z');
     for (const endsAt of [inHours(1), inHours(2), at('2026-09-25T19:00:01Z')]) {
-      await expect(service.create(OWNER, input({ endsAt }), 'miniapp')).rejects.toMatchObject({
+      await expect(service.create({ userId: OWNER }, input({ endsAt }), 'miniapp')).rejects.toMatchObject({
         status: 422,
         code: 'deal_ends_after_closing',
       });
     }
-    const view = await service.create(OWNER, input({ endsAt: at('2026-09-25T19:00:00Z') }), 'miniapp');
+    const view = await service.create(
+      { userId: OWNER },
+      input({ endsAt: at('2026-09-25T19:00:00Z') }),
+      'miniapp',
+    );
     expect(view.deal.endsAt).toEqual(at('2026-09-25T19:00:00Z'));
   });
 
@@ -297,27 +343,33 @@ describe('deals and opening hours', () => {
     ['before opening', '2026-09-25T04:00:00Z'],
   ])('does not start a deal %s', async (_case, now) => {
     clock.set(now);
-    await expect(service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'deal_ends_after_closing',
     });
-    expect(await service.list(OWNER, 'active')).toEqual([]);
+    expect(await service.list({ userId: OWNER }, 'active')).toEqual([]);
   });
 
   it('keeps a new end time of a deal before the closing', async () => {
     clock.set('2026-09-25T17:00:00Z');
-    const { deal } = await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp');
-    await expect(service.update(OWNER, deal.id, { endsAt: inHours(3) }, 'miniapp')).rejects.toMatchObject({
+    const { deal } = await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp');
+    await expect(
+      service.update({ userId: OWNER }, deal.id, { endsAt: inHours(3) }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 422,
       code: 'deal_ends_after_closing',
     });
-    expect((await service.update(OWNER, deal.id, { endsAt: inHours(2) }, 'miniapp')).deal.endsAt).toEqual(
-      inHours(2),
-    );
+    expect(
+      (await service.update({ userId: OWNER }, deal.id, { endsAt: inHours(2) }, 'miniapp')).deal.endsAt,
+    ).toEqual(inHours(2));
     clock.set('2026-09-25T18:55:00Z');
-    expect((await service.update(OWNER, deal.id, { quantityLeft: 2 }, 'miniapp')).deal.quantityLeft).toBe(2);
+    expect(
+      (await service.update({ userId: OWNER }, deal.id, { quantityLeft: 2 }, 'miniapp')).deal.quantityLeft,
+    ).toBe(2);
     await expect(
-      service.update(OWNER, deal.id, { endsAt: at('2026-09-25T19:30:00Z') }, 'miniapp'),
+      service.update({ userId: OWNER }, deal.id, { endsAt: at('2026-09-25T19:30:00Z') }, 'miniapp'),
     ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
   });
 
@@ -328,14 +380,14 @@ describe('deals and opening hours', () => {
       endsAt: at('2026-09-25T09:00:00Z'),
     });
     const moved = await service.update(
-      OWNER,
+      { userId: OWNER },
       scheduled.id,
       { endsAt: at('2026-09-25T19:00:00Z') },
       'miniapp',
     );
     expect(moved.status).toBe('scheduled');
     await expect(
-      service.update(OWNER, scheduled.id, { endsAt: at('2026-09-25T19:01:00Z') }, 'miniapp'),
+      service.update({ userId: OWNER }, scheduled.id, { endsAt: at('2026-09-25T19:01:00Z') }, 'miniapp'),
     ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
   });
 
@@ -344,7 +396,7 @@ describe('deals and opening hours', () => {
     const coffee = await seedMenuItem(pool, allDay.id, { priceRub: 200 });
     clock.set('2026-09-25T21:30:00Z');
     const view = await service.create(
-      OTHER_OWNER,
+      { userId: OTHER_OWNER },
       input({ menuItemId: coffee.id, endsAt: inHours(20) }),
       'miniapp',
     );
@@ -356,10 +408,10 @@ describe('deals and opening hours', () => {
     const snack = await seedMenuItem(pool, bar.id, { priceRub: 200 });
     clock.set('2026-09-25T20:30:00Z');
     await expect(
-      service.create(OTHER_OWNER, input({ menuItemId: snack.id, endsAt: inHours(3) }), 'miniapp'),
+      service.create({ userId: OTHER_OWNER }, input({ menuItemId: snack.id, endsAt: inHours(3) }), 'miniapp'),
     ).rejects.toMatchObject({ code: 'deal_ends_after_closing' });
     const view = await service.create(
-      OTHER_OWNER,
+      { userId: OTHER_OWNER },
       input({ menuItemId: snack.id, endsAt: inHours(2.5) }),
       'miniapp',
     );
@@ -374,18 +426,24 @@ describe('deals after the closing', () => {
       startsAt: clock.now(),
       endsAt: new Date('2026-09-25T19:50:00Z'),
     });
-    expect((await service.list(OWNER, 'active')).map((view) => view.deal.id)).toEqual([late.id]);
+    expect((await service.list({ userId: OWNER }, 'active')).map((view) => view.deal.id)).toEqual([late.id]);
 
     clock.set('2026-09-25T19:05:00Z');
-    expect(await service.list(OWNER, 'active')).toEqual([]);
-    expect(await service.list(OWNER, 'finished')).toMatchObject([{ status: 'ended', deal: { id: late.id } }]);
-    await expect(service.update(OWNER, late.id, { quantityLeft: 1 }, 'miniapp')).rejects.toMatchObject({
+    expect(await service.list({ userId: OWNER }, 'active')).toEqual([]);
+    expect(await service.list({ userId: OWNER }, 'finished')).toMatchObject([
+      { status: 'ended', deal: { id: late.id } },
+    ]);
+    await expect(
+      service.update({ userId: OWNER }, late.id, { quantityLeft: 1 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 409,
       code: 'deal_finished',
     });
 
     clock.set('2026-09-26T06:00:00Z');
-    expect((await service.create(OWNER, input({ endsAt: inHours(1) }), 'miniapp')).status).toBe('active');
+    expect((await service.create({ userId: OWNER }, input({ endsAt: inHours(1) }), 'miniapp')).status).toBe(
+      'active',
+    );
   });
 });
 
@@ -402,16 +460,16 @@ describe('listing deals', () => {
       endsAt: new Date(clock.now().getTime() - 2 * HOUR),
     });
     const soldOut = await seedDeal(pool, third, { startsAt: clock.now(), endsAt: inHours(5) });
-    await service.update(OWNER, soldOut.id, { quantityLeft: 0 }, 'miniapp');
-    const later = await service.create(OWNER, input({ endsAt: inHours(3) }), 'miniapp');
+    await service.update({ userId: OWNER }, soldOut.id, { quantityLeft: 0 }, 'miniapp');
+    const later = await service.create({ userId: OWNER }, input({ endsAt: inHours(3) }), 'miniapp');
     const sooner = await service.create(
-      OWNER,
+      { userId: OWNER },
       input({ menuItemId: other.id, priceRub: 100, endsAt: inHours(1) }),
       'miniapp',
     );
     const scheduled = await seedDeal(pool, third, { startsAt: inHours(1), endsAt: inHours(2) });
 
-    const active = await service.list(OWNER, 'active');
+    const active = await service.list({ userId: OWNER }, 'active');
     expect(active.map((view) => [view.deal.id, view.status])).toEqual([
       [sooner.deal.id, 'active'],
       [scheduled.id, 'scheduled'],
@@ -419,7 +477,7 @@ describe('listing deals', () => {
     ]);
     expect(active[0]?.item.name).toBe('Круассан');
 
-    const finished = await service.list(OWNER, 'finished');
+    const finished = await service.list({ userId: OWNER }, 'finished');
     expect(finished.map((view) => [view.deal.id, view.status])).toEqual([
       [soldOut.id, 'sold_out'],
       [ended.id, 'ended'],
@@ -428,42 +486,48 @@ describe('listing deals', () => {
   });
 
   it('keeps finished deals of archived items in the history', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
-    await menu.archive(OWNER, item.id, 'miniapp');
-    const [finished] = await service.list(OWNER, 'finished');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
+    await menu.archive({ userId: OWNER }, item.id, 'miniapp');
+    const [finished] = await service.list({ userId: OWNER }, 'finished');
     expect(finished).toMatchObject({ status: 'cancelled', deal: { id: deal.id }, item: { id: item.id } });
   });
 });
 
 describe('deal ownership', () => {
   it('hides deals of other venues', async () => {
-    const { deal } = await service.create(OWNER, input(), 'miniapp');
+    const { deal } = await service.create({ userId: OWNER }, input(), 'miniapp');
     await seedVenue(pool, OTHER_OWNER, { name: 'Пекарня' });
-    await expect(service.update(OTHER_OWNER, deal.id, { quantityLeft: 1 }, 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.update({ userId: OTHER_OWNER }, deal.id, { quantityLeft: 1 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'deal_not_found',
     });
-    await expect(service.cancel(OTHER_OWNER, deal.id, 'miniapp')).rejects.toMatchObject({
+    await expect(service.cancel({ userId: OTHER_OWNER }, deal.id, 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'deal_not_found',
     });
-    expect(await service.list(OTHER_OWNER, 'active')).toEqual([]);
-    await expect(service.cancel(OWNER, 999_999, 'miniapp')).rejects.toMatchObject({ code: 'deal_not_found' });
+    expect(await service.list({ userId: OTHER_OWNER }, 'active')).toEqual([]);
+    await expect(service.cancel({ userId: OWNER }, 999_999, 'miniapp')).rejects.toMatchObject({
+      code: 'deal_not_found',
+    });
   });
 
   it('requires a venue for every call', async () => {
     const guest = 101;
     await seedUser(pool, guest);
-    await expect(service.list(guest, 'active')).rejects.toMatchObject({
+    await expect(service.list({ userId: guest }, 'active')).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',
     });
-    await expect(service.create(guest, input(), 'miniapp')).rejects.toMatchObject({
+    await expect(service.create({ userId: guest }, input(), 'miniapp')).rejects.toMatchObject({
       code: 'venue_not_found',
     });
-    await expect(service.update(guest, 1, { quantityLeft: 1 }, 'miniapp')).rejects.toMatchObject({
+    await expect(service.update({ userId: guest }, 1, { quantityLeft: 1 }, 'miniapp')).rejects.toMatchObject({
       code: 'venue_not_found',
     });
-    await expect(service.cancel(guest, 1, 'miniapp')).rejects.toMatchObject({ code: 'venue_not_found' });
+    await expect(service.cancel({ userId: guest }, 1, 'miniapp')).rejects.toMatchObject({
+      code: 'venue_not_found',
+    });
   });
 });

@@ -59,7 +59,10 @@ describe('GET /api/v1/venue/audit', () => {
       ],
       nextCursor: '6',
     });
-    expect(list).toHaveBeenCalledWith(202, { from: '2026-09-20', to: '2026-09-25', cursor: '40' });
+    expect(list).toHaveBeenCalledWith(
+      { userId: 202 },
+      { from: '2026-09-20', to: '2026-09-25', cursor: '40' },
+    );
   });
 
   it.each(['from=20-09-2026', 'to=yesterday', 'cursor=abc', 'cursor=0'])(

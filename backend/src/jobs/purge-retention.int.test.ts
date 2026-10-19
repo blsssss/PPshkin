@@ -81,7 +81,7 @@ describe('purge_retention', () => {
         notifications,
       }),
     });
-    const stats = await analytics.get(OWNER, { from: '2026-06-26', to: '2026-09-25' });
+    const stats = await analytics.get({ userId: OWNER }, { from: '2026-06-26', to: '2026-09-25' });
     expect(stats.offersShown).toBe(2);
   });
 

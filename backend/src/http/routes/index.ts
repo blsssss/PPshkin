@@ -4,6 +4,7 @@ import { adminRoutes } from './admin.ts';
 import { authRoutes } from './auth.ts';
 import { bookingsRoutes } from './bookings.ts';
 import { catalogRoutes } from './catalog.ts';
+import { companyRoutes } from './companies.ts';
 import { complaintsRoutes } from './complaints.ts';
 import { consentsRoutes } from './consents.ts';
 import { demoRoutes } from './demo.ts';
@@ -24,6 +25,7 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
     profile: services.profile,
     account: services.account,
     notificationSettings: services.notificationSettings,
+    companies: services.companies,
     isAdmin: (id) => services.moderation.isAdmin(id),
   });
   await app.register(consentsRoutes, { consents: services.consents });
@@ -35,6 +37,7 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
     deals: services.deals,
     audit: services.audit,
   });
+  await app.register(companyRoutes, { companies: services.companies });
   await app.register(catalogRoutes, { catalog: services.catalog });
   await app.register(recommendationsRoutes, { recommendations: services.recommendations });
   await app.register(insightsRoutes, { insights: services.insights });

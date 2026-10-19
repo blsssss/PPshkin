@@ -11,7 +11,7 @@ import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound } from '../shared/errors.ts';
 import { dayRange, localDate } from '../shared/time.ts';
 import { menuItemFields, type MenuItemInput } from './menu.ts';
-import { requireOwnedVenue, venueNotFound } from './venues.ts';
+import { lockVenueAccess, resolveVenueAccess, type VenueActor } from './access.ts';
 import type { AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
 
@@ -23,11 +23,11 @@ export interface AppliedMenuImport {
 }
 
 export interface MenuImportsService {
-  fromPhoto(ownerId: number, image: Buffer): Promise<MenuImport>;
-  fromText(ownerId: number, text: string): Promise<MenuImport>;
-  get(ownerId: number, importId: number): Promise<MenuImport>;
+  fromPhoto(actor: VenueActor, image: Buffer): Promise<MenuImport>;
+  fromText(actor: VenueActor, text: string): Promise<MenuImport>;
+  get(actor: VenueActor, importId: number): Promise<MenuImport>;
   apply(
-    ownerId: number,
+    actor: VenueActor,
     importId: number,
     items: ParsedMenuItemInput[],
     channel: AuditChannel,
@@ -119,13 +119,12 @@ export function createMenuImportsService({
   }
 
   async function start(
-    ownerId: number,
+    actor: VenueActor,
     source: MenuImport['source'],
     parse: () => Promise<MenuParseResult>,
   ): Promise<MenuImport> {
     const created = await withTransaction(pool, async (client) => {
-      const venue = await venues.lockByOwner(client, ownerId);
-      if (!venue) throw venueNotFound();
+      const { venue } = await lockVenueAccess(client, actor, 'menu.edit');
       const now = clock.now();
       const today = dayRange(localDate(now, venue.timezone), venue.timezone);
       const counts = await menuImports.countRecent(client, venue.id, {
@@ -152,21 +151,20 @@ export function createMenuImportsService({
   }
 
   return {
-    fromPhoto: (ownerId, image) => start(ownerId, 'photo', () => menus.fromPhoto(image)),
+    fromPhoto: (actor, image) => start(actor, 'photo', () => menus.fromPhoto(image)),
 
-    fromText: (ownerId, text) => start(ownerId, 'text', () => menus.fromText(text)),
+    fromText: (actor, text) => start(actor, 'text', () => menus.fromText(text)),
 
-    async get(ownerId, importId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async get(actor, importId) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       const found = await menuImports.findInVenue(pool, venue.id, importId);
       if (!found) throw importNotFound();
       return asOf(found, clock.now());
     },
 
-    async apply(ownerId, importId, items, channel) {
+    async apply(actor, importId, items, channel) {
       return withTransaction(pool, async (client) => {
-        const venue = await venues.lockByOwner(client, ownerId);
-        if (!venue) throw venueNotFound();
+        const { venue } = await lockVenueAccess(client, actor, 'menu.edit');
         const locked = await menuImports.lockInVenue(client, venue.id, importId);
         if (!locked) throw importNotFound();
         const now = clock.now();
@@ -200,7 +198,7 @@ export function createMenuImportsService({
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'menu_import.apply',
             target: { type: 'menu_import', id: locked.id },
             channel,

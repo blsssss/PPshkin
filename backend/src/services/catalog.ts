@@ -2,6 +2,7 @@ import type { Pool } from '../db/pool.ts';
 import { resolveDemoPoint } from '../demo/location.ts';
 import type { GeoPoint, MenuItem, Venue } from '../domain/models.ts';
 import * as impressions from '../repositories/deal-impressions.ts';
+import * as companies from '../repositories/companies.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as users from '../repositories/users.ts';
@@ -25,8 +26,15 @@ export interface VenueCardView {
   activeDeals: number;
 }
 
+export interface VenueSeller {
+  name: string;
+  ogrn: string | null;
+  address: string | null;
+}
+
 export interface VenueDetailsView {
   venue: Venue;
+  seller: VenueSeller | null;
   openNow: boolean;
   menu: MenuItem[];
   deals: DealView[];
@@ -191,8 +199,14 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
         'venue_card',
         now,
       );
+      const company = venue.companyId === null ? null : await companies.findById(pool, venue.companyId);
+      const seller =
+        company?.inn && company.verification !== 'rejected'
+          ? { name: company.name, ogrn: company.ogrn, address: company.address }
+          : null;
       return {
         venue,
+        seller,
         openNow: isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone),
         menu: menu.sort(byMenuOrder),
         deals: await dealViews(pool, visibleDeals, now),

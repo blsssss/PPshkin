@@ -142,10 +142,10 @@ describe('fail_stale_imports job', () => {
       new Date(0),
     );
 
-    const shownBefore = await service.get(OWNER, stale.id);
+    const shownBefore = await service.get({ userId: OWNER }, stale.id);
     await job.run(clock.now());
 
-    expect(await service.get(OWNER, stale.id)).toEqual(shownBefore);
+    expect(await service.get({ userId: OWNER }, stale.id)).toEqual(shownBefore);
     expect(await importRow(stale.id)).toEqual({
       status: 'failed',
       error: 'Не успели распознать меню, попробуйте фото получше или вставьте текст',

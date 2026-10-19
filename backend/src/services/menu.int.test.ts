@@ -41,7 +41,7 @@ afterAll(async () => {
 
 describe('menu service', () => {
   it('creates an item entered by the venue with normalized fields', async () => {
-    const item = await service.create(OWNER, eclair, 'miniapp');
+    const item = await service.create({ userId: OWNER }, eclair, 'miniapp');
     expect(item).toMatchObject({
       venueId: venue.id,
       name: 'Эклер',
@@ -62,7 +62,7 @@ describe('menu service', () => {
 
   it('stores optional fields as null when they are missing or blank', async () => {
     const item = await service.create(
-      OWNER,
+      { userId: OWNER },
       {
         name: 'Американо',
         description: '   ',
@@ -86,7 +86,7 @@ describe('menu service', () => {
 
   it('lists the menu by category order and name, with hidden but not archived items', async () => {
     const make = (name: string, category: MenuItemInput['category'], isAvailable = true) =>
-      service.create(OWNER, { name, category, priceRub: 100, kcal: 100, isAvailable }, 'miniapp');
+      service.create({ userId: OWNER }, { name, category, priceRub: 100, kcal: 100, isAvailable }, 'miniapp');
     await make('Чай', 'drink');
     await make('Эклер', 'dessert');
     await make('Борщ', 'soup');
@@ -94,16 +94,16 @@ describe('menu service', () => {
     await make('Брауни', 'dessert');
     await make('Сырники', 'breakfast');
     const archived = await make('Бублик', 'bakery');
-    await service.archive(OWNER, archived.id, 'miniapp');
-    const names = (await service.list(OWNER)).map((item) => item.name);
+    await service.archive({ userId: OWNER }, archived.id, 'miniapp');
+    const names = (await service.list({ userId: OWNER })).map((item) => item.name);
     expect(names).toEqual(['Сырники', 'Борщ', 'Брауни', 'Ёлочка', 'Эклер', 'Чай']);
   });
 
   it('updates only the given fields', async () => {
-    const created = await service.create(OWNER, eclair, 'miniapp');
+    const created = await service.create({ userId: OWNER }, eclair, 'miniapp');
     clock.advance(60_000);
     const updated = await service.update(
-      OWNER,
+      { userId: OWNER },
       created.id,
       {
         name: 'Эклер ванильный',
@@ -128,22 +128,22 @@ describe('menu service', () => {
   it('marks nutrition as entered by the venue once kcal or macros change', async () => {
     const estimated = await seedMenuItem(pool, venue.id, { nutritionSource: 'estimate' });
     const renamed = await service.update(
-      OWNER,
+      { userId: OWNER },
       estimated.id,
       { name: 'Эклер большой', priceRub: 250 },
       'miniapp',
     );
     expect(renamed.nutritionSource).toBe('estimate');
-    const clearedFat = await service.update(OWNER, estimated.id, { fatG: null }, 'miniapp');
+    const clearedFat = await service.update({ userId: OWNER }, estimated.id, { fatG: null }, 'miniapp');
     expect(clearedFat).toMatchObject({ nutritionSource: 'venue', fatG: null });
 
     const other = await seedMenuItem(pool, venue.id, { nutritionSource: 'estimate' });
-    expect(await service.update(OWNER, other.id, { kcal: 300 }, 'miniapp')).toMatchObject({
+    expect(await service.update({ userId: OWNER }, other.id, { kcal: 300 }, 'miniapp')).toMatchObject({
       nutritionSource: 'venue',
       kcal: 300,
     });
     const third = await seedMenuItem(pool, venue.id, { nutritionSource: 'estimate' });
-    expect(await service.update(OWNER, third.id, { proteinG: 6.26 }, 'miniapp')).toMatchObject({
+    expect(await service.update({ userId: OWNER }, third.id, { proteinG: 6.26 }, 'miniapp')).toMatchObject({
       nutritionSource: 'venue',
       proteinG: 6.3,
     });
@@ -157,12 +157,14 @@ describe('menu service', () => {
       endsAt: new Date(clock.now().getTime() + HOUR),
     });
     for (const priceRub of [120, 100]) {
-      await expect(service.update(OWNER, item.id, { priceRub }, 'miniapp')).rejects.toMatchObject({
-        status: 422,
-        code: 'deal_price_not_lower',
-      });
+      await expect(service.update({ userId: OWNER }, item.id, { priceRub }, 'miniapp')).rejects.toMatchObject(
+        {
+          status: 422,
+          code: 'deal_price_not_lower',
+        },
+      );
     }
-    expect(await service.update(OWNER, item.id, { priceRub: 121 }, 'miniapp')).toMatchObject({
+    expect(await service.update({ userId: OWNER }, item.id, { priceRub: 121 }, 'miniapp')).toMatchObject({
       priceRub: 121,
     });
   });
@@ -175,7 +177,9 @@ describe('menu service', () => {
       endsAt: new Date(clock.now().getTime() + HOUR),
     });
     await deals.update(pool, deal.id, { quantityLeft: 0, endsAt: deal.endsAt });
-    expect(await service.update(OWNER, item.id, { priceRub: 90 }, 'miniapp')).toMatchObject({ priceRub: 90 });
+    expect(await service.update({ userId: OWNER }, item.id, { priceRub: 90 }, 'miniapp')).toMatchObject({
+      priceRub: 90,
+    });
     clock.advance(2 * HOUR);
     const later = await seedMenuItem(pool, venue.id, { priceRub: 200 });
     await seedDeal(pool, later, {
@@ -183,7 +187,7 @@ describe('menu service', () => {
       startsAt: new Date(clock.now().getTime() - 2 * HOUR),
       endsAt: new Date(clock.now().getTime() - HOUR),
     });
-    expect(await service.update(OWNER, later.id, { priceRub: 100 }, 'miniapp')).toMatchObject({
+    expect(await service.update({ userId: OWNER }, later.id, { priceRub: 100 }, 'miniapp')).toMatchObject({
       priceRub: 100,
     });
   });
@@ -201,16 +205,18 @@ describe('menu service', () => {
     });
 
     clock.advance(60_000);
-    await service.archive(OWNER, item.id, 'miniapp');
+    await service.archive({ userId: OWNER }, item.id, 'miniapp');
 
-    expect(await service.list(OWNER)).toEqual([]);
+    expect(await service.list({ userId: OWNER })).toEqual([]);
     expect(await deals.findInVenue(pool, venue.id, live.id)).toMatchObject({ cancelledAt: clock.now() });
     expect(await deals.findInVenue(pool, venue.id, soldOut.id)).toMatchObject({ cancelledAt: null });
-    await expect(service.archive(OWNER, item.id, 'miniapp')).rejects.toMatchObject({
+    await expect(service.archive({ userId: OWNER }, item.id, 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
-    await expect(service.update(OWNER, item.id, { priceRub: 300 }, 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.update({ userId: OWNER }, item.id, { priceRub: 300 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
@@ -219,16 +225,20 @@ describe('menu service', () => {
   it('hides the items of other venues from their owners', async () => {
     const item = await seedMenuItem(pool, venue.id);
     await seedVenue(pool, OTHER_OWNER, { name: 'Пекарня' });
-    await expect(service.update(OTHER_OWNER, item.id, { priceRub: 1 }, 'miniapp')).rejects.toMatchObject({
+    await expect(
+      service.update({ userId: OTHER_OWNER }, item.id, { priceRub: 1 }, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
-    await expect(service.archive(OTHER_OWNER, item.id, 'miniapp')).rejects.toMatchObject({
+    await expect(service.archive({ userId: OTHER_OWNER }, item.id, 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
     });
-    expect(await service.list(OTHER_OWNER)).toEqual([]);
-    await expect(service.update(OWNER, 999_999, { priceRub: 1 }, 'miniapp')).rejects.toMatchObject({
+    expect(await service.list({ userId: OTHER_OWNER })).toEqual([]);
+    await expect(
+      service.update({ userId: OWNER }, 999_999, { priceRub: 1 }, 'miniapp'),
+    ).rejects.toMatchObject({
       code: 'menu_item_not_found',
     });
   });
@@ -236,11 +246,18 @@ describe('menu service', () => {
   it('requires a venue for every call', async () => {
     const guest = 101;
     await seedUser(pool, guest);
-    await expect(service.list(guest)).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
-    await expect(service.create(guest, eclair, 'miniapp')).rejects.toMatchObject({ code: 'venue_not_found' });
-    await expect(service.update(guest, 1, { name: 'x' }, 'miniapp')).rejects.toMatchObject({
+    await expect(service.list({ userId: guest })).rejects.toMatchObject({
+      status: 404,
       code: 'venue_not_found',
     });
-    await expect(service.archive(guest, 1, 'miniapp')).rejects.toMatchObject({ code: 'venue_not_found' });
+    await expect(service.create({ userId: guest }, eclair, 'miniapp')).rejects.toMatchObject({
+      code: 'venue_not_found',
+    });
+    await expect(service.update({ userId: guest }, 1, { name: 'x' }, 'miniapp')).rejects.toMatchObject({
+      code: 'venue_not_found',
+    });
+    await expect(service.archive({ userId: guest }, 1, 'miniapp')).rejects.toMatchObject({
+      code: 'venue_not_found',
+    });
   });
 });

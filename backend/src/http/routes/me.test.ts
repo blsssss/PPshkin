@@ -247,6 +247,7 @@ describe('DELETE /api/v1/me', () => {
     app = await buildTestApp({
       services: {
         account: {
+          soleOwnerships: () => Promise.resolve([]),
           deleteAccount: (id) => {
             deleted.push(id);
             return Promise.resolve();
@@ -269,6 +270,7 @@ describe('DELETE /api/v1/me', () => {
     app = await buildTestApp({
       services: {
         account: {
+          soleOwnerships: () => Promise.resolve([]),
           deleteAccount: (id) =>
             Promise.reject(id < 0 ? forbidden('demo_account_protected', 'Demo') : new Error('unexpected')),
         },

@@ -4,7 +4,7 @@ import type { DealsService } from '../../services/deals.ts';
 import type { MenuImportsService } from '../../services/menu-imports.ts';
 import type { MenuService } from '../../services/menu.ts';
 import type { VenuesService } from '../../services/venues.ts';
-import { bearerSecurity, requireAuth, userId } from '../auth.ts';
+import { bearerSecurity, requireAuth, userId, venueActor } from '../auth.ts';
 import { AuditPageSchema, AuditQuerySchema, toAuditPage } from '../schemas/audit.ts';
 import { errorResponses, IdParams, noContent, success } from '../schemas/common.ts';
 import {
@@ -27,7 +27,7 @@ import {
   toMenuImport,
   toMenuItem,
 } from '../schemas/menu.ts';
-import { toVenue, VenueBody, VenuePatchBody, VenueSchema } from '../schemas/venues.ts';
+import { toVenue, VenueCreateBody, VenuePatchBody, VenueQuery, VenueSchema } from '../schemas/venues.ts';
 import { IMAGE_UPLOAD_ERROR_STATUSES, readImageUpload } from '../uploads.ts';
 
 interface VenueRouteOptions {
@@ -38,7 +38,8 @@ interface VenueRouteOptions {
   audit: AuditService;
 }
 
-const NO_VENUE = 'venue_not_found (404, заведения ещё нет, предложите создать его через POST /api/v1/venue)';
+const NO_VENUE =
+  'venue_not_found (404, заведения ещё нет или оно не из ваших рабочих мест, предложите создать его через POST /api/v1/venue), venue_required (400, у вас несколько заведений, передайте venueId из GET /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это действие)';
 const BAD_INPUT = 'validation_failed (400, исправьте поля из errors)';
 const ENDS_AFTER_CLOSING =
   'deal_ends_after_closing (422, окончание позже ближайшего закрытия заведения или заведение сейчас закрыто: выберите окончание не позже закрытия или выставьте предложение в часы работы)';
@@ -65,21 +66,29 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         tags: ['venue'],
         summary: 'Подключить заведение',
         description: [
-          'Создаёт заведение, владельцем становится текущий пользователь. У пользователя может быть только одно заведение.',
+          'Создаёт заведение в компании. Без рабочих мест или с newCompany=true в одной транзакции создаётся новая компания, а текущий пользователь становится её владельцем. Владелец одной компании подключает заведение в неё, при нескольких компаниях нужен companyId.',
           'Без opensAt и closesAt часы работы 08:00-22:00, без timezone часовой пояс Europe/Moscow.',
-          'Коды ошибок: venue_exists (409, заведение уже подключено, откройте его через GET /api/v1/venue),',
+          'Коды ошибок: company_required (400, вы владеете несколькими компаниями, передайте companyId),',
+          'venue_forbidden (403, управляющий и кассир не подключают заведения, или компания не ваша),',
+          'user_blocked (403, аккаунт заблокирован администратором),',
+          'company_not_found (404, компании нет или вы не её сотрудник),',
+          'venue_exists (409, у вас есть только демо-заведение, откройте его через GET /api/v1/venue),',
           `invalid_timezone (422, выберите часовой пояс из базы IANA), ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
-        body: VenueBody,
+        body: VenueCreateBody,
         response: {
           201: success('Заведение создано', VenueSchema),
-          ...errorResponses(400, 401, 409, 413, 415, 422),
+          ...errorResponses(400, 401, 403, 404, 409, 413, 415, 422),
         },
       },
     },
-    async (request, reply) =>
-      reply.code(201).send(toVenue(await venues.create(userId(request), request.body))),
+    async (request, reply) => {
+      const { companyId, newCompany, ...input } = request.body;
+      return reply
+        .code(201)
+        .send(toVenue(await venues.create(userId(request), input, { companyId, newCompany })));
+    },
   );
 
   app.get(
@@ -92,10 +101,11 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
         summary: 'Заведение текущего пользователя',
         description: `Коды ошибок: ${NO_VENUE}.`,
         security: bearerSecurity,
-        response: { 200: success('Заведение', VenueSchema), ...errorResponses(401, 404) },
+        querystring: VenueQuery,
+        response: { 200: success('Заведение', VenueSchema), ...errorResponses(400, 401, 404, 403) },
       },
     },
-    async (request) => toVenue(await venues.get(userId(request))),
+    async (request) => toVenue(await venues.get(venueActor(request, request.query.venueId))),
   );
 
   app.patch(
@@ -111,14 +121,16 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `Коды ошибок: ${NO_VENUE}, invalid_timezone (422, выберите часовой пояс из базы IANA), ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         body: VenuePatchBody,
         response: {
           200: success('Заведение изменено', VenueSchema),
-          ...errorResponses(400, 401, 404, 413, 415, 422),
+          ...errorResponses(400, 401, 404, 413, 415, 422, 403),
         },
       },
     },
-    async (request) => toVenue(await venues.update(userId(request), request.body, 'miniapp')),
+    async (request) =>
+      toVenue(await venues.update(venueActor(request, request.query.venueId), request.body, 'miniapp')),
   );
 
   app.get(
@@ -135,11 +147,15 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `Коды ошибок: ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
-        querystring: AuditQuerySchema,
-        response: { 200: success('Страница журнала', AuditPageSchema), ...errorResponses(400, 401, 404) },
+        querystring: AuditQuerySchema.extend(VenueQuery.shape),
+        response: {
+          200: success('Страница журнала', AuditPageSchema),
+          ...errorResponses(400, 401, 404, 403),
+        },
       },
     },
-    async (request) => toAuditPage(await audit.list(userId(request), request.query)),
+    async (request) =>
+      toAuditPage(await audit.list(venueActor(request, request.query.venueId), request.query)),
   );
 
   app.get(
@@ -155,10 +171,13 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `Коды ошибок: ${NO_VENUE}.`,
         ].join(' '),
         security: bearerSecurity,
-        response: { 200: success('Позиции меню', MenuItemListSchema), ...errorResponses(401, 404) },
+        querystring: VenueQuery,
+        response: { 200: success('Позиции меню', MenuItemListSchema), ...errorResponses(400, 401, 404, 403) },
       },
     },
-    async (request) => ({ items: (await menu.list(userId(request))).map(toMenuItem) }),
+    async (request) => ({
+      items: (await menu.list(venueActor(request, request.query.venueId))).map(toMenuItem),
+    }),
   );
 
   app.post(
@@ -174,15 +193,20 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `Коды ошибок: ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         body: MenuItemBody,
         response: {
           201: success('Позиция добавлена', MenuItemSchema),
-          ...errorResponses(400, 401, 404, 413, 415),
+          ...errorResponses(400, 401, 404, 413, 415, 403),
         },
       },
     },
     async (request, reply) =>
-      reply.code(201).send(toMenuItem(await menu.create(userId(request), request.body, 'miniapp'))),
+      reply
+        .code(201)
+        .send(
+          toMenuItem(await menu.create(venueActor(request, request.query.venueId), request.body, 'miniapp')),
+        ),
   );
 
   app.patch(
@@ -200,16 +224,24 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
         body: MenuItemPatchBody,
         response: {
           200: success('Позиция изменена', MenuItemSchema),
-          ...errorResponses(400, 401, 404, 413, 415, 422),
+          ...errorResponses(400, 401, 404, 413, 415, 422, 403),
         },
       },
     },
     async (request) =>
-      toMenuItem(await menu.update(userId(request), request.params.id, request.body, 'miniapp')),
+      toMenuItem(
+        await menu.update(
+          venueActor(request, request.query.venueId),
+          request.params.id,
+          request.body,
+          'miniapp',
+        ),
+      ),
   );
 
   app.delete(
@@ -226,12 +258,13 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
-        response: { 204: noContent('Позиция убрана'), ...errorResponses(400, 401, 404) },
+        response: { 204: noContent('Позиция убрана'), ...errorResponses(400, 401, 404, 403) },
       },
     },
     async (request, reply) => {
-      await menu.archive(userId(request), request.params.id, 'miniapp');
+      await menu.archive(venueActor(request, request.query.venueId), request.params.id, 'miniapp');
       return reply.code(204).send(null);
     },
   );
@@ -254,15 +287,20 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `multipart_required, unsupported_image_type (415, пришлите JPEG, PNG или WebP), ${NO_VENUE}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         response: {
           202: success('Импорт запущен', MenuImportSchema),
-          ...errorResponses(...IMAGE_UPLOAD_ERROR_STATUSES, 401, 404, 409),
+          ...errorResponses(...IMAGE_UPLOAD_ERROR_STATUSES, 401, 404, 409, 403),
         },
       },
     },
     async (request, reply) => {
       const upload = await readImageUpload(request);
-      return reply.code(202).send(toMenuImport(await menuImports.fromPhoto(userId(request), upload.data)));
+      return reply
+        .code(202)
+        .send(
+          toMenuImport(await menuImports.fromPhoto(venueActor(request, request.query.venueId), upload.data)),
+        );
     },
   );
 
@@ -282,15 +320,22 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         body: MenuImportTextBody,
         response: {
           202: success('Импорт запущен', MenuImportSchema),
-          ...errorResponses(400, 401, 404, 409, 413, 415),
+          ...errorResponses(400, 401, 404, 409, 413, 415, 403),
         },
       },
     },
     async (request, reply) =>
-      reply.code(202).send(toMenuImport(await menuImports.fromText(userId(request), request.body.text))),
+      reply
+        .code(202)
+        .send(
+          toMenuImport(
+            await menuImports.fromText(venueActor(request, request.query.venueId), request.body.text),
+          ),
+        ),
   );
 
   app.get(
@@ -308,11 +353,13 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
-        response: { 200: success('Импорт меню', MenuImportSchema), ...errorResponses(400, 401, 404) },
+        response: { 200: success('Импорт меню', MenuImportSchema), ...errorResponses(400, 401, 404, 403) },
       },
     },
-    async (request) => toMenuImport(await menuImports.get(userId(request), request.params.id)),
+    async (request) =>
+      toMenuImport(await menuImports.get(venueActor(request, request.query.venueId), request.params.id)),
   );
 
   app.post(
@@ -333,17 +380,18 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `import_not_found (404, импорт принадлежит другому заведению или не существует), ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
         body: ApplyMenuImportBody,
         response: {
           201: success('Новые позиции добавлены в меню', AppliedMenuImportSchema),
-          ...errorResponses(400, 401, 404, 409, 413, 415),
+          ...errorResponses(400, 401, 404, 409, 413, 415, 403),
         },
       },
     },
     async (request, reply) => {
       const { added, duplicates } = await menuImports.apply(
-        userId(request),
+        venueActor(request, request.query.venueId),
         request.params.id,
         request.body.items,
         'miniapp',
@@ -366,12 +414,15 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `Коды ошибок: ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
-        querystring: DealListQuery,
-        response: { 200: success('Горящие предложения', DealListSchema), ...errorResponses(400, 401, 404) },
+        querystring: DealListQuery.extend(VenueQuery.shape),
+        response: {
+          200: success('Горящие предложения', DealListSchema),
+          ...errorResponses(400, 401, 404, 403),
+        },
       },
     },
     async (request) => ({
-      items: (await deals.list(userId(request), request.query.status)).map(toDeal),
+      items: (await deals.list(venueActor(request, request.query.venueId), request.query.status)).map(toDeal),
     }),
   );
 
@@ -396,16 +447,21 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         body: DealBody,
         response: {
           201: success('Предложение выставлено', DealSchema),
-          ...errorResponses(400, 401, 404, 409, 413, 415, 422),
+          ...errorResponses(400, 401, 404, 409, 413, 415, 422, 403),
         },
       },
     },
     async (request, reply) => {
       const { endsAt, ...input } = request.body;
-      const created = await deals.create(userId(request), { ...input, endsAt: new Date(endsAt) }, 'miniapp');
+      const created = await deals.create(
+        venueActor(request, request.query.venueId),
+        { ...input, endsAt: new Date(endsAt) },
+        'miniapp',
+      );
       return reply.code(201).send(toDeal(created));
     },
   );
@@ -431,18 +487,19 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${ENDS_AFTER_CLOSING}, ${NO_VENUE}, ${BAD_INPUT}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
         body: DealPatchBody,
         response: {
           200: success('Предложение изменено', DealSchema),
-          ...errorResponses(400, 401, 404, 409, 413, 415, 422),
+          ...errorResponses(400, 401, 404, 409, 413, 415, 422, 403),
         },
       },
     },
     async (request) => {
       const { quantityLeft, endsAt } = request.body;
       const updated = await deals.update(
-        userId(request),
+        venueActor(request, request.query.venueId),
         request.params.id,
         {
           quantityLeft,
@@ -469,12 +526,13 @@ export const venueRoutes: FastifyPluginCallbackZod<VenueRouteOptions> = (
           `${NO_VENUE}, ${BAD_ID}.`,
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         params: IdParams,
-        response: { 204: noContent('Предложение снято'), ...errorResponses(400, 401, 404) },
+        response: { 204: noContent('Предложение снято'), ...errorResponses(400, 401, 404, 403) },
       },
     },
     async (request, reply) => {
-      await deals.cancel(userId(request), request.params.id, 'miniapp');
+      await deals.cancel(venueActor(request, request.query.venueId), request.params.id, 'miniapp');
       return reply.code(204).send(null);
     },
   );

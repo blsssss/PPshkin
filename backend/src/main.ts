@@ -91,6 +91,7 @@ const services = createServices({
   background,
   notifications: outbox ?? silentNotifications,
   demoDataset: config.DEMO_MODE ? await loadDemoDataset() : null,
+  botUsername: () => botRuntime?.username() ?? null,
 });
 const botRuntime =
   botSettings &&

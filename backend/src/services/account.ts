@@ -1,6 +1,7 @@
 import { withTransaction, type Pool } from '../db/pool.ts';
 import type { Notifications } from '../ports/notifier.ts';
 import * as account from '../repositories/account.ts';
+import * as companies from '../repositories/companies.ts';
 import * as complaints from '../repositories/complaints.ts';
 import * as bookings from '../repositories/bookings.ts';
 import * as users from '../repositories/users.ts';
@@ -10,6 +11,7 @@ import { forbidden } from '../shared/errors.ts';
 
 export interface AccountService {
   deleteAccount(userId: number): Promise<void>;
+  soleOwnerships(userId: number): Promise<{ id: number; name: string }[]>;
 }
 
 export interface AccountDependencies {
@@ -22,6 +24,8 @@ const isDemoAccount = (userId: number) => userId < 0;
 
 export function createAccountService({ pool, clock, notifications }: AccountDependencies): AccountService {
   return {
+    soleOwnerships: (userId) => companies.soleOwnerCompanies(pool, userId),
+
     async deleteAccount(userId) {
       if (isDemoAccount(userId)) {
         throw forbidden('demo_account_protected', 'Demo accounts are shared and cannot be deleted');

@@ -142,13 +142,13 @@ describe('seed', () => {
         personalizedOffers: { granted: false },
       });
     }
-    expect(await services.venues.get(DEMO_OWNER)).toMatchObject({
+    expect(await services.venues.get({ userId: DEMO_OWNER })).toMatchObject({
       id: ZERNO,
       name: 'Кофейня «Зерно»',
       address: 'Казань, ул. Баумана, 36',
       isDemo: true,
     });
-    const menu = await services.menu.list(DEMO_OWNER);
+    const menu = await services.menu.list({ userId: DEMO_OWNER });
     expect(menu).toHaveLength(12);
     expect(menu.every((item) => item.nutritionSource === 'venue' && item.isAvailable)).toBe(true);
   });
@@ -226,7 +226,10 @@ describe('seed', () => {
 
     expect(await demo.seed()).toMatchObject({ venues: 6, menuItems: 64 });
 
-    expect(await services.venues.get(DEMO_OWNER)).toMatchObject({ id: ZERNO, ownerId: DEMO_OWNER });
+    expect(await services.venues.get({ userId: DEMO_OWNER })).toMatchObject({
+      id: ZERNO,
+      ownerId: DEMO_OWNER,
+    });
     const { rows } = await pool.query('select id from venues where id = $1', [own.id]);
     expect(rows).toEqual([]);
     expect(await rowCounts()).toMatchObject({ venues: 6, menu_items: 64, deals: 36, bookings: 21 });
@@ -235,16 +238,20 @@ describe('seed', () => {
 
   it('restores seeded venues and menus changed through the demo venue account', async () => {
     await demo.seed();
-    await services.venues.update(DEMO_OWNER, { name: 'Переименовано', opensAt: '11:00' }, 'miniapp');
+    await services.venues.update(
+      { userId: DEMO_OWNER },
+      { name: 'Переименовано', opensAt: '11:00' },
+      'miniapp',
+    );
     const croissant = 910108;
-    await services.menu.update(DEMO_OWNER, 910101, { priceRub: 999 }, 'miniapp');
-    await services.menu.archive(DEMO_OWNER, croissant, 'miniapp');
+    await services.menu.update({ userId: DEMO_OWNER }, 910101, { priceRub: 999 }, 'miniapp');
+    await services.menu.archive({ userId: DEMO_OWNER }, croissant, 'miniapp');
     await demo.seed();
-    expect(await services.venues.get(DEMO_OWNER)).toMatchObject({
+    expect(await services.venues.get({ userId: DEMO_OWNER })).toMatchObject({
       name: 'Кофейня «Зерно»',
       opensAt: '08:00',
     });
-    const menu = await services.menu.list(DEMO_OWNER);
+    const menu = await services.menu.list({ userId: DEMO_OWNER });
     expect(menu.find((item) => item.id === 910101)?.priceRub).toBe(220);
     expect(menu.map((item) => item.id)).toContain(croissant);
   });
@@ -265,7 +272,7 @@ describe('seed', () => {
     };
     clock.set('2026-09-26T07:30:00Z');
     expect(await stack(withoutCroissant).demo.seed()).toMatchObject({ menuItems: 63, dealsCreated: 0 });
-    const menu = await services.menu.list(DEMO_OWNER);
+    const menu = await services.menu.list({ userId: DEMO_OWNER });
     expect(menu.map((item) => item.id)).not.toContain(910108);
     const { rows } = await pool.query<{ cancelled_at: Date | null }>(
       'select cancelled_at from deals where menu_item_id = 910108 and ends_at > $1',
@@ -274,7 +281,7 @@ describe('seed', () => {
     expect(rows).toEqual([{ cancelled_at: clock.now() }]);
 
     await demo.seed();
-    expect((await services.menu.list(DEMO_OWNER)).map((item) => item.id)).toContain(910108);
+    expect((await services.menu.list({ userId: DEMO_OWNER })).map((item) => item.id)).toContain(910108);
   });
 
   it('is refused when demo mode is off', async () => {
@@ -367,7 +374,10 @@ describe('refresh', () => {
 
   it('fills the analytics of «Зерно» for the last 7 days', async () => {
     await demo.seed();
-    const analytics = await services.analytics.get(DEMO_OWNER, { from: '2026-09-19', to: '2026-09-25' });
+    const analytics = await services.analytics.get(
+      { userId: DEMO_OWNER },
+      { from: '2026-09-19', to: '2026-09-25' },
+    );
     expect(analytics).toMatchObject({ ...HISTORY_WEEK, acceptRate: 0.37, redeemRate: 0.76 });
     expect(analytics.byDay.map((day) => [day.date, day.offersShown, day.bookingsRedeemed])).toEqual([
       ['2026-09-19', 9, 3],
@@ -391,10 +401,13 @@ describe('refresh', () => {
     );
     expect(rows).toHaveLength(21);
     expect(rows.every((row) => row.left === row.total - row.sold)).toBe(true);
-    const history = await services.bookings.listForVenue(DEMO_OWNER, {
-      status: 'history',
-      date: '2026-09-25',
-    });
+    const history = await services.bookings.listForVenue(
+      { userId: DEMO_OWNER },
+      {
+        status: 'history',
+        date: '2026-09-25',
+      },
+    );
     expect(history.every(({ booking }) => /^[A-HJ-NP-Z2-9]{6}$/.test(booking.code))).toBe(true);
   });
 
@@ -403,10 +416,13 @@ describe('refresh', () => {
     for (const today of ['2026-09-27', '2026-09-28', '2026-10-02']) {
       clock.set(moscow(`${today}T07:00:00`));
       await demo.refresh();
-      const analytics = await services.analytics.get(DEMO_OWNER, {
-        from: addDays(today, -7),
-        to: addDays(today, -1),
-      });
+      const analytics = await services.analytics.get(
+        { userId: DEMO_OWNER },
+        {
+          from: addDays(today, -7),
+          to: addDays(today, -1),
+        },
+      );
       expect(analytics, today).toMatchObject(HISTORY_WEEK);
       const { rows } = await pool.query<{ sold: number; left: number; total: number }>(
         `select count(b.id) filter (where b.status = 'redeemed')::int as sold, d.quantity_left as left,
@@ -451,10 +467,10 @@ describe('claimVenue', () => {
       location: { lat: 55.7892, lon: 49.118 },
     });
     expect(copy.id).toBeLessThan(ZERNO);
-    const menu = await services.menu.list(REVIEWER);
+    const menu = await services.menu.list({ userId: REVIEWER });
     expect(menu).toHaveLength(12);
     expect(menu.some((item) => item.id >= 910_000)).toBe(false);
-    const live = await services.deals.list(REVIEWER, 'active');
+    const live = await services.deals.list({ userId: REVIEWER }, 'active');
     expect(live.map(({ item, deal }) => [item.name, deal.priceRub, deal.quantityLeft])).toEqual([
       ['Чизкейк Нью-Йорк', 230, 5],
       ['Сэндвич с курицей', 160, 4],
@@ -469,16 +485,16 @@ describe('claimVenue', () => {
   it('copies another seeded venue and skips deals of items it no longer sells', async () => {
     await demo.seed();
     await seedUser(pool, REVIEWER);
-    await services.menu.archive(DEMO_OWNER, 910110, 'miniapp');
+    await services.menu.archive({ userId: DEMO_OWNER }, 910110, 'miniapp');
     expect((await demo.claimVenue(REVIEWER, ZERNO)).name).toBe('Кофейня «Зерно»');
-    expect((await services.deals.list(REVIEWER, 'active')).map(({ item }) => item.name)).toEqual([
+    expect((await services.deals.list({ userId: REVIEWER }, 'active')).map(({ item }) => item.name)).toEqual([
       'Круассан',
       'Чизкейк Нью-Йорк',
     ]);
     await seedUser(pool, OTHER);
     const bakery = await demo.claimVenue(OTHER, 900003);
     expect(bakery).toMatchObject({ name: 'Пекарня «Утренний хлеб»', opensAt: '07:30', ownerId: OTHER });
-    expect(await services.menu.list(OTHER)).toHaveLength(11);
+    expect(await services.menu.list({ userId: OTHER })).toHaveLength(11);
   });
 
   it('refuses a second venue, unknown sources, demo accounts and a server without demo mode', async () => {
@@ -489,7 +505,7 @@ describe('claimVenue', () => {
     await seedVenue(pool, OTHER, { name: 'Своё кафе' });
     await expect(demo.claimVenue(OTHER)).rejects.toMatchObject({ status: 409, code: 'venue_exists' });
 
-    const regular = await services.venues.get(OTHER);
+    const regular = await services.venues.get({ userId: OTHER });
     for (const sourceId of [900099, regular.id, copy.id]) {
       await expect(demo.claimVenue(503, sourceId)).rejects.toMatchObject({
         status: 404,
@@ -534,7 +550,7 @@ describe('claimVenue', () => {
     });
     expect(offers.items.some((offer) => offer.venue.id === copy.id)).toBe(false);
 
-    const [copyItem] = await services.menu.list(REVIEWER);
+    const [copyItem] = await services.menu.list({ userId: REVIEWER });
     await expect(services.bookings.create(OTHER, { menuItemId: copyItem!.id }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
@@ -553,7 +569,7 @@ describe('claimVenue', () => {
     await demo.seed();
     await seedGuest(pool, REVIEWER, clock.now());
     await demo.claimVenue(REVIEWER);
-    const [sandwich] = await services.deals.list(REVIEWER, 'active');
+    const [sandwich] = await services.deals.list({ userId: REVIEWER }, 'active');
     const booking = await services.bookings.create(
       REVIEWER,
       {
@@ -563,7 +579,7 @@ describe('claimVenue', () => {
       'bot',
     );
     expect(booking.venue.ownerId).toBe(REVIEWER);
-    const redeemed = await services.bookings.redeem(REVIEWER, booking.booking.code, 'miniapp');
+    const redeemed = await services.bookings.redeem({ userId: REVIEWER }, booking.booking.code, 'miniapp');
     expect(redeemed.booking.status).toBe('redeemed');
     expect((await services.diary.day(REVIEWER)).meals.map((meal) => meal.title)).toEqual([
       'Сэндвич с курицей',

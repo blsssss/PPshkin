@@ -83,6 +83,7 @@ export const API_TAGS = [
   { name: 'consents', description: 'Согласия на обработку данных и персональные предложения' },
   { name: 'diary', description: 'Дневник питания' },
   { name: 'venue', description: 'Кабинет заведения' },
+  { name: 'company', description: 'Компании, сотрудники и приглашения' },
   { name: 'catalog', description: 'Заведения и горящие предложения рядом' },
   { name: 'recommendations', description: 'Подбор блюд рядом и обратная связь' },
   { name: 'insights', description: 'Профиль пищевого поведения' },

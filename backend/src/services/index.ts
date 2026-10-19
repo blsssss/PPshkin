@@ -4,6 +4,7 @@ import type { AuditService } from './audit.ts';
 import type { AuthService } from './auth.ts';
 import type { BookingsService } from './bookings.ts';
 import type { CatalogService } from './catalog.ts';
+import type { CompaniesService } from './companies.ts';
 import type { ConsentsService } from './consents.ts';
 import type { DealsService } from './deals.ts';
 import type { DemoService } from './demo.ts';
@@ -25,6 +26,7 @@ export interface Services {
   auth: AuthService;
   profile: ProfileService;
   consents: ConsentsService;
+  companies: CompaniesService;
   diary: DiaryService;
   account: AccountService;
   venues: VenuesService;

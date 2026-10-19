@@ -188,6 +188,14 @@ components:
       required:
         - code
       description: Код брони для погашения
+    RoleInput:
+      type: string
+      enum:
+        - owner
+        - manager
+        - cashier
+      description: "Роль сотрудника: owner - владелец, manager - управляющий, cashier
+        - кассир"
     ManualMealInput:
       type: object
       properties:
@@ -1332,11 +1340,39 @@ components:
         - activeDeals
       additionalProperties: false
       description: Заведение в списке рядом
+    Seller:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Наименование продавца из ЕГРЮЛ или ЕГРИП
+        ogrn:
+          description: ОГРН или ОГРНИП
+          type:
+            - string
+            - "null"
+        address:
+          description: Адрес продавца
+          type:
+            - string
+            - "null"
+      required:
+        - name
+        - ogrn
+        - address
+      additionalProperties: false
+      description: "Продавец: компания, которая ведёт заведение"
     VenueDetails:
       type: object
       properties:
         venue:
           $ref: "#/components/schemas/Venue"
+        seller:
+          anyOf:
+            - $ref: "#/components/schemas/Seller"
+            - type: "null"
+          description: Реквизиты продавца; null, если у компании нет проверенного ИНН или
+            заявка отклонена
         openNow:
           type: boolean
           description: Открыто ли заведение сейчас по часам работы
@@ -1352,6 +1388,7 @@ components:
           description: Горящие предложения, которые можно забронировать сейчас
       required:
         - venue
+        - seller
         - openNow
         - menu
         - deals
@@ -1455,6 +1492,328 @@ components:
         resolvedAt - когда погашена, отменена или истекла. item - текущая
         позиция меню, она может быть уже убрана из меню. Данных гостя в брони
         нет
+    Role:
+      type: string
+      enum:
+        - owner
+        - manager
+        - cashier
+      description: "Роль сотрудника: owner - владелец, manager - управляющий, cashier
+        - кассир"
+    Verification:
+      type: string
+      enum:
+        - unverified
+        - pending
+        - verified
+        - rejected
+      description: "Проверка компании: unverified - без реквизитов, pending - на
+        проверке у модератора, verified - подтверждена, rejected - отклонена"
+    Company:
+      type: object
+      properties:
+        id:
+          type: integer
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - legal
+                - individual
+            - type: "null"
+        inn:
+          type:
+            - string
+            - "null"
+        ogrn:
+          type:
+            - string
+            - "null"
+        kpp:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        address:
+          type:
+            - string
+            - "null"
+        okved:
+          type:
+            - string
+            - "null"
+        registryStatus:
+          description: "Статус в реестре: ACTIVE, LIQUIDATING и другие"
+          type:
+            - string
+            - "null"
+        verification:
+          $ref: "#/components/schemas/Verification"
+        verificationNote:
+          description: Причина отклонения от модератора
+          type:
+            - string
+            - "null"
+        venues:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+            required:
+              - id
+              - name
+            additionalProperties: false
+          description: Заведения компании, доступные пользователю
+      required:
+        - id
+        - kind
+        - inn
+        - ogrn
+        - kpp
+        - name
+        - address
+        - okved
+        - registryStatus
+        - verification
+        - verificationNote
+        - venues
+      additionalProperties: false
+      description: "Компания: юрлицо или ИП с реквизитами"
+    CompanyLookup:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - legal
+            - individual
+        inn:
+          type: string
+        ogrn:
+          type:
+            - string
+            - "null"
+        kpp:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        address:
+          type:
+            - string
+            - "null"
+        okved:
+          type:
+            - string
+            - "null"
+        status:
+          type: string
+        managerName:
+          type:
+            - string
+            - "null"
+        okvedMatches:
+          type: boolean
+          description: Основной ОКВЭД относится к общепиту; несовпадение не блокирует
+        alreadyRegistered:
+          type: boolean
+          description: Компания с этим ИНН уже подключена
+      required:
+        - kind
+        - inn
+        - ogrn
+        - kpp
+        - name
+        - address
+        - okved
+        - status
+        - managerName
+        - okvedMatches
+        - alreadyRegistered
+      additionalProperties: false
+      description: Карточка компании из ЕГРЮЛ или ЕГРИП
+    Member:
+      type: object
+      properties:
+        userId:
+          type: integer
+        firstName:
+          type:
+            - string
+            - "null"
+        role:
+          $ref: "#/components/schemas/Role"
+        venueId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        since:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+      required:
+        - userId
+        - firstName
+        - role
+        - venueId
+        - since
+      additionalProperties: false
+      description: Сотрудник компании
+    CreatedInvite:
+      type: object
+      properties:
+        id:
+          type: integer
+        role:
+          $ref: "#/components/schemas/Role"
+        venueId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        startappLink:
+          type: string
+          description: Ссылка на мини-приложение, показывается один раз
+        botLink:
+          type: string
+          description: Ссылка на бота, показывается один раз
+      required:
+        - id
+        - role
+        - venueId
+        - expiresAt
+        - startappLink
+        - botLink
+      additionalProperties: false
+      description: Созданное приглашение со ссылками
+    Invite:
+      type: object
+      properties:
+        id:
+          type: integer
+        role:
+          $ref: "#/components/schemas/Role"
+        venueId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        createdBy:
+          description: Имя пригласившего
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - role
+        - venueId
+        - expiresAt
+        - createdAt
+        - createdBy
+      additionalProperties: false
+      description: Действующее приглашение
+    InvitePreview:
+      type: object
+      properties:
+        companyName:
+          type: string
+        venueName:
+          description: null - все заведения компании
+          type:
+            - string
+            - "null"
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+      required:
+        - companyName
+        - venueName
+        - role
+        - expiresAt
+      additionalProperties: false
+      description: Что получит сотрудник, приняв приглашение
+    Workplace:
+      type: object
+      properties:
+        venue:
+          $ref: "#/components/schemas/Venue"
+        company:
+          anyOf:
+            - type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                verification:
+                  $ref: "#/components/schemas/Verification"
+              required:
+                - id
+                - name
+                - verification
+              additionalProperties: false
+            - type: "null"
+          description: null у демо-заведения без компании
+        role:
+          $ref: "#/components/schemas/Role"
+        permissions:
+          type: array
+          items:
+            type: string
+            enum:
+              - venue.view
+              - booking.redeem
+              - menu.edit
+              - deal.edit
+              - analytics.view
+              - venue.edit
+              - venue.create
+              - team.invite
+              - team.manage
+              - company.edit
+              - integration.manage
+              - audit.view
+          description: Права роли, их же проверяет сервер на каждом запросе
+        venueScoped:
+          type: boolean
+          description: Доступ только к этому заведению, а не ко всем заведениям компании
+      required:
+        - venue
+        - company
+        - role
+        - permissions
+        - venueScoped
+      additionalProperties: false
+      description: Заведение, с которым работает пользователь, и его роль
     DemoDiaryResult:
       type: object
       properties:
@@ -2873,6 +3232,51 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/me/workplaces:
+    get:
+      operationId: listMyWorkplaces
+      summary: Заведения и роли пользователя
+      tags:
+        - me
+      description: Заведения компаний, в которых пользователь работает, и
+        демо-заведение владельца с ролью и правами. По ним клиент решает, что
+        показывать; права сервер проверяет на каждом запросе заново.
+      security: *a4
+      responses:
+        "200":
+          description: Рабочие места
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workplace"
+                required:
+                  - items
+                additionalProperties: false
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/me/notifications:
     get:
       operationId: getMyNotificationSettings
@@ -3801,10 +4205,17 @@ paths:
       summary: Подключить заведение
       tags:
         - venue
-      description: "Создаёт заведение, владельцем становится текущий пользователь. У
-        пользователя может быть только одно заведение. Без opensAt и closesAt
-        часы работы 08:00-22:00, без timezone часовой пояс Europe/Moscow. Коды
-        ошибок: venue_exists (409, заведение уже подключено, откройте его через
+      description: "Создаёт заведение в компании. Без рабочих мест или с
+        newCompany=true в одной транзакции создаётся новая компания, а текущий
+        пользователь становится её владельцем. Владелец одной компании
+        подключает заведение в неё, при нескольких компаниях нужен companyId.
+        Без opensAt и closesAt часы работы 08:00-22:00, без timezone часовой
+        пояс Europe/Moscow. Коды ошибок: company_required (400, вы владеете
+        несколькими компаниями, передайте companyId), venue_forbidden (403,
+        управляющий и кассир не подключают заведения, или компания не ваша),
+        user_blocked (403, аккаунт заблокирован администратором),
+        company_not_found (404, компании нет или вы не её сотрудник),
+        venue_exists (409, у вас есть только демо-заведение, откройте его через
         GET /api/v1/venue), invalid_timezone (422, выберите часовой пояс из базы
         IANA), validation_failed (400, исправьте поля из errors)."
       requestBody:
@@ -3848,6 +4259,15 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 64
+                companyId:
+                  description: Компания, к которой подключается заведение; обязателен, если
+                    пользователь владеет несколькими
+                  type: integer
+                  exclusiveMinimum: 0
+                newCompany:
+                  description: "true: создать новую компанию для заведения, даже если у
+                    пользователя уже есть другие"
+                  type: boolean
               required:
                 - name
                 - address
@@ -3874,6 +4294,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "409":
           description: Conflict
           content:
@@ -3916,8 +4348,20 @@ paths:
       summary: Заведение текущего пользователя
       tags:
         - venue
-      description: "Коды ошибок: venue_not_found (404, заведения ещё нет, предложите
-        создать его через POST /api/v1/venue)."
+      description: "Коды ошибок: venue_not_found (404, заведения ещё нет или оно не из
+        ваших рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -3926,6 +4370,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Unauthorized
           content:
@@ -3933,6 +4383,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -3958,9 +4414,12 @@ paths:
       tags:
         - venue
       description: "Меняет только переданные поля, нужно хотя бы одно. Коды ошибок:
-        venue_not_found (404, заведения ещё нет, предложите создать его через
-        POST /api/v1/venue), invalid_timezone (422, выберите часовой пояс из
-        базы IANA), validation_failed (400, исправьте поля из errors)."
+        venue_not_found (404, заведения ещё нет или оно не из ваших рабочих
+        мест, предложите создать его через POST /api/v1/venue), venue_required
+        (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), invalid_timezone (422, выберите часовой пояс из базы IANA),
+        validation_failed (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -4003,6 +4462,15 @@ paths:
                   minLength: 1
                   maxLength: 64
               minProperties: 1
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -4024,6 +4492,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4072,9 +4546,11 @@ paths:
         До 100 записей на страницу, новые сверху; следующую страницу
         запрашивайте с cursor из nextCursor. Период from и to включительно в
         часовом поясе заведения, без них журнал за всё время (записи хранятся
-        год). Коды ошибок: venue_not_found (404, заведения ещё нет, предложите
-        создать его через POST /api/v1/venue), validation_failed (400, исправьте
-        поля из errors)."
+        год). Коды ошибок: venue_not_found (404, заведения ещё нет или оно не из
+        ваших рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, исправьте поля из errors)."
       parameters:
         - schema:
             type: string
@@ -4097,6 +4573,14 @@ paths:
           name: cursor
           required: false
           description: nextCursor из предыдущей страницы
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -4118,6 +4602,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4145,7 +4635,19 @@ paths:
         - venue
       description: "Все позиции, кроме удалённых, включая скрытые от гостей, по
         категориям и названию. Коды ошибок: venue_not_found (404, заведения ещё
-        нет, предложите создать его через POST /api/v1/venue)."
+        нет или оно не из ваших рабочих мест, предложите создать его через POST
+        /api/v1/venue), venue_required (400, у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces), venue_forbidden (403,
+        роль не позволяет это действие)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -4162,6 +4664,12 @@ paths:
                 required:
                   - items
                 additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Unauthorized
           content:
@@ -4169,6 +4677,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4196,8 +4710,11 @@ paths:
         - venue
       description: "Калорийность и БЖУ считаются указанными заведением
         (nutritionSource = venue). Коды ошибок: venue_not_found (404, заведения
-        ещё нет, предложите создать его через POST /api/v1/venue),
-        validation_failed (400, исправьте поля из errors)."
+        ещё нет или оно не из ваших рабочих мест, предложите создать его через
+        POST /api/v1/venue), venue_required (400, у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces), venue_forbidden (403,
+        роль не позволяет это действие), validation_failed (400, исправьте поля
+        из errors)."
       requestBody:
         required: true
         content:
@@ -4314,6 +4831,15 @@ paths:
                 - category
                 - priceRub
                 - kcal
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "201":
@@ -4335,6 +4861,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4377,9 +4909,11 @@ paths:
         menu_item_not_found (404, позиция удалена или принадлежит другому
         заведению, обновите меню), deal_price_not_lower (422, на позицию есть
         горящее предложение: оставьте цену выше цены предложения или снимите
-        его), venue_not_found (404, заведения ещё нет, предложите создать его
-        через POST /api/v1/venue), validation_failed (400, исправьте поля из
-        errors)."
+        его), venue_not_found (404, заведения ещё нет или оно не из ваших
+        рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -4496,6 +5030,14 @@ paths:
         - schema:
             type: integer
             exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
           in: path
           name: id
           required: true
@@ -4520,6 +5062,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4565,10 +5113,21 @@ paths:
       description: "Позиция архивируется: пропадает из меню, каталога и рекомендаций,
         её горящее предложение снимается. Уже оформленные брони действуют. Коды
         ошибок: menu_item_not_found (404, позиция уже удалена или принадлежит
-        другому заведению), venue_not_found (404, заведения ещё нет, предложите
-        создать его через POST /api/v1/venue), validation_failed (400, id должен
-        быть положительным целым числом)."
+        другому заведению), venue_not_found (404, заведения ещё нет или оно не
+        из ваших рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, id должен быть положительным целым
+        числом)."
       parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
         - schema:
             type: integer
             exclusiveMinimum: 0
@@ -4592,6 +5151,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4627,8 +5192,11 @@ paths:
         image_required, image_empty, invalid_multipart (400, приложите одно фото
         в поле image), image_too_large, upload_too_many_parts (413, пришлите
         одно фото до 10 МБ), multipart_required, unsupported_image_type (415,
-        пришлите JPEG, PNG или WebP), venue_not_found (404, заведения ещё нет,
-        предложите создать его через POST /api/v1/venue)."
+        пришлите JPEG, PNG или WebP), venue_not_found (404, заведения ещё нет
+        или оно не из ваших рабочих мест, предложите создать его через POST
+        /api/v1/venue), venue_required (400, у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces), venue_forbidden (403,
+        роль не позволяет это действие)."
       requestBody:
         required: true
         content:
@@ -4642,6 +5210,15 @@ paths:
                   type: string
                   format: binary
                   description: Фото JPEG, PNG или WebP до 10 МБ
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "202":
@@ -4663,6 +5240,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4713,8 +5296,11 @@ paths:
         import_in_progress (409, предыдущий импорт ещё распознаётся, дождитесь
         его), import_limit_reached (409, не больше 20 импортов за сутки,
         попробуйте завтра или добавьте позиции вручную), venue_not_found (404,
-        заведения ещё нет, предложите создать его через POST /api/v1/venue),
-        validation_failed (400, исправьте поля из errors)."
+        заведения ещё нет или оно не из ваших рабочих мест, предложите создать
+        его через POST /api/v1/venue), venue_required (400, у вас несколько
+        заведений, передайте venueId из GET /api/v1/me/workplaces),
+        venue_forbidden (403, роль не позволяет это действие), validation_failed
+        (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -4729,6 +5315,15 @@ paths:
                   description: "Текст меню: каждая позиция с новой строки, с ценой"
               required:
                 - text
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "202":
@@ -4750,6 +5345,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4797,10 +5398,21 @@ paths:
         для проверки и примените их; failed: покажите текст error. Импорт,
         который распознаётся дольше 30 минут, отдаётся как failed. Коды ошибок:
         import_not_found (404, импорт принадлежит другому заведению или не
-        существует), venue_not_found (404, заведения ещё нет, предложите создать
-        его через POST /api/v1/venue), validation_failed (400, id должен быть
-        положительным целым числом)."
+        существует), venue_not_found (404, заведения ещё нет или оно не из ваших
+        рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, id должен быть положительным целым
+        числом)."
       parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
         - schema:
             type: integer
             exclusiveMinimum: 0
@@ -4828,6 +5440,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -4864,8 +5482,11 @@ paths:
         распознаётся или завершился ошибкой), import_already_applied (409,
         позиции уже в меню, обновите меню), import_not_found (404, импорт
         принадлежит другому заведению или не существует), venue_not_found (404,
-        заведения ещё нет, предложите создать его через POST /api/v1/venue),
-        validation_failed (400, исправьте поля из errors)."
+        заведения ещё нет или оно не из ваших рабочих мест, предложите создать
+        его через POST /api/v1/venue), venue_required (400, у вас несколько
+        заведений, передайте venueId из GET /api/v1/me/workplaces),
+        venue_forbidden (403, роль не позволяет это действие), validation_failed
+        (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -4993,6 +5614,14 @@ paths:
         - schema:
             type: integer
             exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
           in: path
           name: id
           required: true
@@ -5017,6 +5646,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -5063,8 +5698,11 @@ paths:
       description: "status=active: идущие и запланированные, сначала те, что
         заканчиваются раньше. status=finished: распроданные, закончившиеся и
         снятые за последние 7 дней, сначала последние. Коды ошибок:
-        venue_not_found (404, заведения ещё нет, предложите создать его через
-        POST /api/v1/venue), validation_failed (400, исправьте поля из errors)."
+        venue_not_found (404, заведения ещё нет или оно не из ваших рабочих
+        мест, предложите создать его через POST /api/v1/venue), venue_required
+        (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, исправьте поля из errors)."
       parameters:
         - schema:
             default: active
@@ -5077,6 +5715,14 @@ paths:
           required: false
           description: active - идущие и запланированные; finished - закончившиеся за
             последние 7 дней
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -5106,6 +5752,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -5144,8 +5796,11 @@ paths:
         закрыто: выберите окончание не позже закрытия или выставьте предложение
         в часы работы), deal_exists (409, на позицию уже есть горящее
         предложение, измените или снимите его), venue_not_found (404, заведения
-        ещё нет, предложите создать его через POST /api/v1/venue),
-        validation_failed (400, исправьте поля из errors)."
+        ещё нет или оно не из ваших рабочих мест, предложите создать его через
+        POST /api/v1/venue), venue_required (400, у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces), venue_forbidden (403,
+        роль не позволяет это действие), validation_failed (400, исправьте поля
+        из errors)."
       requestBody:
         required: true
         content:
@@ -5178,6 +5833,15 @@ paths:
                 - priceRub
                 - quantity
                 - endsAt
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "201":
@@ -5199,6 +5863,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -5263,9 +5933,11 @@ paths:
         окончание в ближайшие 24 часа), deal_ends_after_closing (422, окончание
         позже ближайшего закрытия заведения или заведение сейчас закрыто:
         выберите окончание не позже закрытия или выставьте предложение в часы
-        работы), venue_not_found (404, заведения ещё нет, предложите создать его
-        через POST /api/v1/venue), validation_failed (400, исправьте поля из
-        errors)."
+        работы), venue_not_found (404, заведения ещё нет или оно не из ваших
+        рабочих мест, предложите создать его через POST /api/v1/venue),
+        venue_required (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, исправьте поля из errors)."
       requestBody:
         required: true
         content:
@@ -5286,6 +5958,14 @@ paths:
                     круглосуточного заведения ограничения по закрытию нет)"
               minProperties: 1
       parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
         - schema:
             type: integer
             exclusiveMinimum: 0
@@ -5313,6 +5993,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -5365,10 +6051,21 @@ paths:
         оформленные брони действуют. Распроданное, закончившееся или уже снятое
         предложение не меняется, ответ тоже 204. Коды ошибок: deal_not_found
         (404, предложение принадлежит другому заведению или не существует),
-        venue_not_found (404, заведения ещё нет, предложите создать его через
-        POST /api/v1/venue), validation_failed (400, id должен быть
-        положительным целым числом)."
+        venue_not_found (404, заведения ещё нет или оно не из ваших рабочих
+        мест, предложите создать его через POST /api/v1/venue), venue_required
+        (400, у вас несколько заведений, передайте venueId из GET
+        /api/v1/me/workplaces), venue_forbidden (403, роль не позволяет это
+        действие), validation_failed (400, id должен быть положительным целым
+        числом)."
       parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
         - schema:
             type: integer
             exclusiveMinimum: 0
@@ -5392,8 +6089,952 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/lookup:
+    post:
+      operationId: lookupCompany
+      summary: Найти компанию по ИНН
+      tags:
+        - company
+      description: "Карточка компании из ЕГРЮЛ или ЕГРИП: наименование, реквизиты,
+        руководитель, статус и ОКВЭД. Не больше 10 запросов в минуту. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        company_not_in_registry (404): компании с таким ИНН нет в реестре.
+        inn_invalid (422): неверная длина или контрольные цифры ИНН, запрос в
+        реестр не отправлялся. company_inactive (422): компания в реестре не
+        действует. registry_unavailable (503): реестр недоступен, повторите
+        позже или отправьте ИНН в POST /api/v1/companies, реквизиты проверит
+        модератор."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inn:
+                  type: string
+                  pattern: ^(\d{10}|\d{12})$
+                  description: "ИНН: 10 цифр у юрлица, 12 у ИП; контрольные цифры проверяет
+                    сервер"
+              required:
+                - inn
+      security: *a4
+      responses:
+        "200":
+          description: Карточка компании
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyLookup"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies:
+    post:
+      operationId: createCompany
+      summary: Подключить компанию
+      tags:
+        - company
+      description: "Создаёт компанию с реквизитами из реестра в статусе pending,
+        текущий пользователь становится владельцем. Если реестр недоступен,
+        принимается ИНН с верными контрольными цифрами, реквизиты проверит
+        модератор. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. user_blocked (403): аккаунт заблокирован
+        администратором. company_exists (409): компания уже подключена,
+        попросите владельца пригласить вас или напишите в поддержку. inn_invalid
+        (422): неверная длина или контрольные цифры ИНН. company_inactive (422):
+        компания в реестре не действует. company_not_in_registry (422): компании
+        с таким ИНН нет в реестре."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inn:
+                  type: string
+                  pattern: ^(\d{10}|\d{12})$
+                  description: "ИНН: 10 цифр у юрлица, 12 у ИП; контрольные цифры проверяет
+                    сервер"
+                attest:
+                  type: boolean
+                  description: Подтверждение «Я вправе представлять эту компанию», только true
+                  enum:
+                    - true
+              required:
+                - inn
+                - attest
+      security: *a4
+      responses:
+        "201":
+          description: Компания создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/{id}:
+    get:
+      operationId: getCompany
+      summary: Компания
+      tags:
+        - company
+      description: "Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. company_not_found (404): компании нет или вы не
+        её сотрудник."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Компания
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      operationId: updateCompany
+      summary: Указать реквизиты компании
+      tags:
+        - company
+      description: "Подставляет реквизиты по ИНН для компании без реквизитов или с
+        отклонённой заявкой и отправляет её на проверку. Только владелец. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        company_forbidden (403): роль не позволяет это действие.
+        company_not_found (404): компании нет или вы не её сотрудник.
+        company_exists (409): этот ИНН уже у другой компании. requisites_locked
+        (409): компания на проверке или подтверждена, реквизиты меняются только
+        через поддержку. inn_invalid (422): неверная длина или контрольные цифры
+        ИНН. company_inactive (422): компания в реестре не действует.
+        company_not_in_registry (422): компании с таким ИНН нет в реестре."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inn:
+                  type: string
+                  pattern: ^(\d{10}|\d{12})$
+                  description: "ИНН: 10 цифр у юрлица, 12 у ИП; контрольные цифры проверяет
+                    сервер"
+                attest:
+                  type: boolean
+                  description: Подтверждение «Я вправе представлять эту компанию», только true
+                  enum:
+                    - true
+              required:
+                - inn
+                - attest
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Компания обновлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/{id}/members:
+    get:
+      operationId: listCompanyMembers
+      summary: Сотрудники компании
+      tags:
+        - company
+      description: "Владелец видит всех, управляющий себя и кассиров своих заведений.
+        Коды ошибок: validation_failed (400): исправьте поля, перечисленные в
+        errors. company_forbidden (403): роль не позволяет это действие.
+        company_not_found (404): компании нет или вы не её сотрудник."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Сотрудники
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Member"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/{id}/members/{userId}:
+    patch:
+      operationId: updateCompanyMember
+      summary: Изменить роль или заведение сотрудника
+      tags:
+        - company
+      description: "Владелец меняет всех, управляющий только кассиров своих заведений.
+        venueId: null даёт доступ ко всем заведениям компании. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        company_forbidden (403): роль не позволяет это действие.
+        company_not_found (404): компании нет или вы не её сотрудник.
+        member_not_found (404): такого сотрудника в компании нет.
+        venue_not_found (404): заведения нет в этой компании. last_owner (409):
+        в компании должен остаться хотя бы один владелец."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: "#/components/schemas/RoleInput"
+                venueId:
+                  description: Заведение сотрудника; null - все заведения компании
+                  anyOf:
+                    - type: integer
+                      exclusiveMinimum: 0
+                    - type: "null"
+              minProperties: 1
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: userId
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Сотрудник
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: removeCompanyMember
+      summary: Исключить сотрудника или выйти из компании
+      tags:
+        - company
+      description: "Свой id означает выход из компании. Исключённому сотруднику бот
+        пишет о закрытом доступе, права пропадают со следующего запроса. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        company_forbidden (403): роль не позволяет это действие.
+        company_not_found (404): компании нет или вы не её сотрудник.
+        member_not_found (404): такого сотрудника в компании нет. last_owner
+        (409): последний владелец не может выйти или быть исключён."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: userId
+          required: true
+      security: *a4
+      responses:
+        "204":
+          description: Сотрудник исключён
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/{id}/invites:
+    post:
+      operationId: createCompanyInvite
+      summary: Пригласить сотрудника
+      tags:
+        - company
+      description: "Ссылки показываются один раз: в базе остаётся только хеш токена.
+        Приглашение действует 72 часа и принимается один раз. Владелец
+        приглашает любую роль, управляющий только кассиров в свои заведения.
+        Коды ошибок: validation_failed (400): исправьте поля, перечисленные в
+        errors. company_forbidden (403): роль не позволяет это действие.
+        company_not_found (404): компании нет или вы не её сотрудник.
+        venue_not_found (404): заведения нет в этой компании или в компании ещё
+        нет заведений. invite_limit (409): не больше 20 действующих приглашений
+        на компанию, отзовите лишние. bot_unavailable (503): бот не запущен,
+        ссылки собрать нельзя."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: "#/components/schemas/RoleInput"
+                venueId:
+                  description: Заведение приглашения; без него приглашение на все заведения
+                    компании
+                  type: integer
+                  exclusiveMinimum: 0
+              required:
+                - role
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "201":
+          description: Приглашение создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedInvite"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      operationId: listCompanyInvites
+      summary: Действующие приглашения
+      tags:
+        - company
+      description: "Токены не возвращаются. Управляющий видит приглашения кассиров
+        своих заведений. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. company_forbidden (403): роль не позволяет это
+        действие. company_not_found (404): компании нет или вы не её сотрудник."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Приглашения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invite"
+                required:
+                  - items
+                additionalProperties: false
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/companies/{id}/invites/{inviteId}:
+    delete:
+      operationId: revokeCompanyInvite
+      summary: Отозвать приглашение
+      tags:
+        - company
+      description: "Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. company_forbidden (403): роль не позволяет это
+        действие. company_not_found (404): компании нет или вы не её сотрудник.
+        invite_not_found (404): приглашения нет, оно принято, истекло или уже
+        отозвано."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: inviteId
+          required: true
+      security: *a4
+      responses:
+        "204":
+          description: Приглашение отозвано
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/invites/preview:
+    post:
+      operationId: previewInvite
+      summary: Посмотреть приглашение
+      tags:
+        - company
+      description: "Токен передаётся в теле, а не в пути: путь запроса попадает в
+        журнал сервера. Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. invite_not_found (404): приглашения нет или оно
+        отозвано. invite_expired (409): срок приглашения вышел, попросите новое.
+        invite_used (409): приглашение уже принято."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  pattern: ^[A-Za-z0-9]{24}$
+                  description: Токен приглашения из ссылки
+              required:
+                - token
+      security: *a4
+      responses:
+        "200":
+          description: Приглашение
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitePreview"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/invites/accept:
+    post:
+      operationId: acceptInvite
+      summary: Принять приглашение
+      tags:
+        - company
+      description: "Ответ - рабочее место, которое получил сотрудник. Согласие гостя
+        на дневник питания для этого не нужно. Коды ошибок: validation_failed
+        (400): исправьте поля, перечисленные в errors. invite_not_found (404):
+        приглашения нет или оно отозвано. invite_expired (409): срок приглашения
+        вышел, попросите новое. invite_used (409): приглашение уже принято.
+        already_member (409): вы уже работаете в этой компании."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  pattern: ^[A-Za-z0-9]{24}$
+                  description: Токен приглашения из ссылки
+              required:
+                - token
+      security: *a4
+      responses:
+        "200":
+          description: Рабочее место
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workplace"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
           content:
             application/problem+json:
               schema:
@@ -6326,7 +7967,10 @@ paths:
         вышло, перед ответом переводятся в expired. Данных гостя в бронях нет,
         для выдачи достаточно кода. Коды ошибок: validation_failed (400): status
         active или history, date в формате YYYY-MM-DD. venue_not_found (404):
-        заведения ещё нет, предложите создать его через POST /api/v1/venue."
+        заведения ещё нет или оно не из ваших рабочих мест, предложите создать
+        его через POST /api/v1/venue. venue_required (400): у вас несколько
+        заведений, передайте venueId из GET /api/v1/me/workplaces.
+        venue_forbidden (403): роль не позволяет это действие."
       parameters:
         - schema:
             default: active
@@ -6348,6 +7992,14 @@ paths:
           required: false
           description: Только брони, созданные в эти сутки YYYY-MM-DD по часовому поясу
             заведения
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -6377,6 +8029,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -6408,17 +8066,28 @@ paths:
         предложение: порция уже зарезервирована за гостем. Погашенное блюдо
         записывается в дневник гостя. Коды ошибок: validation_failed (400):
         исправьте поля, перечисленные в errors. venue_not_found (404): заведения
-        ещё нет, предложите создать его через POST /api/v1/venue.
-        booking_not_found (404): брони с таким кодом в заведении нет, проверьте
-        код. booking_expired (409): время брони вышло, порция вернулась в
-        продажу, гостю нужно забронировать заново. booking_not_active (409):
-        бронь уже погашена или отменена гостем."
+        ещё нет или оно не из ваших рабочих мест, предложите создать его через
+        POST /api/v1/venue. venue_required (400): у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces. venue_forbidden (403):
+        роль не позволяет это действие. booking_not_found (404): брони с таким
+        кодом в заведении нет, проверьте код. booking_expired (409): время брони
+        вышло, порция вернулась в продажу, гостю нужно забронировать заново.
+        booking_not_active (409): бронь уже погашена или отменена гостем."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/RedeemInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -6440,6 +8109,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -6491,7 +8166,10 @@ paths:
         подсчётом переводятся в expired. Коды ошибок: validation_failed (400):
         передайте from и to в формате YYYY-MM-DD. invalid_period (400): from
         позже to или период длиннее 92 дней. venue_not_found (404): заведения
-        ещё нет, предложите создать его через POST /api/v1/venue."
+        ещё нет или оно не из ваших рабочих мест, предложите создать его через
+        POST /api/v1/venue. venue_required (400): у вас несколько заведений,
+        передайте venueId из GET /api/v1/me/workplaces. venue_forbidden (403):
+        роль не позволяет это действие."
       parameters:
         - schema:
             format: date
@@ -6510,6 +8188,14 @@ paths:
           name: to
           required: false
           description: Последний день периода включительно, по умолчанию сегодня
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
       security: *a4
       responses:
         "200":
@@ -6531,6 +8217,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "404":
           description: Not Found
           content:
@@ -7216,6 +8908,8 @@ tags:
     description: Дневник питания
   - name: venue
     description: Кабинет заведения
+  - name: company
+    description: Компании, сотрудники и приглашения
   - name: catalog
     description: Заведения и горящие предложения рядом
   - name: recommendations

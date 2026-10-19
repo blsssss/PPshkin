@@ -1,9 +1,11 @@
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import type { AccountService } from '../../services/account.ts';
+import type { CompaniesService } from '../../services/companies.ts';
 import type { NotificationSettingsService } from '../../services/notification-settings.ts';
 import type { ProfileService } from '../../services/profile.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
 import { describeErrors, ERROR_NOTES } from '../error-notes.ts';
+import { WorkplaceListSchema, toWorkplace } from '../schemas/companies.ts';
 import { errorResponses, GeoPointSchema, noContent, success } from '../schemas/common.ts';
 import {
   NotificationSettingsPatchSchema,
@@ -22,12 +24,13 @@ interface MeRoutesOptions {
   profile: ProfileService;
   account: AccountService;
   notificationSettings: NotificationSettingsService;
+  companies: CompaniesService;
   isAdmin: (userId: number) => boolean;
 }
 
 export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
   app,
-  { profile, account, notificationSettings, isAdmin },
+  { profile, account, notificationSettings, companies, isAdmin },
   done,
 ) => {
   app.get(
@@ -50,6 +53,23 @@ export const meRoutes: FastifyPluginCallbackZod<MeRoutesOptions> = (
       const { user, consents } = await profile.get(userId(request));
       return toUserProfile(user, consents, isAdmin(user.id));
     },
+  );
+
+  app.get(
+    '/me/workplaces',
+    {
+      preValidation: requireAuth,
+      schema: {
+        operationId: 'listMyWorkplaces',
+        tags: ['me'],
+        summary: 'Заведения и роли пользователя',
+        description:
+          'Заведения компаний, в которых пользователь работает, и демо-заведение владельца с ролью и правами. По ним клиент решает, что показывать; права сервер проверяет на каждом запросе заново.',
+        security: bearerSecurity,
+        response: { 200: success('Рабочие места', WorkplaceListSchema), ...errorResponses(401) },
+      },
+    },
+    async (request) => ({ items: (await companies.workplaces(userId(request))).map(toWorkplace) }),
   );
 
   app.patch(

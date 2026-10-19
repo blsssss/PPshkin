@@ -3,7 +3,15 @@ import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { recordingNotifications } from '../../test/notifications.ts';
-import { seedDeal, seedDemoCopy, seedDemoVenue, seedMenuItem } from '../../test/venues.ts';
+import {
+  seedCompany,
+  seedCompanyVenue,
+  seedDeal,
+  seedDemoCopy,
+  seedDemoVenue,
+  seedMember,
+  seedMenuItem,
+} from '../../test/venues.ts';
 import { DEMO_ACCOUNTS } from '../auth/demo.ts';
 import { jsonb, one } from '../db/pool.ts';
 import * as users from '../repositories/users.ts';
@@ -78,7 +86,10 @@ async function bookingRow(id: number) {
   );
 }
 
-async function count(table: 'meals' | 'consents' | 'chat_states', userId: number): Promise<number> {
+async function count(
+  table: 'meals' | 'consents' | 'chat_states' | 'memberships',
+  userId: number,
+): Promise<number> {
   return (
     await one<{ total: number }>(pool, `select count(*)::int as total from ${table} where user_id = $1`, [
       userId,
@@ -236,5 +247,27 @@ describe('account deletion', () => {
     expect(again).toMatchObject({ kcalTarget: 2000, goal: null, dislikedTags: [], location: null });
     expect(await count('consents', GUEST)).toBe(0);
     expect(await count('meals', GUEST)).toBe(0);
+  });
+
+  it('names the companies that would be left without an owner and deletes the membership of the rest', async () => {
+    const alone = await seedCompany(pool, 701, 'Одна');
+    await seedCompanyVenue(pool, alone.id);
+    const shared = await seedCompany(pool, 701, 'Общая');
+    await seedCompanyVenue(pool, shared.id);
+    await seedMember(pool, shared.id, 702, 'owner');
+    const empty = await seedCompany(pool, 701, 'Пустая');
+    await seedMember(pool, alone.id, 703, 'cashier');
+
+    expect(await account.soleOwnerships(701)).toEqual([{ id: alone.id, name: 'Одна' }]);
+    expect(await account.soleOwnerships(702)).toEqual([]);
+    expect(await account.soleOwnerships(703)).toEqual([]);
+
+    await account.deleteAccount(701);
+
+    expect(await count('memberships', 701)).toBe(0);
+    const { rows } = await pool.query<{ id: number }>('select id from companies order by id');
+    expect(rows.map((row) => row.id)).toEqual([alone.id, shared.id, empty.id]);
+    const { rows: venues } = await pool.query('select id from venues where company_id = $1', [alone.id]);
+    expect(venues).toHaveLength(1);
   });
 });

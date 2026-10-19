@@ -100,7 +100,7 @@ describe('venue audit log', () => {
     await seedGuest(pool, GUEST, clock.now());
     const { booking } = await bookings.create(GUEST, { menuItemId: eclair.id }, 'miniapp');
 
-    await bookings.redeem(OWNER, booking.code, 'bot');
+    await bookings.redeem({ userId: OWNER }, booking.code, 'bot');
 
     expect(await events()).toEqual([
       {
@@ -117,13 +117,13 @@ describe('venue audit log', () => {
   it('records publishing, changing and stopping a hot deal', async () => {
     const endsAt = new Date(clock.now().getTime() + 2 * HOUR);
     const { deal } = await deals.create(
-      OWNER,
+      { userId: OWNER },
       { menuItemId: eclair.id, priceRub: 120, quantity: 5, endsAt },
       'miniapp',
     );
-    await deals.update(OWNER, deal.id, { quantityLeft: 3 }, 'miniapp');
-    await deals.cancel(OWNER, deal.id, 'bot');
-    await deals.cancel(OWNER, deal.id, 'bot');
+    await deals.update({ userId: OWNER }, deal.id, { quantityLeft: 3 }, 'miniapp');
+    await deals.cancel({ userId: OWNER }, deal.id, 'bot');
+    await deals.cancel({ userId: OWNER }, deal.id, 'bot');
 
     expect(await events()).toEqual([
       {
@@ -164,23 +164,23 @@ describe('venue audit log', () => {
 
   it('records menu items, an applied import and venue changes with the changed fields', async () => {
     const tart = await menu.create(
-      OWNER,
+      { userId: OWNER },
       { name: 'Тарт', category: 'dessert', priceRub: 250, kcal: 400, tags: [], isAvailable: true },
       'miniapp',
     );
-    await menu.update(OWNER, tart.id, { priceRub: 270, isAvailable: false }, 'miniapp');
-    await menu.update(OWNER, tart.id, { description: 'С ягодами' }, 'bot');
-    await menu.archive(OWNER, tart.id, 'miniapp');
-    const started = await menuImports.fromText(OWNER, 'Эклер 200 ₽\nМорс 90 ₽');
+    await menu.update({ userId: OWNER }, tart.id, { priceRub: 270, isAvailable: false }, 'miniapp');
+    await menu.update({ userId: OWNER }, tart.id, { description: 'С ягодами' }, 'bot');
+    await menu.archive({ userId: OWNER }, tart.id, 'miniapp');
+    const started = await menuImports.fromText({ userId: OWNER }, 'Эклер 200 ₽\nМорс 90 ₽');
     await background.idle();
-    const parsed = await menuImports.get(OWNER, started.id);
+    const parsed = await menuImports.get({ userId: OWNER }, started.id);
     await menuImports.apply(
-      OWNER,
+      { userId: OWNER },
       started.id,
       parsed.items.map((item) => ({ ...item, priceRub: item.priceRub ?? 1 })),
       'bot',
     );
-    await venues.update(OWNER, { closesAt: '23:00', name: 'Зерно' }, 'miniapp');
+    await venues.update({ userId: OWNER }, { closesAt: '23:00', name: 'Зерно' }, 'miniapp');
 
     expect(
       (await events()).map(({ action, target_type, details }) => [action, target_type, details]),
@@ -203,7 +203,7 @@ describe('venue audit log', () => {
     try {
       await expect(
         deals.create(
-          OWNER,
+          { userId: OWNER },
           {
             menuItemId: eclair.id,
             priceRub: 120,
@@ -222,13 +222,15 @@ describe('venue audit log', () => {
 
   it('writes nothing when the action itself fails', async () => {
     const { deal } = await deals.create(
-      OWNER,
+      { userId: OWNER },
       { menuItemId: eclair.id, priceRub: 120, quantity: 5, endsAt: new Date(clock.now().getTime() + HOUR) },
       'bot',
     );
-    await expect(deals.update(OWNER, deal.id, { quantityLeft: 50 }, 'bot')).rejects.toMatchObject({
-      code: 'deal_quantity_invalid',
-    });
+    await expect(deals.update({ userId: OWNER }, deal.id, { quantityLeft: 50 }, 'bot')).rejects.toMatchObject(
+      {
+        code: 'deal_quantity_invalid',
+      },
+    );
     expect((await events()).map((event) => event.action)).toEqual(['deal.create']);
   });
 });
@@ -254,7 +256,7 @@ describe('reading the audit log', () => {
   it('pages 100 records at a time, newest first', async () => {
     await fill(105, new Date('2026-09-20T09:00:00Z'));
 
-    const first = await service.list(OWNER, {});
+    const first = await service.list({ userId: OWNER }, {});
     expect(first.items).toHaveLength(100);
     expect(first.items[0]).toMatchObject({
       action: 'venue.update',
@@ -265,7 +267,7 @@ describe('reading the audit log', () => {
     });
     expect(first.nextCursor).toBe(String(first.items.at(-1)?.id));
 
-    const second = await service.list(OWNER, { cursor: first.nextCursor ?? '' });
+    const second = await service.list({ userId: OWNER }, { cursor: first.nextCursor ?? '' });
     expect(second.items).toHaveLength(5);
     expect(second.nextCursor).toBeNull();
     expect(new Set([...first.items, ...second.items].map((item) => item.id)).size).toBe(105);
@@ -276,11 +278,20 @@ describe('reading the audit log', () => {
     await fill(1, new Date('2026-09-20T21:00:00Z'));
     await seedVenue(pool, OTHER_OWNER);
 
-    expect((await service.list(OWNER, { from: '2026-09-21', to: '2026-09-21' })).items).toHaveLength(1);
-    expect((await service.list(OWNER, { from: '2026-09-20', to: '2026-09-20' })).items).toHaveLength(1);
-    expect((await service.list(OTHER_OWNER, {})).items).toEqual([]);
-    await expect(service.list(999, {})).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
-    await expect(service.list(OWNER, { from: '2026-09-22', to: '2026-09-21' })).rejects.toMatchObject({
+    expect(
+      (await service.list({ userId: OWNER }, { from: '2026-09-21', to: '2026-09-21' })).items,
+    ).toHaveLength(1);
+    expect(
+      (await service.list({ userId: OWNER }, { from: '2026-09-20', to: '2026-09-20' })).items,
+    ).toHaveLength(1);
+    expect((await service.list({ userId: OTHER_OWNER }, {})).items).toEqual([]);
+    await expect(service.list({ userId: 999 }, {})).rejects.toMatchObject({
+      status: 404,
+      code: 'venue_not_found',
+    });
+    await expect(
+      service.list({ userId: OWNER }, { from: '2026-09-22', to: '2026-09-21' }),
+    ).rejects.toMatchObject({
       status: 400,
       code: 'validation_failed',
     });
@@ -289,6 +300,6 @@ describe('reading the audit log', () => {
   it('keeps the record of a deleted actor without the actor', async () => {
     await fill(1, clock.now());
     await pool.query('update audit_events set actor_user_id = null');
-    expect((await service.list(OWNER, {})).items[0]?.actor).toBeNull();
+    expect((await service.list({ userId: OWNER }, {})).items[0]?.actor).toBeNull();
   });
 });

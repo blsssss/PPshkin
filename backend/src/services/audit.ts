@@ -1,9 +1,10 @@
 import type { Pool } from '../db/pool.ts';
 import { AUDIT_PAGE_SIZE } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
+import type { Role } from '../domain/roles.ts';
 import { badRequest } from '../shared/errors.ts';
 import { dayRange, isLocalDate } from '../shared/time.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
 
 export interface AuditQuery {
   from?: string;
@@ -14,7 +15,7 @@ export interface AuditQuery {
 export interface AuditEventView {
   id: number;
   action: string;
-  actor: { userId: number; name: string | null; role: 'owner' } | null;
+  actor: { userId: number; name: string | null; role: Role } | null;
   target: { type: string; id: number | null };
   details: Record<string, unknown>;
   createdAt: Date;
@@ -26,7 +27,7 @@ export interface AuditPageView {
 }
 
 export interface AuditService {
-  list(ownerId: number, query: AuditQuery): Promise<AuditPageView>;
+  list(actor: VenueActor, query: AuditQuery): Promise<AuditPageView>;
 }
 
 const CURSOR = /^[1-9][0-9]{0,17}$/;
@@ -41,7 +42,8 @@ function view(row: audit.AuditRow): AuditEventView {
   return {
     id: row.id,
     action: row.action,
-    actor: row.actorUserId === null ? null : { userId: row.actorUserId, name: row.actorName, role: 'owner' },
+    actor:
+      row.actorUserId === null ? null : { userId: row.actorUserId, name: row.actorName, role: row.actorRole },
     target: { type: row.targetType, id: row.targetId },
     details: row.details,
     createdAt: row.createdAt,
@@ -50,7 +52,7 @@ function view(row: audit.AuditRow): AuditEventView {
 
 export function createAuditService({ pool }: { pool: Pool }): AuditService {
   return {
-    async list(ownerId, query) {
+    async list(actor, query) {
       for (const field of ['from', 'to'] as const) {
         const value = query[field];
         if (value !== undefined && !isLocalDate(value))
@@ -61,7 +63,7 @@ export function createAuditService({ pool }: { pool: Pool }): AuditService {
       }
       if (query.cursor !== undefined && !CURSOR.test(query.cursor))
         throw invalid('cursor', 'is not a cursor');
-      const venue = await requireOwnedVenue(pool, ownerId);
+      const { venue } = await resolveVenueAccess(pool, actor, 'audit.view');
       const rows = await audit.listInVenue(pool, venue.id, {
         from: query.from === undefined ? EARLIEST : dayRange(query.from, venue.timezone).from,
         to: query.to === undefined ? LATEST : dayRange(query.to, venue.timezone).to,

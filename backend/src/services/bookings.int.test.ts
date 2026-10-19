@@ -212,7 +212,12 @@ describe('creating bookings', () => {
 
   it('keeps the price and calories of the moment of booking', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
-    await menu.update(OWNER, tart.id, { name: 'Тарт с малиной', priceRub: 280, kcal: 450 }, 'miniapp');
+    await menu.update(
+      { userId: OWNER },
+      tart.id,
+      { name: 'Тарт с малиной', priceRub: 280, kcal: 450 },
+      'miniapp',
+    );
     const view = await service.get(GUEST, booking.id);
     expect(view.booking).toMatchObject({ itemName: 'Тарт', priceRub: 250, kcal: 410 });
     expect(view.item).toMatchObject({ name: 'Тарт с малиной', priceRub: 280, kcal: 450 });
@@ -223,12 +228,12 @@ describe('creating bookings', () => {
       status: 404,
       code: 'menu_item_not_found',
     });
-    await menu.update(OWNER, tart.id, { isAvailable: false }, 'miniapp');
+    await menu.update({ userId: OWNER }, tart.id, { isAvailable: false }, 'miniapp');
     await expect(service.create(GUEST, { menuItemId: tart.id }, 'bot')).rejects.toMatchObject({
       status: 422,
       code: 'menu_item_unavailable',
     });
-    await menu.archive(OWNER, tart.id, 'miniapp');
+    await menu.archive({ userId: OWNER }, tart.id, 'miniapp');
     await expect(service.create(GUEST, { menuItemId: tart.id }, 'bot')).rejects.toMatchObject({
       status: 404,
       code: 'menu_item_not_found',
@@ -606,7 +611,7 @@ describe('cancelling bookings', () => {
     const cancelled = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await service.cancel(GUEST, cancelled.booking.id);
     const redeemed = await service.create(GUEST, { menuItemId: tart.id }, 'bot');
-    await service.redeem(OWNER, redeemed.booking.code, 'miniapp');
+    await service.redeem({ userId: OWNER }, redeemed.booking.code, 'miniapp');
     for (const id of [cancelled.booking.id, redeemed.booking.id]) {
       await expect(service.cancel(GUEST, id)).rejects.toMatchObject({
         status: 409,
@@ -633,7 +638,11 @@ describe('redeeming bookings', () => {
   it('redeems the scanned QR code and logs the dish in the guest diary', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.advance(15 * MINUTE);
-    const view = await service.redeem(OWNER, ` ${qrPayload(booking.code).toLowerCase()} `, 'miniapp');
+    const view = await service.redeem(
+      { userId: OWNER },
+      ` ${qrPayload(booking.code).toLowerCase()} `,
+      'miniapp',
+    );
     expect(view.booking).toEqual({ ...booking, status: 'redeemed', resolvedAt: clock.now() });
     expect(await quantityLeft(deal.id)).toBe(1);
     expect(await diaryOf(GUEST)).toEqual([
@@ -655,8 +664,8 @@ describe('redeeming bookings', () => {
 
   it('redeems a booking only once', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
-    await service.redeem(OWNER, booking.code, 'miniapp');
-    await expect(service.redeem(OWNER, booking.code, 'miniapp')).rejects.toMatchObject({
+    await service.redeem({ userId: OWNER }, booking.code, 'miniapp');
+    await expect(service.redeem({ userId: OWNER }, booking.code, 'miniapp')).rejects.toMatchObject({
       status: 409,
       code: 'booking_not_active',
     });
@@ -669,17 +678,19 @@ describe('redeeming bookings', () => {
     await service.cancel(GUEST, cancelled.booking.id);
     clock.set(expiring.booking.expiresAt);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await expect(service.redeem(OWNER, expiring.booking.code, 'miniapp')).rejects.toMatchObject({
-        status: 409,
-        code: 'booking_expired',
-      });
+      await expect(service.redeem({ userId: OWNER }, expiring.booking.code, 'miniapp')).rejects.toMatchObject(
+        {
+          status: 409,
+          code: 'booking_expired',
+        },
+      );
     }
     expect(await storedStatus(expiring.booking.id)).toEqual({
       status: 'expired',
       resolved_at: expiring.booking.expiresAt,
     });
     expect(await quantityLeft(deal.id)).toBe(2);
-    await expect(service.redeem(OWNER, cancelled.booking.code, 'miniapp')).rejects.toMatchObject({
+    await expect(service.redeem({ userId: OWNER }, cancelled.booking.code, 'miniapp')).rejects.toMatchObject({
       status: 409,
       code: 'booking_not_active',
     });
@@ -695,12 +706,12 @@ describe('redeeming bookings', () => {
       [OWNER, 'not a code'],
       [OWNER, `ppshkin:order:${booking.code}`],
     ] as const) {
-      await expect(service.redeem(ownerId, code, 'miniapp')).rejects.toMatchObject({
+      await expect(service.redeem({ userId: ownerId }, code, 'miniapp')).rejects.toMatchObject({
         status: 404,
         code: 'booking_not_found',
       });
     }
-    await expect(service.redeem(THIRD_GUEST, booking.code, 'miniapp')).rejects.toMatchObject({
+    await expect(service.redeem({ userId: THIRD_GUEST }, booking.code, 'miniapp')).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',
     });
@@ -716,7 +727,7 @@ describe('redeeming bookings', () => {
     });
     const generateCode = vi.fn(() => 'ABC234');
     const { booking } = await createService({ generateCode }).create(GUEST, { menuItemId: eclair.id }, 'bot');
-    const view = await service.redeem(OWNER, 'abc 234', 'miniapp');
+    const view = await service.redeem({ userId: OWNER }, 'abc 234', 'miniapp');
     expect(view.booking.id).toBe(booking.id);
     expect(view.booking.id).not.toBe(old);
   });
@@ -725,13 +736,15 @@ describe('redeeming bookings', () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     await venues.update(pool, venue.id, { opensAt: '06:00', closesAt: '07:00' }, clock.now());
     await deals.cancelLiveInVenue(pool, venue.id, deal.id, clock.now());
-    expect((await service.redeem(OWNER, booking.code, 'miniapp')).booking.status).toBe('redeemed');
+    expect((await service.redeem({ userId: OWNER }, booking.code, 'miniapp')).booking.status).toBe(
+      'redeemed',
+    );
   });
 
   it('keeps no diary entry for a deleted account', async () => {
     const { booking } = await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
     await users.remove(pool, GUEST);
-    const view = await service.redeem(OWNER, booking.code, 'miniapp');
+    const view = await service.redeem({ userId: OWNER }, booking.code, 'miniapp');
     expect(view.booking).toMatchObject({ status: 'redeemed', userId: null });
     const { rows } = await pool.query('select id from meals');
     expect(rows).toEqual([]);
@@ -749,7 +762,7 @@ describe('venue bookings', () => {
     const second = await service.create(SECOND_GUEST, { menuItemId: tart.id, dealId: short.id }, 'bot');
     const foreignItem = await seedMenuItem(pool, (await seedVenue(pool, OTHER_OWNER)).id);
     await service.create(THIRD_GUEST, { menuItemId: foreignItem.id }, 'bot');
-    const listed = await service.listForVenue(OWNER, { status: 'active' });
+    const listed = await service.listForVenue({ userId: OWNER }, { status: 'active' });
     expect(listed.map((view) => view.booking.id)).toEqual([second.booking.id, first.booking.id]);
     expect(listed[0]).toMatchObject({ item: tart, venue });
   });
@@ -778,13 +791,13 @@ describe('venue bookings', () => {
     });
     const due = await service.create(SECOND_GUEST, { menuItemId: eclair.id }, 'bot');
     clock.advance(HOUR);
-    const history = await service.listForVenue(OWNER, { status: 'history' });
+    const history = await service.listForVenue({ userId: OWNER }, { status: 'history' });
     expect(history.map((view) => [view.booking.id, view.booking.status])).toEqual([
       [due.booking.id, 'expired'],
       [redeemed, 'redeemed'],
       [cancelled, 'cancelled'],
     ]);
-    expect(await service.listForVenue(OWNER, { status: 'active' })).toEqual([]);
+    expect(await service.listForVenue({ userId: OWNER }, { status: 'active' })).toEqual([]);
   });
 
   it('keeps the venue history to 100 bookings', async () => {
@@ -797,7 +810,7 @@ describe('venue bookings', () => {
         createdAt: later(-(index + 1) * MINUTE),
       });
     }
-    expect(await service.listForVenue(OWNER, { status: 'history' })).toHaveLength(100);
+    expect(await service.listForVenue({ userId: OWNER }, { status: 'history' })).toHaveLength(100);
   });
 
   it('filters by the local day the booking was created', async () => {
@@ -824,7 +837,7 @@ describe('venue bookings', () => {
       createdAt: new Date('2026-09-25T08:30:00Z'),
     });
     const byDay = async (status: 'active' | 'history', date: string) =>
-      (await service.listForVenue(OTHER_OWNER, { status, date })).map((view) => view.booking.id);
+      (await service.listForVenue({ userId: OTHER_OWNER }, { status, date })).map((view) => view.booking.id);
     expect(await byDay('history', '2026-09-23')).toEqual([lateEvening]);
     expect(await byDay('history', '2026-09-24')).toEqual([afterMidnight]);
     expect(await byDay('active', '2026-09-25')).toEqual([active]);
@@ -832,16 +845,18 @@ describe('venue bookings', () => {
   });
 
   it('needs a valid date and a venue', async () => {
-    await expect(service.listForVenue(OWNER, { status: 'active', date: '2026-02-30' })).rejects.toMatchObject(
-      {
-        status: 400,
-        code: 'validation_failed',
-      },
-    );
-    await expect(service.listForVenue(GUEST, { status: 'history', date: 'today' })).rejects.toMatchObject({
+    await expect(
+      service.listForVenue({ userId: OWNER }, { status: 'active', date: '2026-02-30' }),
+    ).rejects.toMatchObject({
+      status: 400,
       code: 'validation_failed',
     });
-    await expect(service.listForVenue(GUEST, { status: 'active' })).rejects.toMatchObject({
+    await expect(
+      service.listForVenue({ userId: GUEST }, { status: 'history', date: 'today' }),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+    await expect(service.listForVenue({ userId: GUEST }, { status: 'active' })).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',
     });

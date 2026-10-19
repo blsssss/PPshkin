@@ -8,7 +8,7 @@ import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../shared/errors.ts';
 import { isOpenAt, nextClosingAt } from '../shared/time.ts';
 import { lockMenuItem } from './menu.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
 import type { AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
 
@@ -37,10 +37,10 @@ export interface DealPatch {
 }
 
 export interface DealsService {
-  list(ownerId: number, status: DealListFilter): Promise<DealView[]>;
-  create(ownerId: number, input: DealInput, channel: AuditChannel): Promise<DealView>;
-  update(ownerId: number, dealId: number, patch: DealPatch, channel: AuditChannel): Promise<DealView>;
-  cancel(ownerId: number, dealId: number, channel: AuditChannel): Promise<void>;
+  list(actor: VenueActor, status: DealListFilter): Promise<DealView[]>;
+  create(actor: VenueActor, input: DealInput, channel: AuditChannel): Promise<DealView>;
+  update(actor: VenueActor, dealId: number, patch: DealPatch, channel: AuditChannel): Promise<DealView>;
+  cancel(actor: VenueActor, dealId: number, channel: AuditChannel): Promise<void>;
 }
 
 interface DealsDependencies {
@@ -124,8 +124,8 @@ function dealExists() {
 
 export function createDealsService({ pool, clock }: DealsDependencies): DealsService {
   return {
-    async list(ownerId, status) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async list(actor, status) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       const now = clock.now();
       const found =
         status === 'active'
@@ -134,8 +134,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       return dealViews(pool, found, now);
     },
 
-    async create(ownerId, input, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async create(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, input.menuItemId);
         assertSellable(item, input.priceRub);
@@ -159,7 +159,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'deal.create',
             target: { type: 'deal', id: deal.id },
             channel,
@@ -176,8 +176,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       });
     },
 
-    async update(ownerId, dealId, patch, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async update(actor, dealId, patch, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
       return withTransaction(pool, async (client) => {
         const found = await deals.findInVenue(client, venue.id, dealId);
         if (!found) throw dealNotFound();
@@ -218,7 +218,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'deal.update',
             target: { type: 'deal', id: deal.id },
             channel,
@@ -230,8 +230,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       });
     },
 
-    async cancel(ownerId, dealId, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async cancel(actor, dealId, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
       const deal = await deals.findInVenue(pool, venue.id, dealId);
       if (!deal) throw dealNotFound();
       const now = clock.now();
@@ -242,7 +242,7 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           client,
           {
             venueId: venue.id,
-            actorUserId: ownerId,
+            actorUserId: actor.userId,
             action: 'deal.cancel',
             target: { type: 'deal', id: deal.id },
             channel,

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { VenueActor } from '../services/access.ts';
 import type { AuthContext, AuthService } from '../services/auth.ts';
 import { unauthorized } from '../shared/errors.ts';
 
@@ -41,6 +42,10 @@ export function userId(request: FastifyRequest): number {
     throw unauthorized('unauthorized', 'Authentication required');
   }
   return request.auth.userId;
+}
+
+export function venueActor(request: FastifyRequest, venueId: number | undefined): VenueActor {
+  return { userId: userId(request), venueId };
 }
 
 export function rateLimitKey(request: FastifyRequest): string {

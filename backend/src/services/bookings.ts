@@ -24,7 +24,7 @@ import { dayRange, isLocalDate, isOpenAt } from '../shared/time.ts';
 import type { ConsentsService } from './consents.ts';
 import { lockMenuItem } from './menu.ts';
 import { requireUnblockedUser } from './moderation.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
 import type { AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
 
@@ -62,8 +62,8 @@ export interface BookingsService {
   get(userId: number, bookingId: number): Promise<BookingView>;
   qr(userId: number, bookingId: number): Promise<Buffer>;
   cancel(userId: number, bookingId: number): Promise<BookingView>;
-  listForVenue(ownerId: number, query: VenueBookingsQuery): Promise<BookingView[]>;
-  redeem(ownerId: number, code: string, channel: AuditChannel): Promise<BookingView>;
+  listForVenue(actor: VenueActor, query: VenueBookingsQuery): Promise<BookingView[]>;
+  redeem(actor: VenueActor, code: string, channel: AuditChannel): Promise<BookingView>;
   expireDue(scope: ExpireScope): Promise<Booking[]>;
 }
 
@@ -310,13 +310,13 @@ export function createBookingsService({
       );
     },
 
-    async listForVenue(ownerId, { status, date }) {
+    async listForVenue(actor, { status, date }) {
       if (date !== undefined && !isLocalDate(date)) {
         throw badRequest('validation_failed', 'Request validation failed', [
           { path: 'date', message: 'must be a calendar date in YYYY-MM-DD format' },
         ]);
       }
-      const venue = await requireOwnedVenue(pool, ownerId);
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       await expire({ venueId: venue.id });
       const created = date === undefined ? null : dayRange(date, venue.timezone);
       const found =
@@ -334,20 +334,20 @@ export function createBookingsService({
       return bookingViews(pool, found);
     },
 
-    async redeem(ownerId, input, channel) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async redeem(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'booking.redeem');
       const code = normalizeBookingCode(input);
       if (code === null) throw bookingNotFound();
       return settle(
         (client) => bookings.lockLatestByCode(client, venue.id, code),
         async (client, booking, now) => {
-          const redeemed = await bookings.markRedeemed(client, booking.id, now);
+          const redeemed = await bookings.markRedeemed(client, booking.id, actor.userId, now);
           const view = await bookingView(client, redeemed);
           await audit.record(
             client,
             {
               venueId: venue.id,
-              actorUserId: ownerId,
+              actorUserId: actor.userId,
               action: 'booking.redeem',
               target: { type: 'booking', id: redeemed.id },
               channel,

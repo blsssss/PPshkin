@@ -2,7 +2,9 @@ import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
 import type { DemoDataset } from './demo/dataset.ts';
+import { createDadataRegistry } from './integrations/dadata/client.ts';
 import { silentNotifications } from './notifications/silent-notifier.ts';
+import type { CompanyRegistry } from './ports/company-registry.ts';
 import type { Notifications } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
@@ -11,6 +13,7 @@ import { createAuditService } from './services/audit.ts';
 import { createAuthService } from './services/auth.ts';
 import { createBookingsService } from './services/bookings.ts';
 import { createCatalogService } from './services/catalog.ts';
+import { createCompaniesService } from './services/companies.ts';
 import { createConsentsService } from './services/consents.ts';
 import { createDealsService } from './services/deals.ts';
 import { createDemoService } from './services/demo.ts';
@@ -37,6 +40,8 @@ export interface ContainerOptions {
   background: BackgroundTasks;
   notifications?: Notifications;
   demoDataset?: DemoDataset | null;
+  registry?: CompanyRegistry;
+  botUsername?: () => string | null;
 }
 
 export function createServices({
@@ -47,6 +52,8 @@ export function createServices({
   background,
   notifications = silentNotifications,
   demoDataset = null,
+  registry = createDadataRegistry({ apiKey: config.DADATA_API_KEY ?? null }),
+  botUsername = () => null,
 }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
   const bookings = createBookingsService({ pool, clock, consents, notifications });
@@ -69,6 +76,14 @@ export function createServices({
     ),
     profile: createProfileService({ pool, clock, consents }),
     consents,
+    companies: createCompaniesService({
+      pool,
+      clock,
+      registry,
+      notifications,
+      adminIds: config.ADMIN_USER_IDS,
+      botUsername,
+    }),
     diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
     account: createAccountService({ pool, clock, notifications }),
     venues: createVenuesService({ pool, clock }),

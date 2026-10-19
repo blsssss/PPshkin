@@ -92,7 +92,7 @@ afterAll(async () => {
 describe('menu import lifecycle', () => {
   it('recognizes pasted text in the background', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     expect(started).toMatchObject({
       source: 'text',
       status: 'processing',
@@ -104,7 +104,7 @@ describe('menu import lifecycle', () => {
     clock.advance(3_000);
     await background.idle();
     expect(menus.fromText).toHaveBeenCalledWith(MENU_TEXT);
-    expect(await imports.get(OWNER, started.id)).toMatchObject({
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({
       status: 'ready',
       items: PARSED_ITEMS,
       error: null,
@@ -115,18 +115,21 @@ describe('menu import lifecycle', () => {
 
   it('sends only the photo to the parser', async () => {
     const imports = service();
-    const started = await imports.fromPhoto(OWNER, PHOTO);
+    const started = await imports.fromPhoto({ userId: OWNER }, PHOTO);
     await background.idle();
     expect(menus.fromPhoto).toHaveBeenCalledWith(PHOTO);
-    expect(await imports.get(OWNER, started.id)).toMatchObject({ source: 'photo', status: 'ready' });
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({
+      source: 'photo',
+      status: 'ready',
+    });
   });
 
   it('fails when nothing was found on the menu', async () => {
     menus.fromText.mockResolvedValue({ ...parsed, items: [] });
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
-    expect(await imports.get(OWNER, started.id)).toMatchObject({
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({
       status: 'failed',
       items: [],
       model: 'test-model',
@@ -144,9 +147,9 @@ describe('menu import lifecycle', () => {
   ])('explains an unavailable parser (%s)', async (reason, error) => {
     menus.fromPhoto.mockResolvedValue({ status: 'unavailable', reason });
     const imports = service();
-    const started = await imports.fromPhoto(OWNER, PHOTO);
+    const started = await imports.fromPhoto({ userId: OWNER }, PHOTO);
     await background.idle();
-    expect(await imports.get(OWNER, started.id)).toMatchObject({
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({
       status: 'failed',
       items: [],
       model: null,
@@ -159,9 +162,9 @@ describe('menu import lifecycle', () => {
     const crash = new Error('socket hang up');
     menus.fromText.mockRejectedValue(crash);
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
-    expect(await imports.get(OWNER, started.id)).toMatchObject({
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({
       status: 'failed',
       error: 'Сервис распознавания не ответил, попробуйте позже',
     });
@@ -173,7 +176,7 @@ describe('menu import lifecycle', () => {
 
   it('fails right away when background work is shutting down', async () => {
     background.stop();
-    const started = await service().fromText(OWNER, MENU_TEXT);
+    const started = await service().fromText({ userId: OWNER }, MENU_TEXT);
     expect(started).toMatchObject({
       status: 'failed',
       error: 'Сервис распознавания не ответил, попробуйте позже',
@@ -186,10 +189,10 @@ describe('menu import lifecycle', () => {
 describe('applying a menu import', () => {
   it('adds the confirmed items as estimates once', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
     clock.advance(MINUTE);
-    const { added, duplicates } = await imports.apply(OWNER, started.id, CONFIRMED, 'miniapp');
+    const { added, duplicates } = await imports.apply({ userId: OWNER }, started.id, CONFIRMED, 'miniapp');
     expect(duplicates).toEqual([]);
     expect(added).toHaveLength(2);
     expect(added[1]).toMatchObject({
@@ -202,33 +205,33 @@ describe('applying a menu import', () => {
       isAvailable: true,
       createdAt: clock.now(),
     });
-    expect((await menu.list(OWNER)).map((item) => item.name)).toEqual(['Эклер', 'Капучино']);
-    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'applied' });
-    await expect(imports.apply(OWNER, started.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
+    expect((await menu.list({ userId: OWNER })).map((item) => item.name)).toEqual(['Эклер', 'Капучино']);
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({ status: 'applied' });
+    await expect(imports.apply({ userId: OWNER }, started.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
       status: 409,
       code: 'import_already_applied',
     });
-    expect(await menu.list(OWNER)).toHaveLength(2);
+    expect(await menu.list({ userId: OWNER })).toHaveLength(2);
   });
 
   it('applies a double submit only once', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
     const results = await Promise.allSettled([
-      imports.apply(OWNER, started.id, CONFIRMED, 'miniapp'),
-      imports.apply(OWNER, started.id, CONFIRMED, 'miniapp'),
+      imports.apply({ userId: OWNER }, started.id, CONFIRMED, 'miniapp'),
+      imports.apply({ userId: OWNER }, started.id, CONFIRMED, 'miniapp'),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
       reason: { code: 'import_already_applied' },
     });
-    expect(await menu.list(OWNER)).toHaveLength(2);
+    expect(await menu.list({ userId: OWNER })).toHaveLength(2);
   });
 
   it('skips items that are already on the menu', async () => {
     const cappuccino = await menu.create(
-      OWNER,
+      { userId: OWNER },
       {
         name: 'Капучино',
         category: 'drink',
@@ -238,7 +241,7 @@ describe('applying a menu import', () => {
       'miniapp',
     );
     const hedgehog = await menu.create(
-      OWNER,
+      { userId: OWNER },
       {
         name: 'Пирожное Ёжик',
         category: 'dessert',
@@ -248,17 +251,17 @@ describe('applying a menu import', () => {
       'miniapp',
     );
     const archived = await menu.create(
-      OWNER,
+      { userId: OWNER },
       { name: 'Латте', category: 'drink', priceRub: 240, kcal: 160 },
       'miniapp',
     );
-    await menu.archive(OWNER, archived.id, 'miniapp');
+    await menu.archive({ userId: OWNER }, archived.id, 'miniapp');
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
 
     const { added, duplicates } = await imports.apply(
-      OWNER,
+      { userId: OWNER },
       started.id,
       [
         { ...CONFIRMED[0]!, name: '  КАПУЧИНО ', priceRub: 250, kcal: 125 },
@@ -271,15 +274,15 @@ describe('applying a menu import', () => {
 
     expect(added.map((item) => item.name)).toEqual(['Латте', 'Эклер']);
     expect(duplicates).toEqual([cappuccino, hedgehog]);
-    const onMenu = await menu.list(OWNER);
+    const onMenu = await menu.list({ userId: OWNER });
     expect(onMenu.map((item) => item.name).sort()).toEqual(['Капучино', 'Латте', 'Пирожное Ёжик', 'Эклер']);
     expect(onMenu.find((item) => item.id === cappuccino.id)).toEqual(cappuccino);
-    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'applied' });
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({ status: 'applied' });
   });
 
   it('applies an import whose items are all on the menu without adding anything', async () => {
     const cappuccino = await menu.create(
-      OWNER,
+      { userId: OWNER },
       {
         name: 'Капучино',
         category: 'drink',
@@ -289,23 +292,28 @@ describe('applying a menu import', () => {
       'miniapp',
     );
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
 
-    const applied = await imports.apply(OWNER, started.id, [CONFIRMED[0]!, CONFIRMED[0]!], 'miniapp');
+    const applied = await imports.apply(
+      { userId: OWNER },
+      started.id,
+      [CONFIRMED[0]!, CONFIRMED[0]!],
+      'miniapp',
+    );
 
     expect(applied).toEqual({ added: [], duplicates: [cappuccino] });
-    expect(await menu.list(OWNER)).toEqual([cappuccino]);
-    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'applied' });
+    expect(await menu.list({ userId: OWNER })).toEqual([cappuccino]);
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({ status: 'applied' });
   });
 
   it('adds an item repeated within one import once', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
 
     const { added, duplicates } = await imports.apply(
-      OWNER,
+      { userId: OWNER },
       started.id,
       [CONFIRMED[1]!, { ...CONFIRMED[1]!, name: ' ЭКЛЕР', priceRub: 170 }],
       'miniapp',
@@ -313,47 +321,51 @@ describe('applying a menu import', () => {
 
     expect(added).toMatchObject([{ name: 'Эклер', priceRub: 150 }]);
     expect(duplicates).toEqual([]);
-    expect(await menu.list(OWNER)).toHaveLength(1);
+    expect(await menu.list({ userId: OWNER })).toHaveLength(1);
   });
 
   it('adds an item only once when two imports are applied at the same time', async () => {
     const imports = service();
-    const first = await imports.fromText(OWNER, MENU_TEXT);
+    const first = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
-    const second = await imports.fromText(OWNER, MENU_TEXT);
+    const second = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
 
     const results = await raceBehindLock(
       pool,
       { text: 'select id from venues where owner_id = $1 for update', values: [OWNER] },
       [
-        () => imports.apply(OWNER, first.id, CONFIRMED, 'miniapp'),
-        () => imports.apply(OWNER, second.id, CONFIRMED, 'miniapp'),
+        () => imports.apply({ userId: OWNER }, first.id, CONFIRMED, 'miniapp'),
+        () => imports.apply({ userId: OWNER }, second.id, CONFIRMED, 'miniapp'),
       ],
     );
 
     const applied = results.map((result) => (result.status === 'fulfilled' ? result.value : null));
     expect(applied.map((result) => result?.added.length).sort()).toEqual([0, 2]);
     expect(applied.map((result) => result?.duplicates.length).sort()).toEqual([0, 2]);
-    expect(await menu.list(OWNER)).toHaveLength(2);
+    expect(await menu.list({ userId: OWNER })).toHaveLength(2);
   });
 
   it('applies only recognized imports', async () => {
     const parse = pendingParse();
     menus.fromText.mockReturnValue(parse.result);
     const imports = service();
-    const processing = await imports.fromText(OWNER, MENU_TEXT);
-    await expect(imports.apply(OWNER, processing.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
-      status: 409,
-      code: 'import_not_ready',
-    });
+    const processing = await imports.fromText({ userId: OWNER }, MENU_TEXT);
+    await expect(imports.apply({ userId: OWNER }, processing.id, CONFIRMED, 'miniapp')).rejects.toMatchObject(
+      {
+        status: 409,
+        code: 'import_not_ready',
+      },
+    );
     parse.finish({ status: 'unavailable', reason: 'timeout' });
     await background.idle();
-    await expect(imports.apply(OWNER, processing.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
-      status: 409,
-      code: 'import_not_ready',
-    });
-    expect(await menu.list(OWNER)).toEqual([]);
+    await expect(imports.apply({ userId: OWNER }, processing.id, CONFIRMED, 'miniapp')).rejects.toMatchObject(
+      {
+        status: 409,
+        code: 'import_not_ready',
+      },
+    );
+    expect(await menu.list({ userId: OWNER })).toEqual([]);
   });
 });
 
@@ -362,36 +374,38 @@ describe('stale menu imports', () => {
     const parse = pendingParse();
     menus.fromText.mockReturnValueOnce(parse.result);
     const imports = service();
-    const stuck = await imports.fromText(OWNER, MENU_TEXT);
+    const stuck = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     clock.advance(30 * MINUTE);
-    expect(await imports.get(OWNER, stuck.id)).toMatchObject({ status: 'processing' });
-    await expect(imports.fromText(OWNER, MENU_TEXT)).rejects.toMatchObject({ code: 'import_in_progress' });
+    expect(await imports.get({ userId: OWNER }, stuck.id)).toMatchObject({ status: 'processing' });
+    await expect(imports.fromText({ userId: OWNER }, MENU_TEXT)).rejects.toMatchObject({
+      code: 'import_in_progress',
+    });
 
     clock.advance(1);
-    expect(await imports.get(OWNER, stuck.id)).toMatchObject({
+    expect(await imports.get({ userId: OWNER }, stuck.id)).toMatchObject({
       status: 'failed',
       error: 'Не успели распознать меню, попробуйте фото получше или вставьте текст',
       completedAt: new Date(stuck.createdAt.getTime() + 30 * MINUTE),
     });
-    await expect(imports.apply(OWNER, stuck.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
+    await expect(imports.apply({ userId: OWNER }, stuck.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
       code: 'import_not_ready',
     });
-    const next = await imports.fromText(OWNER, MENU_TEXT);
+    const next = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     parse.finish(parsed);
     await background.idle();
-    expect(await imports.get(OWNER, next.id)).toMatchObject({ status: 'ready' });
-    expect(await imports.get(OWNER, stuck.id)).toMatchObject({ status: 'failed' });
+    expect(await imports.get({ userId: OWNER }, next.id)).toMatchObject({ status: 'ready' });
+    expect(await imports.get({ userId: OWNER }, stuck.id)).toMatchObject({ status: 'failed' });
   });
 
   it('ignores a result that arrives after the import went stale', async () => {
     const parse = pendingParse();
     menus.fromText.mockReturnValue(parse.result);
     const imports = service();
-    const slow = await imports.fromText(OWNER, MENU_TEXT);
+    const slow = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     clock.advance(31 * MINUTE);
     parse.finish(parsed);
     await background.idle();
-    expect(await imports.get(OWNER, slow.id)).toMatchObject({ status: 'failed', items: [] });
+    expect(await imports.get({ userId: OWNER }, slow.id)).toMatchObject({ status: 'failed', items: [] });
   });
 });
 
@@ -400,14 +414,14 @@ describe('menu import limits', () => {
     const parse = pendingParse();
     menus.fromText.mockReturnValueOnce(parse.result);
     const imports = service();
-    await imports.fromText(OWNER, MENU_TEXT);
-    await expect(imports.fromPhoto(OWNER, PHOTO)).rejects.toMatchObject({
+    await imports.fromText({ userId: OWNER }, MENU_TEXT);
+    await expect(imports.fromPhoto({ userId: OWNER }, PHOTO)).rejects.toMatchObject({
       status: 409,
       code: 'import_in_progress',
     });
     parse.finish(parsed);
     await background.idle();
-    expect((await imports.fromPhoto(OWNER, PHOTO)).status).toBe('processing');
+    expect((await imports.fromPhoto({ userId: OWNER }, PHOTO)).status).toBe('processing');
   });
 
   it('starts only one of two simultaneous imports', async () => {
@@ -415,8 +429,8 @@ describe('menu import limits', () => {
     menus.fromText.mockReturnValue(parse.result);
     const imports = service();
     const results = await Promise.allSettled([
-      imports.fromText(OWNER, MENU_TEXT),
-      imports.fromText(OWNER, MENU_TEXT),
+      imports.fromText({ userId: OWNER }, MENU_TEXT),
+      imports.fromText({ userId: OWNER }, MENU_TEXT),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({
@@ -430,50 +444,56 @@ describe('menu import limits', () => {
     clock.set('2026-09-24T21:00:00Z');
     const imports = service();
     for (let index = 0; index < 20; index += 1) {
-      await imports.fromText(OWNER, MENU_TEXT);
+      await imports.fromText({ userId: OWNER }, MENU_TEXT);
       await background.idle();
       clock.advance(MINUTE);
     }
-    await expect(imports.fromText(OWNER, MENU_TEXT)).rejects.toMatchObject({
+    await expect(imports.fromText({ userId: OWNER }, MENU_TEXT)).rejects.toMatchObject({
       status: 409,
       code: 'import_limit_reached',
     });
     clock.set('2026-09-25T20:59:59Z');
-    await expect(imports.fromText(OWNER, MENU_TEXT)).rejects.toMatchObject({ code: 'import_limit_reached' });
+    await expect(imports.fromText({ userId: OWNER }, MENU_TEXT)).rejects.toMatchObject({
+      code: 'import_limit_reached',
+    });
     clock.set('2026-09-25T21:00:00Z');
-    expect((await imports.fromText(OWNER, MENU_TEXT)).status).toBe('processing');
+    expect((await imports.fromText({ userId: OWNER }, MENU_TEXT)).status).toBe('processing');
   });
 });
 
 describe('menu import ownership', () => {
   it('hides imports of other venues', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
     await seedVenue(pool, OTHER_OWNER, { name: 'Пекарня' });
-    await expect(imports.get(OTHER_OWNER, started.id)).rejects.toMatchObject({
+    await expect(imports.get({ userId: OTHER_OWNER }, started.id)).rejects.toMatchObject({
       status: 404,
       code: 'import_not_found',
     });
-    await expect(imports.apply(OTHER_OWNER, started.id, CONFIRMED, 'miniapp')).rejects.toMatchObject({
+    await expect(
+      imports.apply({ userId: OTHER_OWNER }, started.id, CONFIRMED, 'miniapp'),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'import_not_found',
     });
-    await expect(imports.get(OWNER, 999_999)).rejects.toMatchObject({ code: 'import_not_found' });
-    expect(await imports.get(OWNER, started.id)).toMatchObject({ status: 'ready' });
+    await expect(imports.get({ userId: OWNER }, 999_999)).rejects.toMatchObject({ code: 'import_not_found' });
+    expect(await imports.get({ userId: OWNER }, started.id)).toMatchObject({ status: 'ready' });
   });
 
   it('requires a venue for every call', async () => {
     const guest = 101;
     await seedUser(pool, guest);
     const imports = service();
-    await expect(imports.fromText(guest, MENU_TEXT)).rejects.toMatchObject({
+    await expect(imports.fromText({ userId: guest }, MENU_TEXT)).rejects.toMatchObject({
       status: 404,
       code: 'venue_not_found',
     });
-    await expect(imports.fromPhoto(guest, PHOTO)).rejects.toMatchObject({ code: 'venue_not_found' });
-    await expect(imports.get(guest, 1)).rejects.toMatchObject({ code: 'venue_not_found' });
-    await expect(imports.apply(guest, 1, CONFIRMED, 'miniapp')).rejects.toMatchObject({
+    await expect(imports.fromPhoto({ userId: guest }, PHOTO)).rejects.toMatchObject({
+      code: 'venue_not_found',
+    });
+    await expect(imports.get({ userId: guest }, 1)).rejects.toMatchObject({ code: 'venue_not_found' });
+    await expect(imports.apply({ userId: guest }, 1, CONFIRMED, 'miniapp')).rejects.toMatchObject({
       code: 'venue_not_found',
     });
     expect(menus.fromText).not.toHaveBeenCalled();
@@ -481,7 +501,7 @@ describe('menu import ownership', () => {
 
   it('keeps only known tags from stored results', async () => {
     const imports = service();
-    const started = await imports.fromText(OWNER, MENU_TEXT);
+    const started = await imports.fromText({ userId: OWNER }, MENU_TEXT);
     await background.idle();
     await pool.query(
       `update menu_imports set items = jsonb_set(items, '{0,tags}', '["coffee", "unknown"]') where id = $1`,

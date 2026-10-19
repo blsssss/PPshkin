@@ -17,6 +17,7 @@ afterEach(async () => {
 
 const owner = bearer('venue-token');
 const OWNER_ID = 202;
+const ACTOR = { userId: OWNER_ID };
 const BOOKINGS = '/api/v1/venue/bookings';
 const REDEEM = '/api/v1/venue/bookings/redeem';
 const ANALYTICS = '/api/v1/venue/analytics';
@@ -105,8 +106,8 @@ describe('venue bookings list', () => {
       expect(item).not.toHaveProperty('offerId');
     }
     expect(listForVenue.mock.calls).toEqual([
-      [OWNER_ID, { status: 'active' }],
-      [OWNER_ID, { status: 'history', date: '2026-09-25' }],
+      [ACTOR, { status: 'active' }],
+      [ACTOR, { status: 'history', date: '2026-09-25' }],
     ]);
   });
 
@@ -148,7 +149,7 @@ describe('redeeming a booking', () => {
       status: 'redeemed',
       resolvedAt: '2026-09-25T09:20:00.000Z',
     });
-    expect(redeem).toHaveBeenCalledExactlyOnceWith(OWNER_ID, 'ppshkin:booking:k7mp4x', 'miniapp');
+    expect(redeem).toHaveBeenCalledExactlyOnceWith(ACTOR, 'ppshkin:booking:k7mp4x', 'miniapp');
   });
 
   it('validates the code', async () => {
@@ -208,8 +209,8 @@ describe('venue analytics', () => {
       expect(response.json()).toEqual(analytics);
     }
     expect(get.mock.calls).toEqual([
-      [OWNER_ID, {}],
-      [OWNER_ID, { from: '2026-09-19', to: '2026-09-25' }],
+      [ACTOR, {}],
+      [ACTOR, { from: '2026-09-19', to: '2026-09-25' }],
     ]);
   });
 

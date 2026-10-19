@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
-import { seedUser, seedVenue } from '../../test/venues.ts';
+import { seedCompany, seedCompanyVenue, seedMember, seedUser, seedVenue } from '../../test/venues.ts';
 import { createNotificationSettingsService } from './notification-settings.ts';
 
 const pool = testPool();
@@ -33,6 +33,20 @@ describe('notification settings', () => {
         editable: true,
       })),
     });
+  });
+
+  it('adds the venue kinds for the staff of a company as well', async () => {
+    const company = await seedCompany(pool, OWNER);
+    await seedCompanyVenue(pool, company.id);
+    await seedMember(pool, company.id, 303, 'cashier');
+
+    for (const user of [OWNER, 303]) {
+      const { kinds } = await service.get(user);
+      expect(kinds.some(({ audience }) => audience === 'venue')).toBe(true);
+    }
+    await expect(
+      service.update(303, { kinds: [{ kind: 'venue_booking_created', enabled: false }] }),
+    ).resolves.toBeDefined();
   });
 
   it('adds the venue kinds for an owner with the menu import result always on', async () => {
