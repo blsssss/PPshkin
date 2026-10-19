@@ -6,7 +6,11 @@ import type { MetricsService } from '../services/metrics.ts';
 const BOOKING_STATUSES = ['active', 'redeemed', 'cancelled', 'expired'] as const;
 const OFFER_STATUSES = ['shown', 'accepted', 'declined'] as const;
 
-export function createJobMetrics(registry: Registry, jobNames: readonly string[]): JobMetrics {
+export function createJobMetrics(
+  registry: Registry,
+  jobNames: readonly string[],
+  startedAt = Date.now() / 1000,
+): JobMetrics {
   const runs = new Counter({
     name: 'ppshkin_job_runs_total',
     help: 'Background job runs by result: ok, failed or locked by another instance',
@@ -35,6 +39,7 @@ export function createJobMetrics(registry: Registry, jobNames: readonly string[]
   for (const name of jobNames) {
     for (const result of JOB_RESULTS) runs.inc({ name, result }, 0);
     consecutiveFailures.set({ name }, 0);
+    lastSuccess.set({ name }, startedAt);
   }
 
   return {

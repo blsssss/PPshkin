@@ -46,7 +46,7 @@ describe('GET /metrics', () => {
 
   it('exposes background job runs recorded into the shared registry', async () => {
     const registry = new Registry();
-    const jobs = createJobMetrics(registry, ['expire_bookings', 'purge_processed_updates']);
+    const jobs = createJobMetrics(registry, ['expire_bookings', 'purge_processed_updates'], 1792317000);
     jobs.record({
       job: 'expire_bookings',
       result: 'failed',
@@ -92,8 +92,8 @@ describe('GET /metrics', () => {
     expect(response.body).toContain(
       'ppshkin_job_last_success_timestamp_seconds{name="expire_bookings"} 1792317720\n',
     );
-    expect(response.body).not.toContain(
-      'ppshkin_job_last_success_timestamp_seconds{name="purge_processed_updates"}',
+    expect(response.body).toContain(
+      'ppshkin_job_last_success_timestamp_seconds{name="purge_processed_updates"} 1792317000\n',
     );
     expect(response.body).toContain('ppshkin_job_consecutive_failures{name="expire_bookings"} 0\n');
     expect(response.body).toContain('ppshkin_job_consecutive_failures{name="purge_processed_updates"} 1\n');
