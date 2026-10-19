@@ -1,6 +1,7 @@
 import type { MenuItem, ParsedMenuItem, Venue } from '../../domain/models.ts';
 import { MENU_CATEGORY_LABELS, VENUE_CATEGORY_LABELS } from '../../domain/vocabulary.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
+import type { ReportData } from '../../domain/reports.ts';
 import { DEFAULT_ANALYTICS_DAYS, type VenueAnalytics } from '../../services/analytics.ts';
 import type { BookingView } from '../../services/bookings.ts';
 import type { DealView } from '../../services/deals.ts';
@@ -77,6 +78,12 @@ export const VENUE_BUTTONS = {
   week: '7 дней',
   switchVenue: 'Сменить заведение',
   team: 'Сотрудники',
+  closeoutNone: 'Не списывали',
+  closeoutOther: 'Другое число',
+  reportDay: 'Итоги дня',
+  reportPdf: 'PDF',
+  reportCsv: 'CSV',
+  openReport: 'Открыть в приложении',
   inviteCashier: 'Пригласить кассира',
   inviteManager: 'Пригласить управляющего',
   accept: 'Принять',
@@ -117,6 +124,9 @@ export const VENUE_ERROR_TEXTS = {
   booking_not_found: 'Бронь с таким кодом не найдена в вашем заведении',
   booking_expired: 'Срок брони истёк. Гость может оформить новую',
   booking_not_active: 'Бронь уже погашена или отменена',
+  deal_not_finished: 'Горящее ещё идёт: списание можно отметить после окончания',
+  closeout_locked: 'Списание можно менять только в течение 48 часов после первой отметки',
+  writeoff_too_large: 'Нельзя списать больше, чем осталось непроданных и незабронированных порций',
 } as const;
 
 export type VenueErrorCode = keyof typeof VENUE_ERROR_TEXTS;
@@ -476,5 +486,45 @@ export function statsText(stats: VenueAnalytics): string {
     `Выручка по погашенным броням: ${rub(stats.revenueRub)}`,
     `Горящее: продано ${stats.surplusUnitsSold} шт. на ${rub(stats.surplusRevenueRub)}`,
     ...(top.length > 0 ? [`Топ: ${top.join(', ')}`] : []),
+  ].join('\n');
+}
+
+export const CLOSEOUT_PROMPT = 'Сколько порций списали? Напишите число, 0 если ничего.';
+export const CLOSEOUT_INVALID = 'Нужно целое число от 0 до 1000, например: 2';
+export const CLOSEOUT_CANCELLED = 'Хорошо, списание не отмечено. Незакрытая позиция останется в отчёте.';
+export const REPORT_FILE_SENT = 'Файл придёт в чат с ботом';
+export const REPORT_UNAVAILABLE = 'Отчёт сейчас недоступен, попробуйте позже';
+export const DAY_REPORT_EMPTY = 'Горящих позиций за этот день не было.';
+
+function reportPercent(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+export function reportRangeLabel(from: string, to: string): string {
+  if (from === to) return localDateLabel(from);
+  return from.slice(0, 7) === to.slice(0, 7)
+    ? `${Number(from.slice(8))}-${localDateLabel(to)}`
+    : `${localDateLabel(from)} - ${localDateLabel(to)}`;
+}
+
+export function dayCloseHeader(venueName: string, report: ReportData): string[] {
+  return [
+    bold(`Итоги дня, ${venueName}, ${localDateLabel(report.from)}`),
+    `Выставлено ${report.listed}, продано по броням ${report.soldViaApp} (${reportPercent(report.soldShare)}), выручка ${rub(report.revenueRub)}`,
+  ];
+}
+
+export function dayClosedText(report: ReportData): string {
+  return `День закрыт: списано ${report.writtenOff} из ${report.listed} (${reportPercent(report.writeOffShare)}). Отчёт за неделю придёт в понедельник.`;
+}
+
+export function weekReportText(venueName: string, report: ReportData): string {
+  return [
+    bold(`Отчёт за неделю ${reportRangeLabel(report.from, report.to)} готов`),
+    escapeMarkdown(venueName),
+    `Выставлено ${report.listed}, продано по броням ${report.soldViaApp} (${reportPercent(report.soldShare)})`,
+    `Списано ${report.writtenOff}, не отмечено позиций ${report.notClosed}`,
+    `Выручка ${rub(report.revenueRub)}, скидка ${rub(report.discountRub)}`,
+    `Новых гостей: ${report.newGuests}`,
   ].join('\n');
 }

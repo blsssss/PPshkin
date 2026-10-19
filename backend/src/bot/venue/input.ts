@@ -1,4 +1,5 @@
 import type { GeoPoint } from '../../domain/models.ts';
+import { CLOSEOUT_MAX } from '../../domain/reports.ts';
 
 export const VENUE_NAME_LIMIT = 120;
 export const VENUE_ADDRESS_LIMIT = 200;
@@ -13,6 +14,7 @@ interface OpeningHours {
 const COORDINATES = /^(-?\d{1,3}(?:\.\d+)?)\s*(?:,\s*|\s+)(-?\d{1,3}(?:\.\d+)?)$/;
 const HOURS = /^(\d{1,2})(?:[:.](\d{2}))?\s*[-\u2013\u2014]\s*(\d{1,2})(?:[:.](\d{2}))?$/;
 const QUANTITY = /^(\d{1,4})\s*(?:шт\.?|порци[йия])?$/i;
+const WRITE_OFF = /^(\d{1,4})\s*(?:шт\.?|порци[йия])?$/i;
 const PRICE = /^(\d{1,6})\s*(?:₽|р\.?|руб\.?|рубл[ьяей]{1,2})?$/i;
 const DIGIT = /\d/;
 const MIDNIGHT = 24;
@@ -53,6 +55,10 @@ function wholeNumber(pattern: RegExp, text: string, min: number, max: number): n
 
 export function parseQuantity(text: string): number | null {
   return wholeNumber(QUANTITY, text, 1, DEAL_QUANTITY_LIMIT);
+}
+
+export function parseWriteOff(text: string): number | null {
+  return wholeNumber(WRITE_OFF, text, 0, CLOSEOUT_MAX);
 }
 
 export function parsePrice(text: string, max: number): number | null {

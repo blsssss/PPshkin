@@ -64,4 +64,5 @@ export const VENUE_FLOWS = [
     messageId: WizardMessageId,
   }),
   z.object({ name: z.literal('redeem_input') }),
+  z.object({ name: z.literal('closeout_input'), dealId: PositiveInt, venueId: PositiveInt }),
 ] as const;

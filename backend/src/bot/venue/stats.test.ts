@@ -6,6 +6,7 @@ const PERIOD_BUTTONS = [
   { type: 'callback', text: 'Сегодня', payload: 'vn:stats:today' },
   { type: 'callback', text: '7 дней', payload: 'vn:stats:week' },
 ];
+const REPORT_BUTTON = { type: 'callback', text: 'Итоги дня', payload: 'vn:rp:day' };
 const HOME = { type: 'callback', text: 'Главное меню', payload: 'vn:home' };
 
 function ownerChat(options: Parameters<typeof venueChat>[0] = {}): VenueChat {
@@ -34,7 +35,7 @@ describe('venue statistics', () => {
         'Топ: Эклер (3), Капучино (2)',
       ].join('\n'),
     );
-    expect(reply?.message?.buttons).toEqual([PERIOD_BUTTONS, [HOME]]);
+    expect(reply?.message?.buttons).toEqual([PERIOD_BUTTONS, [REPORT_BUTTON], [HOME]]);
   });
 
   it('shows the last seven days with the default period', async () => {
@@ -46,6 +47,7 @@ describe('venue statistics', () => {
     expect(reply?.message?.text).toMatch(/^\*\*Статистика за 7 дней, 20-26 сентября\*\*\n/);
     expect(reply?.message?.buttons).toEqual([
       PERIOD_BUTTONS,
+      [REPORT_BUTTON],
       [{ type: 'open_app', text: 'Открыть кабинет' }],
       [HOME],
     ]);

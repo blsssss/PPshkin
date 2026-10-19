@@ -32,6 +32,7 @@ export function createStatsScreens({ services }: BotKit) {
             venueButton(VENUE_BUTTONS.today, 'stats', 'today'),
             venueButton(VENUE_BUTTONS.week, 'stats', 'week'),
           ],
+          [venueButton(VENUE_BUTTONS.reportDay, 'rp', 'day')],
           ...appRow(ctx.miniAppEnabled),
           homeRow(),
         ],
