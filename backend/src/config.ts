@@ -55,6 +55,7 @@ const baseSchema = z.object({
   VENUE_VERIFICATION_REQUIRED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   TRUST_PROXY: z.preprocess(emptyAsUndefined, trustProxySetting.default(false)),
+  PHOTOS_DIR: z.preprocess(emptyAsUndefined, z.string().min(1).default('./data/photos')),
   DATABASE_URL: z.string().min(1),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   MIGRATE_ON_START: z.preprocess(emptyAsUndefined, booleanFlag.default(true)),

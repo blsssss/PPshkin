@@ -47,6 +47,7 @@ describe('POST /api/v1/venue/demo', () => {
       closesAt: '22:00',
       timezone: 'Europe/Moscow',
       isDemo: true,
+      photoUrl: null,
     });
     expect(claimVenue).toHaveBeenCalledWith(REVIEWER_ID, 900001);
   });

@@ -125,6 +125,7 @@ describe('recommendation routes', () => {
             nutritionSource: 'venue',
             tags: ['dessert', 'sweet'],
             isAvailable: true,
+            photoUrl: null,
           },
           venue: {
             id: 7,
@@ -136,6 +137,7 @@ describe('recommendation routes', () => {
             closesAt: '22:00',
             timezone: 'Europe/Moscow',
             isDemo: false,
+            photoUrl: null,
           },
           deal: {
             id: 21,

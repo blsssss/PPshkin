@@ -129,6 +129,7 @@ export const sampleBookingJson = {
     nutritionSource: 'venue',
     tags: ['dessert', 'sweet'],
     isAvailable: true,
+    photoUrl: null,
   },
   venue: {
     id: 7,
@@ -140,6 +141,7 @@ export const sampleBookingJson = {
     closesAt: '22:00',
     timezone: 'Europe/Moscow',
     isDemo: false,
+    photoUrl: null,
   },
   priceRub: 130,
   kcal: 330,

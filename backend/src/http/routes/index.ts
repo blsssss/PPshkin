@@ -11,7 +11,9 @@ import { demoRoutes } from './demo.ts';
 import { diaryRoutes } from './diary.ts';
 import { insightsRoutes } from './insights.ts';
 import { meRoutes } from './me.ts';
+import { photoRoutes } from './photos.ts';
 import { recommendationsRoutes } from './recommendations.ts';
+import { venuePhotoRoutes } from './venue-photos.ts';
 import { venueBookingsRoutes } from './venue-bookings.ts';
 import { venueReportsRoutes } from './venue-reports.ts';
 import { venueRoutes } from './venue.ts';
@@ -38,6 +40,8 @@ export const apiRoutes: FastifyPluginAsyncZod<{ services: Services }> = async (a
     deals: services.deals,
     audit: services.audit,
   });
+  await app.register(venuePhotoRoutes, { photos: services.photos });
+  await app.register(photoRoutes, { photos: services.photos });
   await app.register(companyRoutes, { companies: services.companies });
   await app.register(catalogRoutes, { catalog: services.catalog });
   await app.register(recommendationsRoutes, { recommendations: services.recommendations });

@@ -1,3 +1,4 @@
+import { memoryPhotoStorage } from '../../test/photo-storage.ts';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedBooking, seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
@@ -36,7 +37,7 @@ const HOUR_MS = 3_600_000;
 const recorded = recordingNotifications();
 const consents = createConsentsService({ pool, clock });
 const bookings = createBookingsService({ pool, clock, consents, notifications: recorded.notifications });
-const menu = createMenuService({ pool, clock });
+const menu = createMenuService({ pool, clock, storage: memoryPhotoStorage() });
 const deals = createDealsService({ pool, clock });
 const analytics = createAnalyticsService({ pool, clock, bookings });
 const audit = createAuditService({ pool });

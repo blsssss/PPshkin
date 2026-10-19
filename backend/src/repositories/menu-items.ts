@@ -17,13 +17,14 @@ interface MenuItemRow {
   nutrition_source: NutritionSource;
   tags: string[];
   is_available: boolean;
+  photo_key: string | null;
   archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
 const MENU_ITEM_COLUMNS = `id, venue_id, name, description, category, price_rub, weight_g, kcal, protein_g, fat_g,
-  carbs_g, nutrition_source, tags, is_available, archived_at, created_at, updated_at`;
+  carbs_g, nutrition_source, tags, is_available, photo_key, archived_at, created_at, updated_at`;
 
 function mapMenuItem(row: MenuItemRow): MenuItem {
   return {
@@ -41,6 +42,7 @@ function mapMenuItem(row: MenuItemRow): MenuItem {
     nutritionSource: row.nutrition_source,
     tags: onlyKnownTags(row.tags),
     isAvailable: row.is_available,
+    photoKey: row.photo_key,
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -116,7 +118,24 @@ export async function update(
 }
 
 export async function archive(db: Queryable, id: number, now: Date): Promise<void> {
-  await db.query('update menu_items set archived_at = $2, updated_at = $2 where id = $1', [id, now]);
+  await db.query('update menu_items set archived_at = $2, updated_at = $2, photo_key = null where id = $1', [
+    id,
+    now,
+  ]);
+}
+
+export async function setPhotoKey(
+  db: Queryable,
+  id: number,
+  photoKey: string | null,
+  now: Date,
+): Promise<MenuItem> {
+  const row = await one<MenuItemRow>(
+    db,
+    `update menu_items set photo_key = $2, updated_at = $3 where id = $1 returning ${MENU_ITEM_COLUMNS}`,
+    [id, photoKey, now],
+  );
+  return mapMenuItem(row);
 }
 
 export async function lockOnMenu(db: Queryable, venueId: number, id: number): Promise<MenuItem | null> {
@@ -185,9 +204,9 @@ export async function copyAvailable(
 ): Promise<MenuItem[]> {
   const { rows } = await db.query<MenuItemRow>(
     `insert into menu_items (venue_id, name, description, category, price_rub, weight_g, kcal, protein_g, fat_g,
-                             carbs_g, nutrition_source, tags, is_available, created_at, updated_at)
+                             carbs_g, nutrition_source, tags, is_available, photo_key, created_at, updated_at)
      select $2, name, description, category, price_rub, weight_g, kcal, protein_g, fat_g, carbs_g,
-            nutrition_source, tags, true, $3, $3
+            nutrition_source, tags, true, photo_key, $3, $3
        from menu_items
       where venue_id = $1 and archived_at is null and is_available
       order by id

@@ -41,6 +41,7 @@ describe('menu items repository', () => {
       id: expect.any(Number) as number,
       venueId: venue.id,
       ...fields,
+      photoKey: null,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,

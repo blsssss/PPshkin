@@ -85,7 +85,7 @@ describe('OpenAPI document', () => {
       .filter(({ path }) => path.startsWith('/api/'))
       .filter(({ operation }) => !operation.security?.length)
       .map(({ method, path }) => `${method.toUpperCase()} ${path}`);
-    expect(open).toEqual(['POST /api/v1/csp-reports', 'POST /api/v1/auth/max']);
+    expect(open).toEqual(['POST /api/v1/csp-reports', 'POST /api/v1/auth/max', 'GET /api/v1/photos/{file}']);
   });
 });
 

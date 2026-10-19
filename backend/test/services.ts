@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { loadConfig } from '../src/config.ts';
 import { buildApp } from '../src/http/app.ts';
@@ -88,6 +90,13 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       update: notStubbed('menu.update'),
       archive: notStubbed('menu.archive'),
     },
+    photos: {
+      setVenuePhoto: notStubbed('photos.setVenuePhoto'),
+      removeVenuePhoto: notStubbed('photos.removeVenuePhoto'),
+      setMenuItemPhoto: notStubbed('photos.setMenuItemPhoto'),
+      removeMenuItemPhoto: notStubbed('photos.removeMenuItemPhoto'),
+      read: notStubbed('photos.read'),
+    },
     menuImports: {
       fromPhoto: notStubbed('menuImports.fromPhoto'),
       fromText: notStubbed('menuImports.fromText'),
@@ -175,6 +184,7 @@ export function testConfig(env: Record<string, string> = {}) {
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL: 'postgres://unused',
+    PHOTOS_DIR: join(tmpdir(), 'ppshkin-test-photos'),
     ...env,
   });
 }

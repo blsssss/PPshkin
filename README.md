@@ -259,6 +259,7 @@ VITE_DEV_TOKEN=local-demo-guest-token-not-secret VITE_DEMO_MODE=true npm run dev
 | `LOG_PRETTY` | нет | `false` | читаемый однострочный журнал через `pino-pretty`; только при запуске из исходников, в Docker-образе этого пакета нет |
 | `CORS_ORIGINS` | нет | пусто, CORS выключен | разрешённые origin через запятую; мини-приложение и API работают на одном домене, поэтому обычно не нужно |
 | `RATE_LIMIT_PER_MINUTE` | нет | `300` | общий лимит запросов к API в минуту на пользователя (без входа на IP) |
+| `PHOTOS_DIR` | нет | `./data/photos`; в Docker-образе и обоих compose-файлах `/var/lib/ppshkin/photos` (том `photos`) | каталог с фото заведений и позиций меню: на каждое фото два файла WebP (карточка и полный размер), имя по хэшу содержимого |
 | `TRUST_PROXY` | нет | `false`; в `compose.prod.yaml` `1` | доверие `X-Forwarded-For`: `true`, `false`, число прокси или список IP и CIDR |
 | `DATABASE_URL` | да | задаёт `compose.yaml`: `postgres://ppshkin@db:5432/ppshkin` | строка подключения к PostgreSQL |
 | `DATABASE_POOL_SIZE` | нет | `10` | размер пула соединений, от 1 до 100 |
@@ -713,8 +714,8 @@ curl -s -X POST -H "Authorization: Bearer local-demo-guest-token-not-secret" \
 | Команды | Что происходит | Данные |
 |---|---|---|
 | `docker compose stop`, затем `docker compose start` | контейнеры останавливаются без удаления и запускаются снова | сохраняются |
-| `docker compose down`, затем `docker compose up -d --wait` | удаляются контейнеры и сеть, затем создаются заново | остаются в томе `pgdata`: дневник, брони и заведения на месте |
-| `docker compose down -v`, затем `docker compose up -d --wait` | удаляется и том `pgdata` | удаляются все; схема и демо-данные создаются заново |
+| `docker compose down`, затем `docker compose up -d --wait` | удаляются контейнеры и сеть, затем создаются заново | остаются в томах `pgdata` и `photos`: дневник, брони, заведения и их фото на месте |
+| `docker compose down -v`, затем `docker compose up -d --wait` | удаляются тома `pgdata` и `photos` | удаляются все; схема и демо-данные создаются заново |
 | `docker compose up -d --build --wait` | пересборка образов после изменения кода | сохраняются |
 
 Миграции (`backend/migrations/0001_init.sql`, `0002_offer_feedback.sql`, `0003_demo_copies.sql`, `0004_notifications.sql`, `0005_notification_settings.sql`, `0006_pilot_metrics.sql`, `0007_session_epoch.sql`, `0008_audit_retention.sql`) и демо-данные применяются идемпотентно при каждом старте: уже применённые миграции сверяются по контрольной сумме и не выполняются повторно.

@@ -8,6 +8,8 @@ import { notFound, unprocessable } from '../shared/errors.ts';
 import { resolveVenueAccess, type VenueActor } from './access.ts';
 import { changedFields, type AuditChannel } from '../domain/audit.ts';
 import * as audit from '../repositories/audit.ts';
+import type { PhotoStorage } from '../ports/photo-storage.ts';
+import { removeIfUnused } from './photo-files.ts';
 
 export interface MenuItemInput {
   name: string;
@@ -35,6 +37,7 @@ export interface MenuService {
 interface MenuDependencies {
   pool: Pool;
   clock: Clock;
+  storage: PhotoStorage;
 }
 
 const collator = new Intl.Collator('ru');
@@ -102,7 +105,7 @@ export async function lockMenuItem(db: Queryable, venueId: number, itemId: numbe
   return item;
 }
 
-export function createMenuService({ pool, clock }: MenuDependencies): MenuService {
+export function createMenuService({ pool, clock, storage }: MenuDependencies): MenuService {
   return {
     async list(actor) {
       const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
@@ -170,6 +173,7 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
         await menuItems.archive(client, item.id, now);
+        await removeIfUnused(client, storage, item.photoKey);
         const cancelled = await deals.cancelLiveForItem(client, item.id, now);
         for (const deal of cancelled) {
           await audit.record(

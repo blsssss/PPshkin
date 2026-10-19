@@ -15,6 +15,7 @@ describe('loadConfig', () => {
       CORS_ORIGINS: [],
       RATE_LIMIT_PER_MINUTE: 300,
       TRUST_PROXY: false,
+      PHOTOS_DIR: './data/photos',
       DATABASE_POOL_SIZE: 10,
       MIGRATE_ON_START: true,
       SESSION_TTL_HOURS: 12,

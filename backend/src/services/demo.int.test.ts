@@ -294,6 +294,47 @@ describe('seed', () => {
   });
 });
 
+describe('demo photos', () => {
+  it('gives every demo venue and menu item a stored photo by its category', async () => {
+    await demo.seed();
+    const { rows } = await pool.query<{ photo_key: string | null }>(
+      `select photo_key from venues where is_demo and demo_source_id is null
+       union all select photo_key from menu_items where venue_id between 900001 and 900099`,
+    );
+    expect(rows).toHaveLength(6 + 64);
+    for (const { photo_key: key } of rows) {
+      expect(key).toMatch(/^[0-9a-f]{64}$/);
+      expect(await services.photos.read(key ?? '', 'card')).not.toBeNull();
+      expect(await services.photos.read(key ?? '', 'large')).not.toBeNull();
+    }
+  });
+
+  it('is idempotent and passes the photos on to a claimed copy', async () => {
+    await demo.seed();
+    const before = await pool.query('select id, photo_key from menu_items order by id');
+    await demo.seed();
+    expect((await pool.query('select id, photo_key from menu_items order by id')).rows).toEqual(before.rows);
+    await seedUser(pool, REVIEWER);
+    const copy = await demo.claimVenue(REVIEWER, ZERNO);
+    expect(copy.photoKey).toMatch(/^[0-9a-f]{64}$/);
+    const items = await services.menu.list({ userId: REVIEWER });
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item) => item.photoKey !== null)).toBe(true);
+  });
+
+  it('leaves venues without photos when the photo set is not given', async () => {
+    const bare = createDemoService({
+      pool,
+      clock,
+      consents: services.consents,
+      dataset,
+    });
+    await bare.seed();
+    const { rows } = await pool.query('select count(*)::int as n from venues where photo_key is not null');
+    expect(rows).toEqual([{ n: 0 }]);
+  });
+});
+
 describe('refresh', () => {
   it('creates only windows that have not ended, nothing twice a day and the next day again', async () => {
     clock.set(moscow('2026-09-26T20:00:00'));

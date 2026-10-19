@@ -4,7 +4,8 @@ import { VENUE_CATEGORIES } from '../../domain/vocabulary.ts';
 import type { DealCardView, VenueCardView, VenueDetailsView } from '../../services/catalog.ts';
 import { blankAsMissing, GeoPointSchema, PointQueryFields, pointTogether } from './common.ts';
 import { DealSchema, toDeal } from './deals.ts';
-import { MenuItemSchema, toMenuItem } from './menu.ts';
+import { MenuItemSchema, PhotoUrl, toMenuItem } from './menu.ts';
+import { photoUrl } from './menu.ts';
 
 const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
@@ -37,6 +38,7 @@ export const VenueSchema = z
       ),
     timezone: z.string().describe('Часовой пояс IANA'),
     isDemo: z.boolean().describe('Тестовое заведение: покажите пометку «Заведение и меню тестовые»'),
+    photoUrl: PhotoUrl,
   })
   .meta({ id: 'Venue', description: 'Заведение' });
 
@@ -153,6 +155,7 @@ export function toVenue(venue: Venue): z.infer<typeof VenueSchema> {
     closesAt: venue.closesAt,
     timezone: venue.timezone,
     isDemo: venue.isDemo,
+    photoUrl: photoUrl(venue.photoKey),
   };
 }
 
