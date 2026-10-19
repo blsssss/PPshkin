@@ -4,7 +4,9 @@ import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { seedDeal, seedDemoVenue, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
 import type { MenuItem } from '../domain/models.ts';
 import * as deals from '../repositories/deals.ts';
+import * as venueRepository from '../repositories/venues.ts';
 import * as users from '../repositories/users.ts';
+import { buildVenueReport } from './reports.ts';
 import { buildPilotReport, renderPilotReport, type PilotReport } from './pilot-report.ts';
 
 const pool = testPool();
@@ -141,6 +143,11 @@ async function seed(): Promise<void> {
   await redeemed(bun, G1, 'BBB232', '2026-11-04T10:00:00Z', dB1.id, 60);
   await redeemed(demoItem, G3, 'DDD232', '2026-11-04T10:00:00Z', dD.id, 50);
 
+  await pool.query(
+    `insert into deal_closeouts (deal_id, venue_id, written_off, closed_by, channel, closed_at, updated_at)
+     values ($1, $2, 3, $3, 'bot', '2026-11-03T19:00:00Z', '2026-11-03T19:00:00Z')`,
+    [dA1.id, a.id, OWNER_A],
+  );
   await seedOffer(pool, { userId: G1, item: eclair, createdAt: at('2026-11-03T08:00:00Z') });
   await seedOffer(pool, {
     userId: G1,
@@ -224,6 +231,9 @@ describe('pilot report', () => {
       listed: 14,
       sold: 4,
       soldShare: { numerator: 4, denominator: 14, value: 0.2857 },
+      writtenOff: 3,
+      closedListed: 10,
+      writeOffShare: { numerator: 3, denominator: 10, value: 0.3 },
       offerAcceptance: { numerator: 1, denominator: 3, value: 0.3333 },
       catalogConversion: { numerator: 5, denominator: 10, value: 0.5 },
       newGuests: 1,
@@ -242,6 +252,25 @@ describe('pilot report', () => {
       redeemShare: { numerator: 1, denominator: 1, value: 1 },
       offerAcceptance: { numerator: 0, denominator: 0, value: null },
     });
+  });
+
+  it('matches the venue report of each venue for the same period', async () => {
+    for (const row of report.venues) {
+      const [venue] = await venueRepository.findByIds(pool, [row.venueId]);
+      if (!venue) throw new Error('venue is missing');
+      const own = await buildVenueReport(pool, venue, PERIOD.from, PERIOD.to, NOW);
+      expect({
+        listed: row.listed,
+        sold: row.sold,
+        writtenOff: row.writtenOff,
+        newGuests: row.newGuests,
+      }).toEqual({
+        listed: own.listed,
+        sold: own.soldViaApp,
+        writtenOff: own.writtenOff,
+        newGuests: own.newGuests,
+      });
+    }
   });
 
   it('sums the pilot total from the venue numerators and denominators', () => {
@@ -290,10 +319,10 @@ describe('pilot report', () => {
     expect(csv.split('\n').slice(0, 3)).toEqual([
       'period,2026-11-02,2026-11-08,7',
       '',
-      'venue_id,venue,listed,sold,sold_share,offers_shown,offers_accepted,offer_acceptance,catalog_bookings,deal_impressions,catalog_conversion,new_guests,new_guests_per_week,redeeming_guests,new_guest_share,new_guest_discount_rub,new_guest_list_price_rub,cost_per_guest,bookings_created,bookings_redeemed,redeem_share,bookings_without_guest',
+      'venue_id,venue,listed,sold,sold_share,written_off,closed_listed,written_off_share,offers_shown,offers_accepted,offer_acceptance,catalog_bookings,deal_impressions,catalog_conversion,new_guests,new_guests_per_week,redeeming_guests,new_guest_share,new_guest_discount_rub,new_guest_list_price_rub,cost_per_guest,bookings_created,bookings_redeemed,redeem_share,bookings_without_guest',
     ]);
     expect(csv).toContain(
-      `${String(venueA)},"Зерно, на Баумана",14,4,0.2857,3,1,0.3333,5,10,0.5,1,1,2,0.5,160,400,0.4,6,4,0.6667,1`,
+      `${String(venueA)},"Зерно, на Баумана",14,4,0.2857,3,10,0.3,3,1,0.3333,5,10,0.5,1,1,2,0.5,160,400,0.4,6,4,0.6667,1`,
     );
     expect(csv).toContain(',Итого,19,5,');
     expect(csv).toContain('all,2,3,2,0.6667');

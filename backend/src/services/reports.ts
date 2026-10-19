@@ -136,6 +136,28 @@ async function venuesById(db: Queryable, ids: Iterable<number>): Promise<Map<num
   return new Map((await venues.findByIds(db, [...ids])).map((venue) => [venue.id, venue]));
 }
 
+export async function buildVenueReport(
+  db: Queryable,
+  venue: Venue,
+  from: string,
+  to: string,
+  now: Date,
+): Promise<ReportData> {
+  const start = dayRange(from, venue.timezone).from;
+  const end = dayRange(to, venue.timezone).to;
+  const [rows, newGuests] = await Promise.all([
+    reports.listDealFacts(db, { venueId: venue.id, onlyOpen: false }, start, end),
+    reports.countNewGuests(db, venue.id, start, end),
+  ]);
+  return buildReport({
+    from,
+    to,
+    timezone: venue.timezone,
+    deals: countedFacts(rows, venue, now),
+    newGuests,
+  });
+}
+
 export function createReportsService({
   pool,
   clock,
@@ -144,21 +166,8 @@ export function createReportsService({
   messenger,
   background,
 }: ReportsDependencies): ReportsService {
-  async function build(venue: Venue, from: string, to: string): Promise<ReportData> {
-    const now = clock.now();
-    const start = dayRange(from, venue.timezone).from;
-    const end = dayRange(to, venue.timezone).to;
-    const [rows, newGuests] = await Promise.all([
-      reports.listDealFacts(pool, { venueId: venue.id, onlyOpen: false }, start, end),
-      reports.countNewGuests(pool, venue.id, start, end),
-    ]);
-    return buildReport({
-      from,
-      to,
-      timezone: venue.timezone,
-      deals: countedFacts(rows, venue, now),
-      newGuests,
-    });
+  function build(venue: Venue, from: string, to: string): Promise<ReportData> {
+    return buildVenueReport(pool, venue, from, to, clock.now());
   }
 
   async function authorize(actor: VenueActor, period: AnalyticsPeriod) {

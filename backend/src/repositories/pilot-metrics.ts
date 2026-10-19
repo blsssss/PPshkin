@@ -1,4 +1,5 @@
 import type { Queryable } from '../db/pool.ts';
+import { FIRST_REDEEMS } from './reports.ts';
 
 export interface MetricsPeriod {
   from: string;
@@ -9,11 +10,6 @@ export interface MetricsPeriod {
 export interface PilotVenue {
   id: number;
   name: string;
-}
-
-export interface DealSales {
-  listed: number;
-  sold: number;
 }
 
 export interface OfferAcceptance {
@@ -70,11 +66,6 @@ function localDay(column: string, timeZone: string): string {
 
 const REAL_BOOKING = '(b.user_id is null or b.user_id > 0)';
 
-const FIRST_REDEEMS = `select b.venue_id, b.user_id, min(b.resolved_at) as first_at
-    from bookings b
-   where b.status = 'redeemed' and b.user_id > 0
-   group by b.venue_id, b.user_id`;
-
 const NEW_GUESTS = `select f.venue_id, f.user_id
     from (${FIRST_REDEEMS}) f
     join venues v on v.id = f.venue_id
@@ -96,29 +87,6 @@ export async function pilotVenues(db: Queryable, period: MetricsPeriod): Promise
     params(period),
   );
   return rows;
-}
-
-export async function dealSales(db: Queryable, period: MetricsPeriod): Promise<Map<number, DealSales>> {
-  const { rows } = await db.query<{ venue_id: number } & DealSales>(
-    `with listed as (
-       select d.id, d.venue_id, d.quantity_total
-         from deals d
-         join venues v on v.id = d.venue_id
-        where ${PILOT_VENUE} and ${localDay('d.starts_at', 'v.timezone')}
-          and not (d.cancelled_at is not null and not exists (
-            select 1 from bookings b where b.deal_id = d.id and b.created_at < d.cancelled_at))
-     )
-     select l.venue_id, sum(l.quantity_total)::int as listed,
-            coalesce(sum(redeemed.units), 0)::int as sold
-       from listed l
-       left join lateral (
-         select count(*)::int as units from bookings b
-          where b.deal_id = l.id and b.status = 'redeemed' and ${REAL_BOOKING}
-       ) redeemed on true
-      group by l.venue_id`,
-    params(period),
-  );
-  return byVenue(rows);
 }
 
 export async function offerAcceptance(

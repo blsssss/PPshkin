@@ -1,7 +1,10 @@
 import type { Queryable } from '../db/pool.ts';
+import type { ReportData } from '../domain/reports.ts';
 import { csvLine, perWeek, periodDays, ratio, type Ratio } from '../domain/pilot-metrics.ts';
 import * as metrics from '../repositories/pilot-metrics.ts';
+import * as venueRepository from '../repositories/venues.ts';
 import { isLocalDate } from '../shared/time.ts';
+import { buildVenueReport } from './reports.ts';
 
 export interface PilotReportQuery {
   from: string;
@@ -12,6 +15,8 @@ export interface PilotReportQuery {
 export interface VenueCounts {
   listed: number;
   sold: number;
+  writtenOff: number;
+  closedListed: number;
   offersShown: number;
   offersAccepted: number;
   catalogBookings: number;
@@ -27,6 +32,7 @@ export interface VenueCounts {
 
 export interface VenueMetrics extends VenueCounts {
   soldShare: Ratio;
+  writeOffShare: Ratio;
   offerAcceptance: Ratio;
   catalogConversion: Ratio;
   newGuestsPerWeek: number;
@@ -56,6 +62,8 @@ export type ReportFormat = (typeof REPORT_FORMATS)[number];
 const EMPTY_COUNTS: VenueCounts = {
   listed: 0,
   sold: 0,
+  writtenOff: 0,
+  closedListed: 0,
   offersShown: 0,
   offersAccepted: 0,
   catalogBookings: 0,
@@ -73,6 +81,7 @@ function withRatios(counts: VenueCounts, days: number): VenueMetrics {
   return {
     ...counts,
     soldShare: ratio(counts.sold, counts.listed),
+    writeOffShare: ratio(counts.writtenOff, counts.closedListed),
     offerAcceptance: ratio(counts.offersAccepted, counts.offersShown),
     catalogConversion: ratio(counts.catalogBookings, counts.dealImpressions),
     newGuestsPerWeek: perWeek(counts.newGuests, days),
@@ -117,6 +126,10 @@ export function parseReportArgs(argv: readonly string[]): PilotReportQuery & { f
   return { from, to, venueId, format: format as ReportFormat };
 }
 
+function closedListed(report: ReportData | undefined): number {
+  return (report?.rows ?? []).reduce((total, row) => total + (row.writtenOff === null ? 0 : row.listed), 0);
+}
+
 export async function buildPilotReport(
   db: Queryable,
   query: PilotReportQuery,
@@ -124,29 +137,41 @@ export async function buildPilotReport(
 ): Promise<PilotReport> {
   const period = { from: query.from, to: query.to, venueId: query.venueId };
   const days = periodDays(query.from, query.to);
-  const [venues, sales, offers, catalog, guests, cost, outcomes, cohorts, acquisitions, entry] =
-    await Promise.all([
-      metrics.pilotVenues(db, period),
-      metrics.dealSales(db, period),
-      metrics.offerAcceptance(db, period),
-      metrics.catalogConversion(db, period),
-      metrics.guestCounts(db, period),
-      metrics.newGuestCost(db, period),
-      metrics.bookingOutcomes(db, period),
-      metrics.retentionD7(db, period, now),
-      metrics.newGuestsByAcquisition(db, period),
-      metrics.funnel(db, period),
-    ]);
+  const [venues, offers, catalog, guests, cost, outcomes, cohorts, acquisitions, entry] = await Promise.all([
+    metrics.pilotVenues(db, period),
+    metrics.offerAcceptance(db, period),
+    metrics.catalogConversion(db, period),
+    metrics.guestCounts(db, period),
+    metrics.newGuestCost(db, period),
+    metrics.bookingOutcomes(db, period),
+    metrics.retentionD7(db, period, now),
+    metrics.newGuestsByAcquisition(db, period),
+    metrics.funnel(db, period),
+  ]);
+  const reports = new Map(
+    await Promise.all(
+      (
+        await venueRepository.findByIds(
+          db,
+          venues.map((venue) => venue.id),
+        )
+      ).map(
+        async (venue) => [venue.id, await buildVenueReport(db, venue, query.from, query.to, now)] as const,
+      ),
+    ),
+  );
   const counted = venues.map((venue): { venueId: number; name: string } & VenueCounts => ({
     venueId: venue.id,
     name: venue.name,
-    listed: sales.get(venue.id)?.listed ?? 0,
-    sold: sales.get(venue.id)?.sold ?? 0,
+    listed: reports.get(venue.id)?.listed ?? 0,
+    sold: reports.get(venue.id)?.soldViaApp ?? 0,
+    writtenOff: reports.get(venue.id)?.writtenOff ?? 0,
+    closedListed: closedListed(reports.get(venue.id)),
     offersShown: offers.get(venue.id)?.shown ?? 0,
     offersAccepted: offers.get(venue.id)?.accepted ?? 0,
     catalogBookings: catalog.get(venue.id)?.bookings ?? 0,
     dealImpressions: catalog.get(venue.id)?.impressions ?? 0,
-    newGuests: guests.get(venue.id)?.newGuests ?? 0,
+    newGuests: reports.get(venue.id)?.newGuests ?? 0,
     redeemingGuests: guests.get(venue.id)?.redeemingGuests ?? 0,
     newGuestDiscountRub: cost.get(venue.id)?.discountRub ?? 0,
     newGuestListPriceRub: cost.get(venue.id)?.listPriceRub ?? 0,
@@ -183,6 +208,9 @@ const VENUE_COLUMNS = [
   'listed',
   'sold',
   'sold_share',
+  'written_off',
+  'closed_listed',
+  'written_off_share',
   'offers_shown',
   'offers_accepted',
   'offer_acceptance',
@@ -209,6 +237,9 @@ function venueCells(id: number | null, name: string, row: VenueMetrics): (string
     row.listed,
     row.sold,
     row.soldShare.value,
+    row.writtenOff,
+    row.closedListed,
+    row.writeOffShare.value,
     row.offersShown,
     row.offersAccepted,
     row.offerAcceptance.value,

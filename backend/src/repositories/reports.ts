@@ -99,6 +99,7 @@ export async function listDealFacts(
        join venues v on v.id = d.venue_id
        join menu_items m on m.venue_id = d.venue_id and m.id = d.menu_item_id
        left join bookings b on b.venue_id = d.venue_id and b.deal_id = d.id
+                            and (b.user_id is null or b.user_id > 0 or v.is_demo)
        left join deal_closeouts c on c.deal_id = d.id
       where ($1::bigint is null and v.blocked_at is null and not v.is_demo or d.venue_id = $1)
         and d.starts_at >= $2 and d.starts_at < $3
@@ -132,15 +133,17 @@ export async function listDealFacts(
   }));
 }
 
+export const FIRST_REDEEMS = `select b.venue_id, b.user_id, min(b.resolved_at) as first_at
+    from bookings b
+   where b.status = 'redeemed' and b.user_id > 0
+   group by b.venue_id, b.user_id`;
+
 export async function countNewGuests(db: Queryable, venueId: number, from: Date, to: Date): Promise<number> {
   const found = await one<{ guests: number }>(
     db,
     `select count(*)::int as guests
-       from (select b.user_id, min(b.resolved_at) as first_at
-               from bookings b
-              where b.venue_id = $1 and b.status = 'redeemed' and b.user_id > 0
-              group by b.user_id) first_visits
-      where first_visits.first_at >= $2 and first_visits.first_at < $3`,
+       from (${FIRST_REDEEMS}) first_visits
+      where first_visits.venue_id = $1 and first_visits.first_at >= $2 and first_visits.first_at < $3`,
     [venueId, from, to],
   );
   return found.guests;
