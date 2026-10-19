@@ -13,6 +13,7 @@ import type {
   Tag,
   VenueCategory,
 } from './vocabulary.ts';
+import type { Role } from './roles.ts';
 
 export interface GeoPoint {
   lat: number;
@@ -65,6 +66,7 @@ export interface Meal extends Macros {
 export interface Venue {
   id: number;
   ownerId: number | null;
+  companyId: number | null;
   name: string;
   address: string;
   category: VenueCategory;
@@ -179,4 +181,52 @@ export interface Booking {
   expiresAt: Date;
   createdAt: Date;
   resolvedAt: Date | null;
+}
+
+export type CompanyKind = 'legal' | 'individual';
+export type CompanyVerification = 'unverified' | 'pending' | 'verified' | 'rejected';
+export type RegistryStatus = 'ACTIVE' | 'LIQUIDATING' | 'LIQUIDATED' | 'BANKRUPT' | 'REORGANIZING';
+
+export interface Company {
+  id: number;
+  kind: CompanyKind | null;
+  inn: string | null;
+  ogrn: string | null;
+  kpp: string | null;
+  name: string;
+  address: string | null;
+  okved: string | null;
+  registryStatus: RegistryStatus | null;
+  registryCheckedAt: Date | null;
+  verification: CompanyVerification;
+  verificationNote: string | null;
+  verifiedAt: Date | null;
+  createdBy: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Membership {
+  id: number;
+  companyId: number;
+  userId: number;
+  role: Role;
+  venueId: number | null;
+  invitedBy: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CompanyInvite {
+  id: number;
+  companyId: number;
+  venueId: number | null;
+  role: Role;
+  createdBy: number | null;
+  createdByName: string | null;
+  expiresAt: Date;
+  acceptedBy: number | null;
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
 }

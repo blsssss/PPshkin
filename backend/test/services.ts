@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { loadConfig } from '../src/config.ts';
 import { buildApp } from '../src/http/app.ts';
 import type { AuthContext } from '../src/services/auth.ts';
+import type { NotificationStats } from '../src/notifications/stats.ts';
 import type { Services } from '../src/services/index.ts';
 import { notFound } from '../src/shared/errors.ts';
 
@@ -24,6 +25,8 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
           activeDeals: 2,
           bookings: { redeemed: 4 },
           offers: { shown: 7 },
+          notifications: { pending: 4, oldestDueSeconds: 12.5 },
+          pilot: { newGuests7d: 6, redeemRate7d: 0.75, retentionD7LastCohort: 0.3 },
         }),
     },
     auth: {
@@ -52,7 +55,28 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       update: notStubbed('diary.update'),
       remove: notStubbed('diary.remove'),
     },
-    account: { deleteAccount: notStubbed('account.deleteAccount') },
+    account: {
+      deleteAccount: notStubbed('account.deleteAccount'),
+      soleOwnerships: notStubbed('account.soleOwnerships'),
+    },
+    companies: {
+      workplaces: () => Promise.resolve([]),
+      lookup: notStubbed('companies.lookup'),
+      create: notStubbed('companies.create'),
+      get: notStubbed('companies.get'),
+      updateRequisites: notStubbed('companies.updateRequisites'),
+      listMembers: notStubbed('companies.listMembers'),
+      updateMember: notStubbed('companies.updateMember'),
+      removeMember: notStubbed('companies.removeMember'),
+      createInvite: notStubbed('companies.createInvite'),
+      listInvites: notStubbed('companies.listInvites'),
+      revokeInvite: notStubbed('companies.revokeInvite'),
+      previewInvite: notStubbed('companies.previewInvite'),
+      createOwnerInviteAsAdmin: notStubbed('companies.createOwnerInviteAsAdmin'),
+      listForVerification: notStubbed('companies.listForVerification'),
+      findView: notStubbed('companies.findView'),
+      acceptInvite: notStubbed('companies.acceptInvite'),
+    },
     venues: {
       get: notStubbed('venues.get'),
       create: notStubbed('venues.create'),
@@ -69,6 +93,7 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       fromText: notStubbed('menuImports.fromText'),
       get: notStubbed('menuImports.get'),
       apply: notStubbed('menuImports.apply'),
+      failStale: notStubbed('menuImports.failStale'),
     },
     deals: {
       list: notStubbed('deals.list'),
@@ -103,12 +128,43 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       expireDue: notStubbed('bookings.expireDue'),
     },
     analytics: { get: notStubbed('analytics.get') },
+    reports: {
+      day: notStubbed('reports.day'),
+      period: notStubbed('reports.period'),
+      closeOut: notStubbed('reports.closeOut'),
+      exportToChat: notStubbed('reports.exportToChat'),
+      build: notStubbed('reports.build'),
+      file: notStubbed('reports.file'),
+      queueDayClose: notStubbed('reports.queueDayClose'),
+      queueWeekly: notStubbed('reports.queueWeekly'),
+      venuesWithNotClosedStreak: notStubbed('reports.venuesWithNotClosedStreak'),
+    },
     demo: {
       enabled: false,
       seed: notStubbed('demo.seed'),
       refresh: notStubbed('demo.refresh'),
       claimVenue: notStubbed('demo.claimVenue'),
       fillDiary: notStubbed('demo.fillDiary'),
+    },
+    notificationSettings: {
+      get: notStubbed('notificationSettings.get'),
+      update: notStubbed('notificationSettings.update'),
+    },
+    audit: { list: notStubbed('audit.list') },
+    moderation: {
+      isAdmin: () => false,
+      listCompaniesForReview: notStubbed('moderation.listCompaniesForReview'),
+      decideCompanyVerification: notStubbed('moderation.decideCompanyVerification'),
+      createOwnerInviteAsAdmin: notStubbed('moderation.createOwnerInviteAsAdmin'),
+      createComplaint: notStubbed('moderation.createComplaint'),
+      listComplaints: notStubbed('moderation.listComplaints'),
+      listForReview: notStubbed('moderation.listForReview'),
+      resolveComplaint: notStubbed('moderation.resolveComplaint'),
+      blockVenue: notStubbed('moderation.blockVenue'),
+      unblockVenue: notStubbed('moderation.unblockVenue'),
+      blockUser: notStubbed('moderation.blockUser'),
+      unblockUser: notStubbed('moderation.unblockUser'),
+      signals: notStubbed('moderation.signals'),
     },
     ...overrides,
   };
@@ -127,10 +183,15 @@ export async function buildTestApp(
   options: {
     env?: Record<string, string>;
     services?: Partial<Services>;
+    notificationStats?: NotificationStats;
     extend?: (app: FastifyInstance) => void;
   } = {},
 ): Promise<FastifyInstance> {
-  const app = await buildApp({ config: testConfig(options.env), services: fakeServices(options.services) });
+  const app = await buildApp({
+    config: testConfig(options.env),
+    services: fakeServices(options.services),
+    notificationStats: options.notificationStats,
+  });
   options.extend?.(app);
   await app.ready();
   return app;

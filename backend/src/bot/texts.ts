@@ -55,10 +55,14 @@ export const BUTTONS = {
   offersOff: 'Предложения: выключить',
   resetDisliked: 'Сбросить список «Не предлагать»',
   deleteAccount: 'Удалить аккаунт',
+  notifications: 'Уведомления',
+  configure: 'Настроить',
+  back: 'Назад',
   confirmDelete: 'Да, удалить',
   route: 'Маршрут',
   venueInApp: 'Меню и все предложения',
   openInApp: 'Открыть в мини-приложении',
+  problem: 'Проблема с бронью',
 } as const;
 
 export const NOTICES = {
@@ -97,6 +101,18 @@ const ERROR_TEXTS: Readonly<Record<string, string>> = {
   demo_account_protected: 'Демо-аккаунт удалить нельзя.',
   demo_diary_exists: 'Пример уже добавлен',
   demo_mode_disabled: 'Демо-режим на сервере выключен.',
+  user_blocked:
+    'Бронирование недоступно: аккаунт заблокирован. Напишите команде проекта, если считаете это ошибкой.',
+  complaint_exists: 'Жалоба на эту бронь уже отправлена.',
+  complaint_limit: 'Сегодня отправлено максимум жалоб, повторите завтра.',
+  already_resolved: 'Решение по жалобе уже принято.',
+  not_pending: 'Решение по компании уже принято.',
+  company_not_found: RECORD_GONE,
+  invite_limit: 'У компании уже 20 действующих приглашений, отзовите лишние.',
+  bot_unavailable: 'Бот не запущен, ссылку собрать нельзя.',
+  already_blocked: 'Уже заблокировано.',
+  not_blocked: 'Блокировка уже снята.',
+  complaint_not_found: RECORD_GONE,
   validation_failed: 'Проверьте ввод и попробуйте ещё раз.',
   eaten_at_out_of_range: 'Проверьте ввод и попробуйте ещё раз.',
 };
@@ -366,8 +382,29 @@ export function profileText(facts: ProfileFacts): string {
   ].join('\n');
 }
 
+export const NOTIFICATION_TURNED_OFF =
+  'Больше не пришлю такие сообщения. Включить снова: /profile, «Уведомления».';
+
+export function notificationsText(quietHours: { from: string; until: string } | null): string {
+  return [
+    bold('Уведомления'),
+    `Тихие часы: ${quietHours ? `${quietHours.from}-${quietHours.until}` : 'выключены'}`,
+    ...(quietHours
+      ? ['В тихие часы сообщения о бронях приходят без звука, итоги дня после их окончания.']
+      : []),
+    'Нажмите на тип, чтобы включить или выключить его.',
+  ].join('\n');
+}
+
+export function notificationToggle(label: string, enabled: boolean): string {
+  return `${label}: ${enabled ? 'вкл' : 'выкл'}`;
+}
+
 export const DELETE_QUESTION =
   'Удалить аккаунт и все данные: дневник, настройки, согласия? Активные брони отменятся. Это необратимо.';
+export function soleOwnerWarning(companyName: string): string {
+  return `Вы единственный владелец «${companyName}». Передайте права другому сотруднику, иначе заведение останется без владельца.`;
+}
 export const ACCOUNT_DELETED = 'Данные удалены. Чтобы начать заново, отправьте /start.';
 export const ACCOUNT_KEPT = 'Хорошо, ничего не удаляю.';
 

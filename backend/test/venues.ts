@@ -1,5 +1,8 @@
 import type { Queryable } from '../src/db/pool.ts';
-import type { Deal, GeoPoint, MenuItem, Venue } from '../src/domain/models.ts';
+import type { Company, Deal, GeoPoint, MenuItem, Venue } from '../src/domain/models.ts';
+import type { Role } from '../src/domain/roles.ts';
+import * as companies from '../src/repositories/companies.ts';
+import * as memberships from '../src/repositories/memberships.ts';
 import * as deals from '../src/repositories/deals.ts';
 import * as menuItems from '../src/repositories/menu-items.ts';
 import * as users from '../src/repositories/users.ts';
@@ -14,6 +17,7 @@ const SEEDED_AT = new Date('2026-09-20T09:00:00Z');
 export const sampleVenue: Venue = {
   id: 7,
   ownerId: 202,
+  companyId: null,
   name: 'Кофейня «Зерно»',
   address: 'ул. Баумана, 36',
   category: 'coffee',
@@ -86,9 +90,58 @@ export async function seedVenue(
   fields: Partial<venues.VenueFields> = {},
 ): Promise<Venue> {
   await seedUser(db, ownerId);
-  const venue = await venues.insert(db, ownerId, { ...DEFAULT_VENUE, ...fields }, SEEDED_AT);
-  if (!venue) throw new Error(`User ${ownerId} already owns a venue`);
-  return venue;
+  const venue = { ...DEFAULT_VENUE, ...fields };
+  const { rows } = await db.query<{ id: number }>(
+    `insert into venues (owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone,
+                         created_at, updated_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+     returning id`,
+    [
+      ownerId,
+      venue.name,
+      venue.address,
+      venue.category,
+      venue.location.lat,
+      venue.location.lon,
+      venue.opensAt,
+      venue.closesAt,
+      venue.timezone,
+      SEEDED_AT,
+    ],
+  );
+  const [seeded] = await venues.findByIds(db, [rows[0]?.id ?? 0]);
+  if (!seeded) throw new Error(`Venue of ${ownerId} was not stored`);
+  return seeded;
+}
+
+export async function seedCompany(db: Queryable, ownerId: number, name = 'Компания'): Promise<Company> {
+  await seedUser(db, ownerId);
+  const company = await companies.insert(db, name, ownerId, null, SEEDED_AT);
+  await memberships.insert(
+    db,
+    { companyId: company.id, userId: ownerId, role: 'owner', venueId: null, invitedBy: null },
+    SEEDED_AT,
+  );
+  return company;
+}
+
+export async function seedCompanyVenue(
+  db: Queryable,
+  companyId: number,
+  fields: Partial<venues.VenueFields> = {},
+): Promise<Venue> {
+  return venues.insert(db, companyId, { ...DEFAULT_VENUE, ...fields }, SEEDED_AT);
+}
+
+export async function seedMember(
+  db: Queryable,
+  companyId: number,
+  userId: number,
+  role: Role,
+  venueId: number | null = null,
+): Promise<void> {
+  await seedUser(db, userId);
+  await memberships.insert(db, { companyId, userId, role, venueId, invitedBy: null }, SEEDED_AT);
 }
 
 export async function seedDemoVenue(
@@ -170,6 +223,7 @@ export async function seedDeal(db: Queryable, item: MenuItem, seed: DealSeed): P
       venueId: item.venueId,
       menuItemId: item.id,
       priceRub: seed.priceRub ?? Math.floor(item.priceRub / 2),
+      listPriceRub: item.priceRub,
       quantity: seed.quantity ?? 5,
       endsAt: seed.endsAt,
     },

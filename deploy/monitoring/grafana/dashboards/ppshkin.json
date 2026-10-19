@@ -162,13 +162,51 @@
       "fieldConfig": { "defaults": { "unit": "reqps" } }
     },
     {
+      "type": "timeseries", "title": "Уведомления",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+      "targets": [{ "refId": "A", "expr": "sum by (result) (increase(ppshkin_notifications_total{job=\"backend\"}[15m]))", "legendFormat": "{{result}}" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries", "title": "Очередь уведомлений",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+      "targets": [
+        { "refId": "A", "expr": "max(ppshkin_notifications_oldest_pending_seconds{job=\"backend\"})", "legendFormat": "самая старая готовая строка" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(ppshkin_notification_delay_seconds_bucket{job=\"backend\"}[15m])))", "legendFormat": "p95 задержки доставки" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "stat", "title": "Новые гости за 7 дней",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 42 },
+      "targets": [{ "refId": "A", "expr": "max(ppshkin_new_guests_7d{job=\"backend\"})" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "stat", "title": "Погашено броней за 7 дней",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 42 },
+      "targets": [{ "refId": "A", "expr": "max(ppshkin_redeem_rate_7d{job=\"backend\"})" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "type": "stat", "title": "Удержание на 7-й день, последняя когорта",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 42 },
+      "targets": [{ "refId": "A", "expr": "max(ppshkin_retention_d7_last_cohort{job=\"backend\"})" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
       "type": "row", "title": "SLO", "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 }
     },
     {
       "type": "stat", "title": "Доступность за 28 дней, цель 99,5%",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 35 },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 47 },
       "targets": [{ "refId": "A", "expr": "avg(avg_over_time(probe_success{job=\"blackbox\"}[28d]))" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2,
         "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.995 }] }
@@ -178,7 +216,7 @@
     {
       "type": "stat", "title": "Остаток бюджета доступности",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 35 },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 47 },
       "targets": [{ "refId": "A", "expr": "1 - (1 - avg(avg_over_time(probe_success{job=\"blackbox\"}[28d]))) / 0.005" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 0,
         "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.25 }, { "color": "green", "value": 0.5 }] }
@@ -188,7 +226,7 @@
     {
       "type": "stat", "title": "Брони и погашения без 5xx, цель 99,9%",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 35 },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 47 },
       "targets": [{ "refId": "A", "expr": "1 - (sum(increase(http_request_duration_seconds_count{job=\"backend\",method=\"POST\",route=~\"/api/v1/bookings|/api/v1/venue/bookings/redeem\",status_code=~\"5..\"}[28d])) or vector(0)) / sum(increase(http_request_duration_seconds_count{job=\"backend\",method=\"POST\",route=~\"/api/v1/bookings|/api/v1/venue/bookings/redeem\"}[28d]))" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2,
         "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.999 }] }
@@ -198,7 +236,7 @@
     {
       "type": "stat", "title": "API быстрее 800 мс, цель 99%",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 35 },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 47 },
       "targets": [{ "refId": "A", "expr": "sum(increase(http_request_duration_seconds_bucket{job=\"backend\",le=\"0.8\",route!~\"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*\"}[28d])) / sum(increase(http_request_duration_seconds_count{job=\"backend\",route!~\"/max/webhook|/api/v1/diary/meals/(photo|text)|/api/v1/venue/menu/imports.*\"}[28d]))" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2,
         "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.99 }] }
@@ -208,7 +246,7 @@
     {
       "type": "timeseries", "title": "Скорость сгорания бюджета",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 39 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 51 },
       "targets": [
         { "refId": "A", "expr": "slo:availability_errors:ratio_rate1h / 0.005", "legendFormat": "доступность, 1 ч" },
         { "refId": "B", "expr": "slo:availability_errors:ratio_rate6h / 0.005", "legendFormat": "доступность, 6 ч" },
@@ -223,7 +261,7 @@
     {
       "type": "timeseries", "title": "Доля ответов API медленнее 800 мс",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 51 },
       "targets": [
         { "refId": "A", "expr": "slo:api_slow:ratio_rate5m", "legendFormat": "5 мин" },
         { "refId": "B", "expr": "slo:api_slow:ratio_rate1h", "legendFormat": "1 ч" },
@@ -233,57 +271,57 @@
     },
     {
       "type": "row", "title": "Фоновые задачи", "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 }
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 59 }
     },
     {
       "type": "timeseries", "title": "Запуски задач за 15 минут",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 48 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 60 },
       "targets": [{ "refId": "A", "expr": "sum by (name, result) (increase(ppshkin_job_runs_total[15m]))", "legendFormat": "{{name}} {{result}}" }]
     },
     {
       "type": "timeseries", "title": "С последнего успешного запуска",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 48 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 60 },
       "targets": [{ "refId": "A", "expr": "time() - max by (name) (ppshkin_job_last_success_timestamp_seconds)", "legendFormat": "{{name}}" }],
       "fieldConfig": { "defaults": { "unit": "s", "min": 0 } }
     },
     {
       "type": "timeseries", "title": "Длительность задач, p95",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 48 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 60 },
       "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, name) (rate(ppshkin_job_duration_seconds_bucket[1h])))", "legendFormat": "{{name}}" }],
       "fieldConfig": { "defaults": { "unit": "s" } }
     },
     {
       "type": "row", "title": "Сервер", "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 }
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 }
     },
     {
       "type": "timeseries", "title": "CPU",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 57 },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 69 },
       "targets": [{ "refId": "A", "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Память",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 57 },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 69 },
       "targets": [{ "refId": "A", "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Диск /",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 57 },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 69 },
       "targets": [{ "refId": "A", "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}", "legendFormat": "занято" }],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
     },
     {
       "type": "timeseries", "title": "Память backend",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 57 },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 69 },
       "targets": [
         { "refId": "A", "expr": "process_resident_memory_bytes{job=\"backend\"}", "legendFormat": "RSS" },
         { "refId": "B", "expr": "nodejs_heap_size_used_bytes{job=\"backend\"}", "legendFormat": "heap" }
@@ -293,7 +331,7 @@
     {
       "type": "table", "title": "Сработавшие алерты",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 64 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 76 },
       "targets": [{ "refId": "A", "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "format": "table" }],
       "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true } } }]
     }

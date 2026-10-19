@@ -36,7 +36,22 @@ flowchart LR
 - Ansible берёт `compose.prod.yaml`, `deploy/Caddyfile` и роли из того же коммита, что и образы, поэтому код и конфигурация на сервере всегда из одной версии.
 - Плейбук идемпотентный: каждый выкат заново применяет всё состояние, включая файл `.env`, и перезаписывает ручные изменения на сервере.
 - Перед выкатом делается копия базы, после `up --wait` Docker ждёт, пока все сервисы станут здоровыми. Если новая версия не поднялась, Ansible возвращает предыдущий тег и завершает job ошибкой.
-- Job `deploy` в [ci.yml](../.github/workflows/ci.yml) на каждом pull request выполняет тот же плейбук на раннере CI: выкатывает рабочую версию, проверяет HTTPS, демо-данные, права на `.env` и копию базы, затем выкатывает версию с падающим backend и проверяет, что вернулась рабочая.
+- Job `deploy` в [ci.yml](../.github/workflows/ci.yml) на каждом pull request выполняет тот же плейбук на раннере CI: выкатывает рабочую версию, проверяет HTTPS, заголовки Content Security Policy у `/`, `/index.html`, API и `/docs`, приём отчётов `POST /api/v1/csp-reports`, демо-данные, права на `.env` и копию базы, затем выкатывает версию с падающим backend и проверяет, что вернулась рабочая.
+- Jobs `backend` и `frontend` запускают `npm audit --omit=dev --audit-level=high`: pull request с зависимостью, у которой есть известная уязвимость уровня high или critical, не проходит. Job `security` и job `docker` сканируют Trivy файлы репозитория и собранные образы на уязвимости и секреты и падают на HIGH и CRITICAL, для которых есть исправление. Action Trivy закреплён по SHA коммита.
+
+Исключение из проверки Trivy допускается, только когда исправления ещё нет или уязвимый код не используется. Оно добавляется в [.trivyignore.yaml](../.trivyignore.yaml) с причиной в поле `statement` и датой пересмотра в поле `expired_at`, после которой проверка снова падает:
+
+```yaml
+vulnerabilities:
+  - id: CVE-2026-00000
+    paths:
+      - backend/package-lock.json
+    statement: уязвимая функция не вызывается, исправленной версии пока нет
+    expired_at: 2026-12-01
+secrets: []
+```
+
+Сейчас исключений нет. Уязвимость в `npm audit` исключением не закрывается: зависимость обновляется до исправленной версии, при необходимости через `overrides` в `package.json`.
 
 Роли Ansible:
 
@@ -112,6 +127,7 @@ rm deploy_key known_hosts
 | `ACME_EMAIL` | почта для уведомлений Let's Encrypt, секрет, чтобы не попасть в публичные журналы Actions |
 | `POSTGRES_PASSWORD` | `openssl rand -hex 24` |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
+| `SESSION_SECRET_PREVIOUS` | прежний `SESSION_SECRET`, только на время ротации, см. ниже |
 | `MAX_WEBHOOK_SECRET` | `openssl rand -hex 32` (подходит под `^[A-Za-z0-9_-]{5,256}$`) |
 | `GRAFANA_ADMIN_PASSWORD` | `openssl rand -hex 16`, пароль пользователя `admin` в Grafana |
 
@@ -121,6 +137,7 @@ rm deploy_key known_hosts
 |---|---|
 | `MAX_BOT_TOKEN` | токен бота от организаторов |
 | `CHADGPT_API_KEY` | ключ ChadGPT |
+| `DADATA_API_KEY` | ключ DaData для проверки компании по ИНН, необязательный |
 | `DEMO_GUEST_TOKEN`, `DEMO_VENUE_TOKEN` | `openssl rand -hex 24`, на период проверки хакатона |
 | `ALERT_BOT_TOKEN`, `ALERT_CHAT_ID` | токен Telegram-бота для алертов и id чата команды, раздел 11 |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | ключ доступа к бакету копий во внешнем хранилище, раздел 10 |
@@ -134,6 +151,8 @@ rm deploy_key known_hosts
 | `PUBLIC_BASE_URL` | `https://<домен>` | живые проверки |
 | `MINI_APP_ENABLED` | `true` после регистрации мини-приложения (раздел 7) | кнопки открытия мини-приложения в сообщениях бота |
 | `PROACTIVE_OFFERS`, `LOG_LEVEL` | необязательные | значения по умолчанию backend: `false` и `info` |
+| `VENUE_VERIFICATION_REQUIRED` | необязательная | `true`: гостям видны только заведения проверенных компаний, по умолчанию `false`; значение берётся из переменной репозитория `VENUE_VERIFICATION_REQUIRED` |
+| `ADMIN_USER_IDS` | необязательная | id администраторов модерации в MAX через запятую, только положительные целые; пусто: модерация выключена |
 | `BACKUP_AGE_RECIPIENT` | открытый ключ `age` команды, `age1...` | шифрование копий перед выгрузкой, раздел 10 |
 | `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET` | адрес S3-хранилища в России, регион и бакет | выгрузка копий, раздел 10 |
 
@@ -152,9 +171,47 @@ openssl rand -hex 24 | gh secret set DEMO_VENUE_TOKEN
 
 Правила:
 
-- `SESSION_SECRET` и `POSTGRES_PASSWORD` после первого выката не меняйте: смена `SESSION_SECRET` разлогинит всех пользователей, а пароль базы записан в её томе при создании.
+- `SESSION_SECRET` и `POSTGRES_PASSWORD` меняйте только по порядку из раздела «Ротация секретов» ниже: простая замена `SESSION_SECRET` разлогинит всех пользователей, а пароль базы записан в её томе при создании и сам не меняется.
 - Без `ACME_EMAIL`, `POSTGRES_PASSWORD`, `SESSION_SECRET`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_BOT_TOKEN` или `ALERT_CHAT_ID` плейбук останавливается до обращения к серверу и называет недостающую переменную. Без `MAX_BOT_TOKEN` и `MAX_WEBHOOK_SECRET` backend в режиме `webhook` не запускается, выкат откатывается, имя переменной видно в логе контейнера. Демо-токены из локального `compose.yaml` (с префиксом `local-demo-`) в режиме `webhook` отклоняются.
 - Чтобы применить изменённый секрет или переменную, запустите выкат текущего коммита `main` (раздел 9). `MAX_BOT_USERNAME` и `DEMO_MODE` ещё и зашиты в образ мини-приложения, после их изменения сначала запустите workflow `publish` (Actions, publish, Run workflow): он пересоберёт образы и сам выкатит их.
+
+### Ротация секретов
+
+Секрет меняют по расписанию, при уходе человека с доступом к нему и сразу при подозрении на утечку. Каждый шаг «выкат» ниже означает выкат текущего коммита `main` (раздел 9), значения генерируются так же, как выше, и сразу отправляются в GitHub.
+
+`SESSION_SECRET` меняется без повторного входа пользователей:
+
+1. Скопируйте текущее значение в секрет `SESSION_SECRET_PREVIOUS`. GitHub не показывает значения секретов, поэтому возьмите его из `/opt/ppshkin/.env` на сервере: `grep '^SESSION_SECRET=' /opt/ppshkin/.env | cut -d= -f2- | gh secret set SESSION_SECRET_PREVIOUS --env production`.
+2. Задайте новый `SESSION_SECRET`: `openssl rand -hex 32 | gh secret set SESSION_SECRET --env production`.
+3. Выкатите. Новые токены подписываются новым ключом, выданные раньше принимаются по `SESSION_SECRET_PREVIOUS`, открытое мини-приложение работает без повторного входа.
+4. Через `SESSION_TTL_HOURS` (по умолчанию 12 часов) удалите `SESSION_SECRET_PREVIOUS` (`gh secret delete SESSION_SECRET_PREVIOUS --env production`) и выкатите ещё раз. При утечке ключа шаг 1 пропустите: тогда все сессии, подписанные старым ключом, перестанут действовать сразу после выката.
+
+`MAX_BOT_TOKEN`: новый токен выдают на платформе MAX для партнёров, после этого старый перестаёт работать. Сохраните новый токен в секрет репозитория `MAX_BOT_TOKEN` и выкатите. При старте backend заново подписывает webhook новым токеном. Сессии мини-приложения подписаны `SESSION_SECRET` и не сбрасываются; без `SESSION_SECRET` ключ сессий выводится из токена бота, поэтому в продакшене `SESSION_SECRET` обязателен. Живые проверки ([smoke.md](smoke.md)) читают тот же секрет.
+
+`MAX_WEBHOOK_SECRET`: задайте новое значение (`openssl rand -hex 32 | gh secret set MAX_WEBHOOK_SECRET --env production`) и выкатите. При старте backend переподписывает webhook с новым секретом. Обновления, которые MAX успел отправить со старым секретом во время перезапуска, получают 404, и MAX повторяет их доставку (раздел 6). После выката проверьте подписку живой проверкой `max.webhook`.
+
+Ключ распознавания `CHADGPT_API_KEY`: выпустите новый ключ в аккаунте ChadGPT, сохраните его в секрет репозитория `CHADGPT_API_KEY`, выкатите, проверьте распознавание фото живой проверкой ([smoke.md](smoke.md)) и только после этого удалите старый ключ в ChadGPT.
+
+`POSTGRES_PASSWORD`: пароль записан в томе базы при создании, поэтому меняется и в секрете, и в самой базе. Сначала сохраните новое значение в секрет, затем задайте его пользователю базы через SSH (SQL передаётся через stdin и не попадает в командную строку сервера) и сразу выкатите: после смены пароля новые соединения backend со старым паролем не открываются.
+
+```bash
+new_password=$(openssl rand -hex 24)
+printf '%s' "$new_password" | gh secret set POSTGRES_PASSWORD --env production
+printf "alter role current_user password '%s';\n" "$new_password" | ssh <пользователь>@<домен> 'cd /opt/ppshkin && docker compose -f compose.prod.yaml exec -T db psql -U ppshkin -d ppshkin'
+unset new_password
+```
+
+### Отзыв сессий
+
+Если утёк токен сессии одного пользователя или есть подозрение, что токены выданы посторонним, увеличьте номер сессии в базе. Токены с прежним номером получают 401 `invalid_token` не позже чем через 30 секунд, мини-приложение само входит заново по `initData`:
+
+```bash
+cd /opt/ppshkin
+docker compose -f compose.prod.yaml exec backend node dist/scripts/revoke-sessions.js --user <id>
+docker compose -f compose.prod.yaml exec backend node dist/scripts/revoke-sessions.js --all
+```
+
+Локально то же делает `npm run sessions:revoke -- --user <id>` из `backend/`. Исключение сотрудника из заведения сессии не отзывает: права проверяются по участникам заведения на каждом запросе.
 
 ## 5. Выкат
 
@@ -217,6 +274,18 @@ docker compose -f compose.prod.yaml exec backend node -e "fetch('https://platfor
 4. Вставьте адрес мини-приложения, выберите кнопку запуска «Открыть» и нажмите «Сохранить».
 
 После регистрации включите кнопки открытия мини-приложения в сообщениях бота: переменная репозитория `MINI_APP_ENABLED=true`, затем выкат текущего коммита (раздел 9). Проверьте запуск из чата с ботом в мобильном приложении MAX и в веб-версии `https://web.max.ru`: мини-приложение загружается и входит без ошибок.
+
+### Content Security Policy мини-приложения
+
+Мини-приложение отдаёт nginx (`frontend/nginx.conf`, `location /`). Сначала политика работает в режиме `Content-Security-Policy-Report-Only`: браузер ничего не блокирует и присылает нарушения на `POST /api/v1/csp-reports`. Backend ничего не хранит, а считает нарушения в метрике `ppshkin_csp_violations_total{directive}` и пишет в журнал директиву и заблокированный адрес без query.
+
+Как перейти к блокирующей политике:
+
+1. Выкатите версию с `Content-Security-Policy-Report-Only` и оставьте её на неделю в рабочем боте. За неделю откройте мини-приложение в мобильных клиентах MAX (iOS и Android) и в `https://web.max.ru`: вход, каталог, QR брони, фото еды, кабинет заведения.
+2. Посмотрите нарушения: `docker compose -f compose.prod.yaml logs backend --since 168h | grep 'content security policy violation'` и панель метрики `ppshkin_csp_violations_total` в Grafana. Для каждой директивы решите, что это: свой код, который нужно разрешить (добавьте источник в политику), или посторонний код (разберитесь, откуда он взялся, источник не разрешайте). Если встроенных стилей в отчётах нет, уберите `'unsafe-inline'` из `style-src`.
+3. Соберите источники для `frame-ancestors`. Пока директивы нет, MAX может встраивать мини-приложение откуда угодно, а если её добавить заранее с неполным списком, запуск сломается. Добавьте `frame-ancestors 'self'` в `Content-Security-Policy-Report-Only`, выкатите и неделю собирайте записи этой директивы в журнале: у них в заблокированном адресе стоит страница, которая встроила мини-приложение (адреса клиентов MAX и `https://web.max.ru`). Если браузер скрывает адрес, снимите источник в самом клиенте через отладку веб-вида. Каждый найденный источник из мобильных клиентов и веба добавьте в список `frame-ancestors`. Запуск проверяйте в каждом клиенте после изменения списка.
+4. Когда за сутки в отчётах нет новых нарушений, замените в `frontend/nginx.conf` имя заголовка `Content-Security-Policy-Report-Only` на `Content-Security-Policy`, оставив политику без изменений, выкатите и снова проверьте запуск в мобильных клиентах и в `https://web.max.ru`. Если запуск сломался, верните `Content-Security-Policy-Report-Only` и повторите с шага 2: откат делается обычным выкатом (раздел 9).
+5. Проверка CI принимает оба заголовка: `Content-Security-Policy-Report-Only` и `Content-Security-Policy`, поэтому менять её при переходе не нужно.
 
 ## 8. Заморозка версии
 

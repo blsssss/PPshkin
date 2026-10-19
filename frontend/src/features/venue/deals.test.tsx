@@ -306,7 +306,7 @@ describe('redemption', () => {
 });
 
 describe('venue bookings', () => {
-  it('refreshes active bookings every 30 seconds only while visible and on screen', async () => {
+  it('refreshes active bookings every 30 seconds while visible, off the screen only for the tab counter', async () => {
     await start();
     const { router } = await renderApp('/venue/bookings');
     expect(await screen.findByText('K7M2QX')).toBeTruthy();
@@ -335,7 +335,7 @@ describe('venue bookings', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(90_000);
     });
-    expect(count()).toBe(left);
+    expect(count()).toBe(left + 3);
   });
 
   it('filters the history by day', async () => {

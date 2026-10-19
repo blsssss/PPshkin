@@ -82,8 +82,25 @@ describe('POST /api/v1/auth/max', () => {
         location: null,
         locationUpdatedAt: null,
         consents: consentStatusJson,
+        isAdmin: false,
       },
     });
+  });
+
+  it('marks a configured administrator in the session', async () => {
+    app = await buildTestApp({
+      services: {
+        ...signInService,
+        moderation: { ...fakeServices().moderation, isAdmin: (id) => id === 101 },
+      },
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/max',
+      payload: { initData: 'signed' },
+    });
+    expectContract(response, 'POST', '/api/v1/auth/max');
+    expect(response.json<{ user: { isAdmin: boolean } }>().user.isAdmin).toBe(true);
   });
 
   it('rejects bad init data with a problem', async () => {

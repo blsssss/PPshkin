@@ -30,6 +30,7 @@ import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { conflict, forbidden, notFound } from '../shared/errors.ts';
 import { addDays, dayRange, localDate } from '../shared/time.ts';
+import { listWorkplaces } from './access.ts';
 import type { ConsentsService } from './consents.ts';
 
 export const DEFAULT_DEMO_SOURCE_VENUE_ID = 900_001;
@@ -127,6 +128,7 @@ function insertDeal(
       venueId,
       menuItemId: plan.menuItemId,
       priceRub: plan.priceRub,
+      listPriceRub: null,
       quantity: plan.quantity,
       quantityLeft: Math.max(0, plan.quantity - sold),
       startsAt: plan.window.startsAt,
@@ -335,6 +337,9 @@ export function createDemoService({ pool, clock, consents, dataset }: DemoDepend
         const source = template ? await venues.findSeededDemo(client, template.id) : null;
         if (!template || !source) throw notFound('venue_not_found', 'There is no demo venue with this id');
         const now = clock.now();
+        if ((await listWorkplaces(client, userId)).length > 0) {
+          throw conflict('venue_exists', 'You already have a venue, open it instead');
+        }
         const copy = await venues.insertDemoCopy(client, source.id, userId, now);
         if (!copy) throw conflict('venue_exists', 'You already have a venue, open it instead');
         const copied = new Map(

@@ -381,3 +381,58 @@ tests:
             exp_annotations:
               summary: "Проверка восстановления не проходила больше 8 дней"
               description: "Еженедельный restore-check.sh не отработал: смотрите journalctl -t ppshkin-restore-check на сервере."
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_notifications_total{job="backend",kind="venue_booking_created",result="sent"}'
+        values: 0+1x40
+      - series: 'ppshkin_notifications_total{job="backend",kind="booking_reminder",result="failed"}'
+        values: 0+1x40
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: NotificationsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Не доставлено 50% уведомлений"
+              description: "За 30 минут больше 10% уведомлений закончились статусом failed или expired: проверьте доступность MAX и журнал backend."
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_notifications_total{job="backend",kind="booking_reminder",result="expired"}'
+        values: 0+0.1x40
+      - series: 'ppshkin_notifications_total{job="backend",kind="venue_booking_created",result="sent"}'
+        values: 0+0.1x40
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: NotificationsFailing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_notifications_total{job="backend",kind="booking_reminder",result="failed"}'
+        values: 0+0.02x40
+      - series: 'ppshkin_notifications_total{job="backend",kind="venue_booking_created",result="sent"}'
+        values: 0+1x40
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: NotificationsFailing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_notifications_oldest_pending_seconds{job="backend",instance="backend:3000"}'
+        values: 0 0 400+60x14
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: NotificationsBacklog
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: NotificationsBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Уведомление ждёт отправки 17m 40s"
+              description: "Готовые к отправке уведомления не уходят больше 5 минут: проверьте, запущен ли бот и задача deliver_notifications."

@@ -24,9 +24,14 @@ const SessionSchema = z
 interface AuthRoutesOptions {
   auth: AuthService;
   consents: ConsentsService;
+  isAdmin: (userId: number) => boolean;
 }
 
-export const authRoutes: FastifyPluginCallbackZod<AuthRoutesOptions> = (app, { auth, consents }, done) => {
+export const authRoutes: FastifyPluginCallbackZod<AuthRoutesOptions> = (
+  app,
+  { auth, consents, isAdmin },
+  done,
+) => {
   app.post(
     '/auth/max',
     {
@@ -56,7 +61,11 @@ export const authRoutes: FastifyPluginCallbackZod<AuthRoutesOptions> = (app, { a
         token: signedIn.token,
         expiresAt: iso(signedIn.expiresAt),
         startParam: signedIn.startParam,
-        user: toUserProfile(signedIn.user, await consents.status(signedIn.user.id)),
+        user: toUserProfile(
+          signedIn.user,
+          await consents.status(signedIn.user.id),
+          isAdmin(signedIn.user.id),
+        ),
       };
     },
   );

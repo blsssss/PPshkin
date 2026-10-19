@@ -40,6 +40,7 @@ describe('/profile', () => {
       ],
       [{ type: 'callback', text: 'Предложения: включить', payload: 'pf:ad:on' }],
       [{ type: 'request_geo_location', text: 'Отправить местоположение' }],
+      [{ type: 'callback', text: 'Уведомления', payload: 'nt:ls' }],
       [{ type: 'callback', text: 'Удалить аккаунт', payload: 'ac:del' }],
     ]);
   });
@@ -72,6 +73,7 @@ describe('/profile', () => {
       'Цель',
       'Предложения: выключить',
       'Обновить местоположение',
+      'Уведомления',
       'Сбросить список «Не предлагать»',
       'Удалить аккаунт',
     ]);
@@ -224,6 +226,18 @@ describe('/delete', () => {
     expect(chat.world.services.account.deleteAccount).toHaveBeenCalledTimes(1);
 
     expect(texts(await chat.send('Сырники 350'))).toEqual([expect.stringContaining('Чтобы вести дневник')]);
+  });
+
+  it('warns the only owner of a company with venues', async () => {
+    const chat = consentedChat();
+    chat.world.services.account.soleOwnerships = () => Promise.resolve([{ id: 3, name: 'Кофейни' }]);
+
+    const [question] = sent(await chat.send('/delete'));
+
+    expect(question?.text).toBe(
+      `${QUESTION}\nВы единственный владелец «Кофейни». Передайте права другому сотруднику, иначе заведение останется без владельца.`,
+    );
+    expect(question?.buttons[0]?.[0]).toMatchObject({ payload: 'ac:del_ok' });
   });
 
   it('keeps everything when the guest cancels', async () => {

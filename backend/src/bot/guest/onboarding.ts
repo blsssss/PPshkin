@@ -1,5 +1,6 @@
 import { CONSENT_DOCUMENTS } from '../../domain/consents.ts';
 import type { ConsentKind } from '../../domain/vocabulary.ts';
+import { can } from '../../domain/roles.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
 import { answerStale, byAction } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
@@ -68,8 +69,21 @@ export function createOnboardingModule(kit: BotKit): BotModule {
     await ctx.reply({ text: ONBOARDING_DONE, buttons: [...helpButtons(), ...sample] });
   }
 
+  async function opensWithoutConsent(ctx: BotContext, link: StartLink): Promise<boolean> {
+    if (link.kind === 'j') return true;
+    if (link.kind !== 'r') return false;
+    return (await services.companies.workplaces(ctx.user.id)).some((place) =>
+      can(place.role, 'booking.redeem'),
+    );
+  }
+
   async function start(ctx: BotContext, args: string): Promise<void> {
-    const link = parseStartLink(args);
+    const parsed = parseStartLink(args);
+    const link = parsed?.kind === 'c' ? null : parsed;
+    if (link && (await opensWithoutConsent(ctx, link))) {
+      await kit.openStartLink(ctx, link);
+      return;
+    }
     const { personalData } = await consents.status(ctx.user.id);
     if (personalData.granted) {
       if (!link) await ctx.reply(welcomeBack());

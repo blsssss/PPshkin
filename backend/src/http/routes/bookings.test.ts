@@ -70,7 +70,11 @@ describe('creating a booking', () => {
     expect(response.statusCode).toBe(201);
     expectContract(response, 'POST', BOOKINGS);
     expect(response.json()).toEqual(bookingJson);
-    expect(create).toHaveBeenCalledExactlyOnceWith(GUEST_ID, { menuItemId: 11, dealId: 21, offerId: 501 });
+    expect(create).toHaveBeenCalledExactlyOnceWith(
+      GUEST_ID,
+      { menuItemId: 11, dealId: 21, offerId: 501 },
+      'miniapp',
+    );
 
     const plain = await server.inject({
       method: 'POST',
@@ -79,7 +83,7 @@ describe('creating a booking', () => {
       payload: { menuItemId: 11 },
     });
     expect(plain.statusCode).toBe(201);
-    expect(create).toHaveBeenLastCalledWith(GUEST_ID, { menuItemId: 11 });
+    expect(create).toHaveBeenLastCalledWith(GUEST_ID, { menuItemId: 11 }, 'miniapp');
   });
 
   it('validates the body', async () => {

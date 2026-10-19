@@ -1,4 +1,5 @@
 import { Button } from '@maxhub/max-ui';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { isApiError } from '../../api/errors.ts';
 import { userMessage } from '../../api/messages.ts';
@@ -18,6 +19,7 @@ import {
   VENUE_CATEGORY_LABELS,
   type MenuCategory,
 } from '../../shared/vocabulary.ts';
+import { ComplaintSheet } from '../support/ComplaintSheet.tsx';
 import { bookingLink, hoursText, mapsLink, venueShareText, type MenuItem } from './model.ts';
 import { DealPrice, DemoBadge } from './parts.tsx';
 import { useVenueDetails } from './queries.ts';
@@ -41,6 +43,7 @@ export function VenueScreen() {
   const details = useVenueDetails(valid ? venueId : 0);
   const device = useDevicePoint();
   const now = new Date();
+  const [reporting, setReporting] = useState(false);
 
   const notFound = !valid || (details.isError && isApiError(details.error, 'venue_not_found'));
   if (notFound) {
@@ -184,6 +187,25 @@ export function VenueScreen() {
               </section>
             );
           })}
+
+          <Button
+            size="medium"
+            variant="secondary"
+            stretched
+            onClick={() => {
+              setReporting(true);
+            }}
+          >
+            Сообщить о проблеме
+          </Button>
+          <ComplaintSheet
+            open={reporting}
+            title="Сообщить о проблеме"
+            venueId={data.venue.id}
+            onClose={() => {
+              setReporting(false);
+            }}
+          />
         </>
       )}
     </Page>

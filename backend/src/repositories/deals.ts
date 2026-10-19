@@ -37,7 +37,7 @@ const WITH_VENUE = 'join venues v on v.id = d.venue_id';
 
 function visibleTo(nowParam: string): string {
   return `${LIVE} and d.starts_at <= ${nowParam} and ${OVER_AT} > ${nowParam}
-    and m.archived_at is null and m.is_available`;
+    and m.archived_at is null and m.is_available and v.blocked_at is null`;
 }
 
 function mapDeal(row: DealRow): Deal {
@@ -59,6 +59,7 @@ export interface NewDeal {
   venueId: number;
   menuItemId: number;
   priceRub: number;
+  listPriceRub: number | null;
   quantity: number;
   endsAt: Date;
 }
@@ -77,10 +78,10 @@ export async function insert(db: Queryable, deal: NewDeal, now: Date): Promise<D
   const row = await one<DealRow>(
     db,
     `insert into deals as d (venue_id, menu_item_id, price_rub, quantity_total, quantity_left, starts_at, ends_at,
-                             created_at)
-     values ($1, $2, $3, $4, $4, $5, $6, $5)
+                             created_at, list_price_rub)
+     values ($1, $2, $3, $4, $4, $5, $6, $5, $7)
      returning ${DEAL_COLUMNS}`,
-    [deal.venueId, deal.menuItemId, deal.priceRub, deal.quantity, now, deal.endsAt],
+    [deal.venueId, deal.menuItemId, deal.priceRub, deal.quantity, now, deal.endsAt, deal.listPriceRub],
   );
   return mapDeal(row);
 }
@@ -89,8 +90,8 @@ export async function insertScheduled(db: Queryable, deal: ScheduledDeal, create
   const row = await one<DealRow>(
     db,
     `insert into deals as d (venue_id, menu_item_id, price_rub, quantity_total, quantity_left, starts_at, ends_at,
-                             created_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+                             created_at, list_price_rub)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning ${DEAL_COLUMNS}`,
     [
       deal.venueId,
@@ -101,6 +102,7 @@ export async function insertScheduled(db: Queryable, deal: ScheduledDeal, create
       deal.startsAt,
       deal.endsAt,
       createdAt,
+      deal.listPriceRub,
     ],
   );
   return mapDeal(row);
@@ -120,22 +122,40 @@ export async function cancelLiveInVenue(
   venueId: number,
   id: number,
   now: Date,
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const { rowCount } = await db.query(
     `update deals as d set cancelled_at = $3
        from venues v
       where v.id = d.venue_id and d.venue_id = $1 and d.id = $2 and ${LIVE} and ${OVER_AT} > $3`,
     [venueId, id, now],
   );
+  return rowCount === 1;
 }
 
-export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<void> {
-  await db.query(
+export async function cancelLiveForItem(db: Queryable, menuItemId: number, now: Date): Promise<Deal[]> {
+  const { rows } = await db.query<DealRow>(
     `update deals as d set cancelled_at = $2
        from venues v
-      where v.id = d.venue_id and d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2`,
+      where v.id = d.venue_id and d.menu_item_id = $1 and ${LIVE} and ${OVER_AT} > $2
+      returning ${DEAL_COLUMNS}`,
     [menuItemId, now],
   );
+  return rows.map(mapDeal);
+}
+
+export async function findById(db: Queryable, id: number): Promise<Deal | null> {
+  const row = await maybeOne<DealRow>(db, `select ${DEAL_COLUMNS} from deals d where d.id = $1`, [id]);
+  return row ? mapDeal(row) : null;
+}
+
+export async function listEndingCandidates(db: Queryable, startedBefore: Date, now: Date): Promise<Deal[]> {
+  const { rows } = await db.query<DealRow>(
+    `select ${DEAL_COLUMNS} from deals d
+      where ${LIVE} and d.starts_at <= $1 and d.ends_at > $2
+      order by d.id`,
+    [startedBefore, now],
+  );
+  return rows.map(mapDeal);
 }
 
 export async function findInVenue(db: Queryable, venueId: number, id: number): Promise<Deal | null> {

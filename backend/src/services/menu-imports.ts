@@ -1,6 +1,7 @@
-import { withTransaction, type Pool } from '../db/pool.ts';
+import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
 import { menuNameKey, STALE_IMPORT_ERROR, STALE_IMPORT_MS } from '../domain/menu-imports.ts';
 import type { MenuImport, MenuItem } from '../domain/models.ts';
+import type { Notifications } from '../ports/notifier.ts';
 import type { MenuParser, MenuParseResult, UnavailableReason } from '../ports/recognition.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
@@ -10,7 +11,9 @@ import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound } from '../shared/errors.ts';
 import { dayRange, localDate } from '../shared/time.ts';
 import { menuItemFields, type MenuItemInput } from './menu.ts';
-import { requireOwnedVenue, venueNotFound } from './venues.ts';
+import { lockVenueAccess, resolveVenueAccess, type VenueActor } from './access.ts';
+import type { AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export type ParsedMenuItemInput = Omit<MenuItemInput, 'isAvailable'>;
 
@@ -20,10 +23,16 @@ export interface AppliedMenuImport {
 }
 
 export interface MenuImportsService {
-  fromPhoto(ownerId: number, image: Buffer): Promise<MenuImport>;
-  fromText(ownerId: number, text: string): Promise<MenuImport>;
-  get(ownerId: number, importId: number): Promise<MenuImport>;
-  apply(ownerId: number, importId: number, items: ParsedMenuItemInput[]): Promise<AppliedMenuImport>;
+  fromPhoto(actor: VenueActor, image: Buffer): Promise<MenuImport>;
+  fromText(actor: VenueActor, text: string): Promise<MenuImport>;
+  get(actor: VenueActor, importId: number): Promise<MenuImport>;
+  apply(
+    actor: VenueActor,
+    importId: number,
+    items: ParsedMenuItemInput[],
+    channel: AuditChannel,
+  ): Promise<AppliedMenuImport>;
+  failStale(now: Date): Promise<MenuImport[]>;
 }
 
 interface MenuImportsDependencies {
@@ -31,6 +40,7 @@ interface MenuImportsDependencies {
   clock: Clock;
   menus: MenuParser;
   background: BackgroundTasks;
+  notifications: Notifications;
 }
 
 const DAILY_IMPORT_LIMIT = 20;
@@ -76,10 +86,25 @@ export function createMenuImportsService({
   clock,
   menus,
   background,
+  notifications,
 }: MenuImportsDependencies): MenuImportsService {
-  function finish(importId: number, outcome: menuImports.ImportOutcome): Promise<MenuImport | null> {
+  async function announce(db: Queryable, finished: readonly MenuImport[], now: Date): Promise<void> {
+    const places = await venues.findByIds(db, [...new Set(finished.map((menuImport) => menuImport.venueId))]);
+    for (const menuImport of finished) {
+      const venue = places.find((place) => place.id === menuImport.venueId);
+      if (venue) await notifications.enqueue(db, { kind: 'menu_import_done', menuImport, venue }, now);
+    }
+  }
+
+  async function finish(importId: number, outcome: menuImports.ImportOutcome): Promise<MenuImport | null> {
     const now = clock.now();
-    return menuImports.complete(pool, importId, outcome, now, processingSince(now));
+    const completed = await withTransaction(pool, async (client) => {
+      const found = await menuImports.complete(client, importId, outcome, now, processingSince(now));
+      if (found) await announce(client, [found], now);
+      return found;
+    });
+    if (completed) notifications.flush();
+    return completed;
   }
 
   async function recognize(importId: number, parse: () => Promise<MenuParseResult>): Promise<void> {
@@ -94,13 +119,12 @@ export function createMenuImportsService({
   }
 
   async function start(
-    ownerId: number,
+    actor: VenueActor,
     source: MenuImport['source'],
     parse: () => Promise<MenuParseResult>,
   ): Promise<MenuImport> {
     const created = await withTransaction(pool, async (client) => {
-      const venue = await venues.lockByOwner(client, ownerId);
-      if (!venue) throw venueNotFound();
+      const { venue } = await lockVenueAccess(client, actor, 'menu.edit');
       const now = clock.now();
       const today = dayRange(localDate(now, venue.timezone), venue.timezone);
       const counts = await menuImports.countRecent(client, venue.id, {
@@ -127,21 +151,20 @@ export function createMenuImportsService({
   }
 
   return {
-    fromPhoto: (ownerId, image) => start(ownerId, 'photo', () => menus.fromPhoto(image)),
+    fromPhoto: (actor, image) => start(actor, 'photo', () => menus.fromPhoto(image)),
 
-    fromText: (ownerId, text) => start(ownerId, 'text', () => menus.fromText(text)),
+    fromText: (actor, text) => start(actor, 'text', () => menus.fromText(text)),
 
-    async get(ownerId, importId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async get(actor, importId) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       const found = await menuImports.findInVenue(pool, venue.id, importId);
       if (!found) throw importNotFound();
       return asOf(found, clock.now());
     },
 
-    async apply(ownerId, importId, items) {
+    async apply(actor, importId, items, channel) {
       return withTransaction(pool, async (client) => {
-        const venue = await venues.lockByOwner(client, ownerId);
-        if (!venue) throw venueNotFound();
+        const { venue } = await lockVenueAccess(client, actor, 'menu.edit');
         const locked = await menuImports.lockInVenue(client, venue.id, importId);
         if (!locked) throw importNotFound();
         const now = clock.now();
@@ -171,8 +194,30 @@ export function createMenuImportsService({
           onMenu.set(key, created);
         }
         await menuImports.markApplied(client, locked.id);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'menu_import.apply',
+            target: { type: 'menu_import', id: locked.id },
+            channel,
+            details: { added: added.length, duplicates: duplicates.size },
+          },
+          now,
+        );
         return { added, duplicates: [...duplicates.values()] };
       });
+    },
+
+    async failStale(now) {
+      const failed = await withTransaction(pool, async (client) => {
+        const stale = await menuImports.failStale(client, now);
+        await announce(client, stale, now);
+        return stale;
+      });
+      if (failed.length > 0) notifications.flush();
+      return failed;
     },
   };
 }

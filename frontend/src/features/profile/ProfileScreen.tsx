@@ -7,6 +7,7 @@ import { userMessage } from '../../api/messages.ts';
 import {
   useConsents,
   useGrantConsent,
+  useNotificationSettings,
   useProfile,
   useRevokeConsent,
   useSaveLocation,
@@ -31,6 +32,7 @@ import { Skeleton } from '../../shared/ui/Skeleton.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
 import { GOAL_LABELS, GOALS, TAG_LABELS, type Goal } from '../../shared/vocabulary.ts';
 import { ConsentText } from '../onboarding/OnboardingStep.tsx';
+import { enabledSummary } from './notificationsModel.ts';
 import {
   formFromProfile,
   grantedLine,
@@ -333,6 +335,20 @@ function LocationSection({ profile }: { profile: UserProfile }) {
   );
 }
 
+function NotificationsSection() {
+  const settings = useNotificationSettings();
+  return (
+    <Section title="Уведомления">
+      <p className={styles.value}>
+        {settings.data === undefined ? 'Сообщения бота о бронях и заведении' : enabledSummary(settings.data)}
+      </p>
+      <Link to="/profile/notifications" className={styles.link}>
+        Настроить
+      </Link>
+    </Section>
+  );
+}
+
 function ConsentsSection({ profile }: { profile: UserProfile }) {
   const toast = useToast();
   const consents = useConsents();
@@ -485,6 +501,7 @@ export function ProfileScreen() {
             </Section>
             <LocationSection profile={data} />
           </SettingsForm>
+          <NotificationsSection />
           <ConsentsSection profile={data} />
           <Section title="Кабинет заведения">
             <Button

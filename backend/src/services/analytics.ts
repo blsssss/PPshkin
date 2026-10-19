@@ -4,7 +4,7 @@ import type { Clock } from '../shared/clock.ts';
 import { badRequest, type ErrorDetail } from '../shared/errors.ts';
 import { addDays, dayRange, isLocalDate, localDate } from '../shared/time.ts';
 import type { BookingsService } from './bookings.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
 
 export const DEFAULT_ANALYTICS_DAYS = 7;
 export const MAX_ANALYTICS_DAYS = 92;
@@ -42,7 +42,7 @@ export interface VenueAnalytics {
 }
 
 export interface AnalyticsService {
-  get(ownerId: number, period: AnalyticsPeriod): Promise<VenueAnalytics>;
+  get(actor: VenueActor, period: AnalyticsPeriod): Promise<VenueAnalytics>;
 }
 
 interface AnalyticsDependencies {
@@ -78,7 +78,7 @@ interface ResolvedPeriod {
   days: number;
 }
 
-function assertDates(period: AnalyticsPeriod): void {
+export function assertDates(period: AnalyticsPeriod): void {
   const problems: ErrorDetail[] = (['from', 'to'] as const)
     .filter((field) => {
       const value = period[field];
@@ -88,7 +88,7 @@ function assertDates(period: AnalyticsPeriod): void {
   if (problems.length > 0) throw badRequest('validation_failed', 'Request validation failed', problems);
 }
 
-function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
+export function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
   const to = period.to ?? today;
   const from = period.from ?? addDays(to, 1 - DEFAULT_ANALYTICS_DAYS);
   const days = (Date.parse(to) - Date.parse(from)) / DAY_MS + 1;
@@ -129,9 +129,9 @@ function sumDays(days: readonly analytics.DayActivity[]): Totals {
 
 export function createAnalyticsService({ pool, clock, bookings }: AnalyticsDependencies): AnalyticsService {
   return {
-    async get(ownerId, period) {
+    async get(actor, period) {
       assertDates(period);
-      const venue = await requireOwnedVenue(pool, ownerId);
+      const { venue } = await resolveVenueAccess(pool, actor, 'analytics.view');
       const { from, to, days } = resolvePeriod(period, localDate(clock.now(), venue.timezone));
       await bookings.expireDue({ venueId: venue.id });
       const windows = Array.from({ length: days }, (_, index) => {

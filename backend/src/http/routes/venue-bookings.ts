@@ -5,7 +5,7 @@ import {
   type AnalyticsService,
 } from '../../services/analytics.ts';
 import { VENUE_HISTORY_DAYS, VENUE_HISTORY_LIMIT, type BookingsService } from '../../services/bookings.ts';
-import { bearerSecurity, requireAuth, userId } from '../auth.ts';
+import { bearerSecurity, requireAuth, venueActor } from '../auth.ts';
 import { describeErrors, ERROR_NOTES } from '../error-notes.ts';
 import { AnalyticsQuery, toVenueAnalytics, VenueAnalyticsSchema } from '../schemas/analytics.ts';
 import {
@@ -16,13 +16,15 @@ import {
   VenueBookingListQuery,
 } from '../schemas/bookings.ts';
 import { errorResponses, success } from '../schemas/common.ts';
+import { VenueQuery } from '../schemas/venues.ts';
 
 interface VenueBookingRouteOptions {
   bookings: BookingsService;
   analytics: AnalyticsService;
 }
 
-const NO_VENUE = 'venue_not_found (404): заведения ещё нет, предложите создать его через POST /api/v1/venue.';
+const NO_VENUE =
+  'venue_not_found (404): заведения ещё нет или оно не из ваших рабочих мест, предложите создать его через POST /api/v1/venue. venue_required (400): у вас несколько заведений, передайте venueId из GET /api/v1/me/workplaces. venue_forbidden (403): роль не позволяет это действие.';
 
 export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOptions> = (
   app,
@@ -48,12 +50,14 @@ export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOpti
           ),
         ].join(' '),
         security: bearerSecurity,
-        querystring: VenueBookingListQuery,
-        response: { 200: success('Брони', BookingListSchema), ...errorResponses(400, 401, 404) },
+        querystring: VenueBookingListQuery.extend(VenueQuery.shape),
+        response: { 200: success('Брони', BookingListSchema), ...errorResponses(400, 401, 404, 403) },
       },
     },
     async (request) => ({
-      items: (await bookings.listForVenue(userId(request), request.query)).map(toBooking),
+      items: (await bookings.listForVenue(venueActor(request, request.query.venueId), request.query)).map(
+        toBooking,
+      ),
     }),
   );
 
@@ -78,14 +82,18 @@ export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOpti
           ),
         ].join(' '),
         security: bearerSecurity,
+        querystring: VenueQuery,
         body: RedeemBody,
         response: {
           200: success('Бронь погашена', BookingSchema),
-          ...errorResponses(400, 401, 404, 409, 413, 415),
+          ...errorResponses(400, 401, 404, 409, 413, 415, 403),
         },
       },
     },
-    async (request) => toBooking(await bookings.redeem(userId(request), request.body.code)),
+    async (request) =>
+      toBooking(
+        await bookings.redeem(venueActor(request, request.query.venueId), request.body.code, 'miniapp'),
+      ),
   );
 
   app.get(
@@ -107,11 +115,12 @@ export const venueBookingsRoutes: FastifyPluginCallbackZod<VenueBookingRouteOpti
           ),
         ].join(' '),
         security: bearerSecurity,
-        querystring: AnalyticsQuery,
-        response: { 200: success('Аналитика', VenueAnalyticsSchema), ...errorResponses(400, 401, 404) },
+        querystring: AnalyticsQuery.extend(VenueQuery.shape),
+        response: { 200: success('Аналитика', VenueAnalyticsSchema), ...errorResponses(400, 401, 404, 403) },
       },
     },
-    async (request) => toVenueAnalytics(await analytics.get(userId(request), request.query)),
+    async (request) =>
+      toVenueAnalytics(await analytics.get(venueActor(request, request.query.venueId), request.query)),
   );
 
   done();

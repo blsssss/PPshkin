@@ -1,8 +1,10 @@
 import type { AccountService } from './account.ts';
 import type { AnalyticsService } from './analytics.ts';
+import type { AuditService } from './audit.ts';
 import type { AuthService } from './auth.ts';
 import type { BookingsService } from './bookings.ts';
 import type { CatalogService } from './catalog.ts';
+import type { CompaniesService } from './companies.ts';
 import type { ConsentsService } from './consents.ts';
 import type { DealsService } from './deals.ts';
 import type { DemoService } from './demo.ts';
@@ -12,8 +14,11 @@ import type { InsightsService } from './insights.ts';
 import type { MenuImportsService } from './menu-imports.ts';
 import type { MenuService } from './menu.ts';
 import type { MetricsService } from './metrics.ts';
+import type { ModerationService } from './moderation.ts';
+import type { NotificationSettingsService } from './notification-settings.ts';
 import type { ProfileService } from './profile.ts';
 import type { RecommendationsService } from './recommendations.ts';
+import type { ReportsService } from './reports.ts';
 import type { VenuesService } from './venues.ts';
 
 export interface Services {
@@ -22,6 +27,7 @@ export interface Services {
   auth: AuthService;
   profile: ProfileService;
   consents: ConsentsService;
+  companies: CompaniesService;
   diary: DiaryService;
   account: AccountService;
   venues: VenuesService;
@@ -33,5 +39,9 @@ export interface Services {
   insights: InsightsService;
   bookings: BookingsService;
   analytics: AnalyticsService;
+  reports: ReportsService;
   demo: DemoService;
+  notificationSettings: NotificationSettingsService;
+  audit: AuditService;
+  moderation: ModerationService;
 }

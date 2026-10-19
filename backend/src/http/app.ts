@@ -10,6 +10,7 @@ import type { Services } from '../services/index.ts';
 import type { BackgroundTasks } from '../shared/background.ts';
 import { tooManyRequests } from '../shared/errors.ts';
 import { rateLimitKey, registerAuthentication } from './auth.ts';
+import { API_CSP_DIRECTIVES } from './csp.ts';
 import { registerMetrics } from './metrics.ts';
 import { registerOpenApi } from './openapi.ts';
 import { registerProblemHandlers } from './problem.ts';
@@ -17,10 +18,12 @@ import { apiRoutes } from './routes/index.ts';
 import { maxWebhookRoutes } from './routes/max-webhook.ts';
 import { systemRoutes } from './routes/system.ts';
 import { registerUploads } from './uploads.ts';
+import type { NotificationStats } from '../notifications/stats.ts';
 
 export interface AppOptions {
   config: Config;
   services: Services;
+  notificationStats?: NotificationStats;
   logger?: FastifyServerOptions['logger'];
   maxWebhook?: { secret: string; handler: UpdateHandler; background: BackgroundTasks };
   metricsRegistry?: Registry;
@@ -54,7 +57,14 @@ export function trustProxyOption(
   return typeof setting === 'number' ? (_address, hop) => hop < setting : setting;
 }
 
-export async function buildApp({ config, services, logger, maxWebhook, metricsRegistry }: AppOptions) {
+export async function buildApp({
+  config,
+  services,
+  logger,
+  maxWebhook,
+  notificationStats,
+  metricsRegistry,
+}: AppOptions) {
   const app = Fastify({
     logger: logger ?? loggerOptions(config),
     trustProxy: trustProxyOption(config.TRUST_PROXY),
@@ -65,7 +75,9 @@ export async function buildApp({ config, services, logger, maxWebhook, metricsRe
   app.setSerializerCompiler(serializerCompiler);
   registerProblemHandlers(app);
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: { useDefaults: false, directives: API_CSP_DIRECTIVES },
+  });
   await app.register(cors, {
     origin: config.CORS_ORIGINS.length > 0 ? config.CORS_ORIGINS : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -84,10 +96,17 @@ export async function buildApp({ config, services, logger, maxWebhook, metricsRe
   await registerUploads(app);
   await registerOpenApi(app);
   const probeLogLevel = quietestLevel(config.LOG_LEVEL, 'warn');
-  registerMetrics(app, services.metrics, probeLogLevel, metricsRegistry);
+  const metrics = registerMetrics(
+    app,
+    services.metrics,
+    probeLogLevel,
+    notificationStats?.metrics ?? [],
+    metricsRegistry,
+  );
 
   await app.register(systemRoutes, {
     health: services.health,
+    metrics,
     probeLogLevel,
   });
   await app.register(apiRoutes, { prefix: '/api/v1', services });

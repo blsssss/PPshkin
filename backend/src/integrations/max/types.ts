@@ -39,6 +39,7 @@ export type MaxButton =
 
 export type MaxAttachmentRequest =
   | { type: 'image'; payload: { token: string } }
+  | { type: 'file'; payload: { token: string } }
   | { type: 'inline_keyboard'; payload: { buttons: MaxButton[][] } };
 
 export interface MaxNewMessageBody {

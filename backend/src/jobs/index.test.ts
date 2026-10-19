@@ -8,7 +8,14 @@ const db: Queryable = { query: () => Promise.reject(new Error('the database is n
 
 function jobs(flags: Partial<JobsDependencies['config']>, extra: Partial<JobsDependencies> = {}) {
   return createJobs({
-    config: { BOT_MODE: 'polling', DEMO_MODE: false, PROACTIVE_OFFERS: false, ...flags },
+    config: {
+      ADMIN_USER_IDS: [],
+      BOT_MODE: 'polling',
+      DEMO_MODE: false,
+      PROACTIVE_OFFERS: false,
+      PURGE_INACTIVE_ACCOUNTS: false,
+      ...flags,
+    },
     db,
     services: fakeServices(),
     messenger: () => null,
@@ -26,7 +33,36 @@ describe('createJobs', () => {
       expire_bookings: { everyMs: 60_000 },
       fail_stale_imports: { everyMs: 300_000 },
       purge_processed_updates: { everyMs: 3_600_000 },
+      purge_notifications: { dailyAt: '04:30', timeZone: 'Europe/Moscow' },
+      purge_deal_impressions: { dailyAt: '04:40', timeZone: 'Europe/Moscow' },
+      purge_retention: { dailyAt: '04:50', timeZone: 'Europe/Moscow' },
     });
+  });
+
+  it('delivers and reminds through the notification queue only when the bot can send', async () => {
+    const outbox = {
+      enqueue: vi.fn(() => Promise.resolve()),
+      flush: vi.fn(),
+      deliverDue: vi.fn(() =>
+        Promise.resolve({ sent: 0, skipped: 0, unreachable: 0, failed: 0, expired: 0, retried: 0 }),
+      ),
+    };
+    const names = (list: ReturnType<typeof jobs>) => list.map((job) => job.name);
+
+    expect(names(jobs({}))).not.toContain('deliver_notifications');
+    expect(schedules(jobs({}, { outbox }))).toMatchObject({
+      deliver_notifications: { everyMs: 15_000 },
+      booking_reminders: { everyMs: 60_000 },
+      deal_ending_reminders: { everyMs: 300_000 },
+      venue_day_close: { everyMs: 300_000 },
+      weekly_reports: { everyMs: 900_000 },
+    });
+
+    const now = new Date('2026-09-26T09:00:00Z');
+    await jobs({}, { outbox })
+      .find((job) => job.name === 'deliver_notifications')
+      ?.run(now);
+    expect(outbox.deliverDue).toHaveBeenCalledExactlyOnceWith(now);
   });
 
   it('leaves proactive offers out unless PROACTIVE_OFFERS is on', () => {
@@ -80,10 +116,39 @@ describe('createJobs', () => {
     await expect(guard?.run(new Date('2026-09-26T09:00:00Z'))).rejects.toBe(failure);
   });
 
+  it('queues the day close and the weekly report through the reports service', async () => {
+    const outbox = {
+      enqueue: vi.fn(() => Promise.resolve()),
+      flush: vi.fn(),
+      deliverDue: vi.fn(() =>
+        Promise.resolve({ sent: 0, skipped: 0, unreachable: 0, failed: 0, expired: 0, retried: 0 }),
+      ),
+    };
+    const queueDayClose = vi.fn(() => Promise.resolve(0));
+    const queueWeekly = vi.fn(() => Promise.resolve(0));
+    const services = fakeServices({
+      reports: { ...fakeServices().reports, queueDayClose, queueWeekly },
+    });
+    const list = jobs({}, { outbox, services });
+    const now = new Date('2026-10-19T06:00:00Z');
+
+    await list.find((job) => job.name === 'venue_day_close')?.run(now);
+    await list.find((job) => job.name === 'weekly_reports')?.run(now);
+
+    expect(queueDayClose).toHaveBeenCalledWith(now);
+    expect(queueWeekly).toHaveBeenCalledWith(now);
+  });
+
   it('expires bookings across all guests and venues', async () => {
     const expireDue = vi.fn(() => Promise.resolve([]));
     const expire = createJobs({
-      config: { BOT_MODE: 'polling', DEMO_MODE: false, PROACTIVE_OFFERS: false },
+      config: {
+        ADMIN_USER_IDS: [],
+        BOT_MODE: 'polling',
+        DEMO_MODE: false,
+        PROACTIVE_OFFERS: false,
+        PURGE_INACTIVE_ACCOUNTS: false,
+      },
       db,
       services: fakeServices({
         bookings: { ...fakeServices().bookings, expireDue },

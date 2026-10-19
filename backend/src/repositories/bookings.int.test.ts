@@ -16,6 +16,7 @@ let deal: Deal;
 
 const booking = (code: string, overrides: Partial<bookings.NewBooking> = {}): bookings.NewBooking => ({
   userId: GUEST,
+  channel: 'bot',
   venueId: eclair.venueId,
   menuItemId: eclair.id,
   dealId: deal.id,
@@ -61,12 +62,16 @@ describe('bookings repository', () => {
       await bookings.insertIfCodeFree(client, booking('ABC234', { dealId: null })),
       await bookings.insertIfCodeFree(client, booking('XYZ789', { dealId: null })),
     ]);
+    const { channel, ...fields } = booking('ABC234');
+    expect(channel).toBe('bot');
     expect(stored).toEqual({
       id: expect.any(Number) as number,
-      ...booking('ABC234'),
+      ...fields,
       status: 'active',
       resolvedAt: null,
     });
+    const { rows } = await pool.query('select channel from bookings where code = $1', ['ABC234']);
+    expect(rows).toEqual([{ channel: 'bot' }]);
     expect(taken).toBeNull();
     expect(next).toMatchObject({ code: 'XYZ789', dealId: null });
     expect(await bookings.listActiveItemIds(pool, GUEST)).toEqual([eclair.id, eclair.id]);
@@ -224,11 +229,16 @@ describe('bookings repository', () => {
       dealId: deal.id,
       createdAt: now,
     });
-    expect(await bookings.markRedeemed(pool, id, now)).toMatchObject({
+    expect(await bookings.markRedeemed(pool, id, 202, now)).toMatchObject({
       id,
       status: 'redeemed',
       resolvedAt: now,
     });
+    const { rows } = await pool.query<{ redeemed_by: number }>(
+      'select redeemed_by from bookings where id = $1',
+      [id],
+    );
+    expect(rows).toEqual([{ redeemed_by: 202 }]);
     expect(await quantityLeft()).toBe(1);
     expect(await bookings.listActiveItemIds(pool, GUEST)).toEqual([]);
   });

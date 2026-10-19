@@ -1,6 +1,8 @@
 import type { Pool } from '../db/pool.ts';
 import { resolveDemoPoint } from '../demo/location.ts';
 import type { GeoPoint, MenuItem, Venue } from '../domain/models.ts';
+import * as impressions from '../repositories/deal-impressions.ts';
+import * as companies from '../repositories/companies.ts';
 import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as users from '../repositories/users.ts';
@@ -8,7 +10,7 @@ import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound } from '../shared/errors.ts';
 import { distanceMeters } from '../shared/geo.ts';
-import { isOpenAt } from '../shared/time.ts';
+import { isOpenAt, localDate } from '../shared/time.ts';
 import { dealViews, type DealView } from './deals.ts';
 import { byMenuOrder } from './menu.ts';
 
@@ -24,8 +26,15 @@ export interface VenueCardView {
   activeDeals: number;
 }
 
+export interface VenueSeller {
+  name: string;
+  ogrn: string | null;
+  address: string | null;
+}
+
 export interface VenueDetailsView {
   venue: Venue;
+  seller: VenueSeller | null;
   openNow: boolean;
   menu: MenuItem[];
   deals: DealView[];
@@ -53,6 +62,7 @@ interface CatalogDependencies {
   pool: Pool;
   clock: Clock;
   demoMode: boolean;
+  verificationRequired?: boolean;
 }
 
 interface Nearby {
@@ -117,7 +127,12 @@ function bySoonestEnd(left: DealCardView, right: DealCardView): number {
   );
 }
 
-export function createCatalogService({ pool, clock, demoMode }: CatalogDependencies): CatalogService {
+export function createCatalogService({
+  pool,
+  clock,
+  demoMode,
+  verificationRequired = false,
+}: CatalogDependencies): CatalogService {
   async function savedPoint(userId: number): Promise<GeoPoint | null> {
     return (await users.findById(pool, userId))?.location ?? null;
   }
@@ -133,18 +148,36 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
   async function nearby(userId: number, query: CatalogQuery, now: Date): Promise<Nearby> {
     const { point, demoCenterUsed } = resolveDemoPoint(query.point ?? (await savedPoint(userId)), demoMode);
     if (!point) {
-      const everywhere = await venues.listVisible(pool, userId);
+      const everywhere = await venues.listVisible(pool, userId, verificationRequired);
       return {
         placed: everywhere.map((venue) => place(venue, null, now)).sort(byOpenThenName),
         demoCenterUsed,
       };
     }
-    const candidates = await venues.listVisibleWithin(pool, boundingBox(point, query.radiusM), userId);
+    const candidates = await venues.listVisibleWithin(
+      pool,
+      boundingBox(point, query.radiusM),
+      userId,
+      verificationRequired,
+    );
     const placed = candidates
       .filter((venue) => distanceMeters(point, venue.location) <= query.radiusM)
       .map((venue) => place(venue, point, now))
       .sort(byDistance);
     return { placed, demoCenterUsed };
+  }
+
+  async function remember(
+    userId: number,
+    shown: readonly { dealId: number; venue: Venue }[],
+    source: impressions.ImpressionSource,
+    now: Date,
+  ): Promise<void> {
+    if (userId <= 0) return;
+    const real = shown
+      .filter(({ venue }) => !venue.isDemo)
+      .map(({ dealId, venue }) => ({ dealId, day: localDate(now, venue.timezone) }));
+    await impressions.record(pool, userId, real, source, now);
   }
 
   return {
@@ -164,15 +197,27 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
     },
 
     async venue(userId, venueId) {
-      const venue = await venues.findVisible(pool, venueId, userId);
+      const venue = await venues.findVisible(pool, venueId, userId, verificationRequired);
       if (!venue) throw notFound('venue_not_found', 'Venue not found');
       const now = clock.now();
       const [menu, visibleDeals] = await Promise.all([
         menuItems.listAvailable(pool, venue.id),
         deals.listVisible(pool, [venue.id], now),
       ]);
+      await remember(
+        userId,
+        visibleDeals.map((deal) => ({ dealId: deal.id, venue })),
+        'venue_card',
+        now,
+      );
+      const company = venue.companyId === null ? null : await companies.findById(pool, venue.companyId);
+      const seller =
+        company?.inn && company.verification !== 'rejected'
+          ? { name: company.name, ogrn: company.ogrn, address: company.address }
+          : null;
       return {
         venue,
+        seller,
         openNow: isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone),
         menu: menu.sort(byMenuOrder),
         deals: await dealViews(pool, visibleDeals, now),
@@ -193,6 +238,12 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
         })
         .sort(bySoonestEnd)
         .slice(0, MAX_RESULTS);
+      await remember(
+        userId,
+        items.map((item) => ({ dealId: item.deal.deal.id, venue: item.venue })),
+        'catalog',
+        now,
+      );
       return { items, demoCenterUsed };
     },
 
@@ -202,11 +253,12 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
       if (!found) throw dealNotFound();
       const [[view], venue, point] = await Promise.all([
         dealViews(pool, [found], now),
-        venues.findVisible(pool, found.venueId, userId),
+        venues.findVisible(pool, found.venueId, userId, verificationRequired),
         savedPoint(userId),
       ]);
       if (!venue) throw dealNotFound();
       if (!view) throw new Error(`Deal ${dealId} lost its menu item`);
+      await remember(userId, [{ dealId: found.id, venue }], 'deal_card', now);
       return { deal: view, venue, distanceM: distanceFrom(resolveDemoPoint(point, demoMode).point, venue) };
     },
   };

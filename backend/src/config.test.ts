@@ -74,6 +74,36 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...required, DEMO_MODE: 'true', DEMO_GUEST_TOKEN: 'short' })).toThrow(
       /DEMO_GUEST_TOKEN/,
     );
+    expect(() =>
+      loadConfig({
+        ...required,
+        SESSION_SECRET: 'session-secret-for-tests-0123456789',
+        SESSION_SECRET_PREVIOUS: 'short',
+      }),
+    ).toThrow(/SESSION_SECRET_PREVIOUS/);
+  });
+
+  it('keeps the previous session secret only next to a different current one', () => {
+    const current = 'session-secret-for-tests-0123456789';
+    const previous = 'previous-session-secret-0123456789';
+    expect(loadConfig(required).SESSION_SECRET_PREVIOUS).toBeUndefined();
+    expect(loadConfig({ ...required, SESSION_SECRET_PREVIOUS: '' }).SESSION_SECRET_PREVIOUS).toBeUndefined();
+    expect(
+      loadConfig({ ...required, SESSION_SECRET: current, SESSION_SECRET_PREVIOUS: previous })
+        .SESSION_SECRET_PREVIOUS,
+    ).toBe(previous);
+    expect(() => loadConfig({ ...required, SESSION_SECRET_PREVIOUS: previous })).toThrow(
+      /SESSION_SECRET_PREVIOUS needs SESSION_SECRET/,
+    );
+    expect(() =>
+      loadConfig({ ...required, SESSION_SECRET: current, SESSION_SECRET_PREVIOUS: current }),
+    ).toThrow(/SESSION_SECRET_PREVIOUS must differ/);
+  });
+
+  it('reads the DaData key and treats an empty one as missing', () => {
+    expect(loadConfig(required).DADATA_API_KEY).toBeUndefined();
+    expect(loadConfig({ ...required, DADATA_API_KEY: '' }).DADATA_API_KEY).toBeUndefined();
+    expect(loadConfig({ ...required, DADATA_API_KEY: ' dadata-key ' }).DADATA_API_KEY).toBe('dadata-key');
   });
 
   it('configures ChadGPT with safe defaults and no key', () => {
@@ -168,6 +198,37 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...required, MINI_APP_ENABLED: 'true' }).MINI_APP_ENABLED).toBe(true);
     expect(loadConfig({ ...required, MINI_APP_ENABLED: 'false' }).MINI_APP_ENABLED).toBe(false);
     expect(() => loadConfig({ ...required, MINI_APP_ENABLED: 'maybe' })).toThrow(/MINI_APP_ENABLED/);
+  });
+
+  it('keeps inactive accounts unless their deletion is switched on', () => {
+    expect(loadConfig(required).PURGE_INACTIVE_ACCOUNTS).toBe(false);
+    expect(loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: '' }).PURGE_INACTIVE_ACCOUNTS).toBe(false);
+    expect(loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: 'true' }).PURGE_INACTIVE_ACCOUNTS).toBe(true);
+    expect(() => loadConfig({ ...required, PURGE_INACTIVE_ACCOUNTS: 'sometimes' })).toThrow(
+      /PURGE_INACTIVE_ACCOUNTS/,
+    );
+  });
+
+  it('reads administrator ids as positive whole numbers', () => {
+    expect(loadConfig(required).ADMIN_USER_IDS).toEqual([]);
+    expect(loadConfig({ ...required, ADMIN_USER_IDS: '' }).ADMIN_USER_IDS).toEqual([]);
+    expect(loadConfig({ ...required, ADMIN_USER_IDS: '12, 345 ,' }).ADMIN_USER_IDS).toEqual([12, 345]);
+    for (const bad of ['-5', '12,-3', '0', '1.5', 'abc', '12;13']) {
+      expect(() => loadConfig({ ...required, ADMIN_USER_IDS: bad })).toThrow(/ADMIN_USER_IDS/);
+    }
+  });
+
+  it('keeps the venue verification off unless it is switched on', () => {
+    expect(loadConfig(required).VENUE_VERIFICATION_REQUIRED).toBe(false);
+    expect(loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: '' }).VENUE_VERIFICATION_REQUIRED).toBe(
+      false,
+    );
+    expect(loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: 'true' }).VENUE_VERIFICATION_REQUIRED).toBe(
+      true,
+    );
+    expect(() => loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: 'sometimes' })).toThrow(
+      /VENUE_VERIFICATION_REQUIRED/,
+    );
   });
 
   it('keeps proactive offers off unless they are switched on', () => {

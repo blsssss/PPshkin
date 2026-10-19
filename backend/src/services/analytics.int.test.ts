@@ -1,11 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
+import { recordingNotifications } from '../../test/notifications.ts';
 import { seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
 import type { MenuItem } from '../domain/models.ts';
-import type { Notifier } from '../ports/notifier.ts';
-import { createBackgroundTasks } from '../shared/background.ts';
 import { createAnalyticsService } from './analytics.ts';
 import { createBookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
@@ -13,19 +12,12 @@ import { createMenuService } from './menu.ts';
 
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
-const background = createBackgroundTasks({ error: () => undefined });
-const notifier = {
-  bookingCreated: vi.fn<Notifier['bookingCreated']>(() => Promise.resolve()),
-  bookingCancelled: vi.fn<Notifier['bookingCancelled']>(() => Promise.resolve()),
-  bookingRedeemed: vi.fn<Notifier['bookingRedeemed']>(() => Promise.resolve()),
-  bookingExpired: vi.fn<Notifier['bookingExpired']>(() => Promise.resolve()),
-} satisfies Notifier;
+const recorded = recordingNotifications();
 const bookings = createBookingsService({
   pool,
   clock,
   consents: createConsentsService({ pool, clock }),
-  notifier,
-  background,
+  notifications: recorded.notifications,
 });
 const service = createAnalyticsService({ pool, clock, bookings });
 
@@ -119,7 +111,12 @@ beforeAll(async () => {
       expiresAt: at('2026-09-26T09:00:00Z'),
     });
   }
-  await createMenuService({ pool, clock }).update(OWNER, achma.id, { name: 'Ачма с сыром' });
+  await createMenuService({ pool, clock }).update(
+    { userId: OWNER },
+    achma.id,
+    { name: 'Ачма с сыром' },
+    'miniapp',
+  );
 });
 
 afterAll(async () => {
@@ -128,7 +125,7 @@ afterAll(async () => {
 
 describe('venue analytics', () => {
   it('counts offers, bookings and revenue by local day of creation', async () => {
-    expect(await service.get(OWNER, { from: '2026-09-21', to: '2026-09-25' })).toEqual({
+    expect(await service.get({ userId: OWNER }, { from: '2026-09-21', to: '2026-09-25' })).toEqual({
       from: '2026-09-21',
       to: '2026-09-25',
       timezone: 'Asia/Yekaterinburg',
@@ -189,7 +186,7 @@ describe('venue analytics', () => {
   });
 
   it('covers the last 7 local days including today by default', async () => {
-    const analytics = await service.get(OWNER, {});
+    const analytics = await service.get({ userId: OWNER }, {});
     expect(analytics).toMatchObject({
       from: '2026-09-19',
       to: '2026-09-25',
@@ -218,18 +215,17 @@ describe('venue analytics', () => {
       bookingsRedeemed: 1,
       revenueRub: 130,
     });
-    expect((await service.get(OWNER, { from: '2026-09-24' })).byDay.map((day) => day.date)).toEqual([
-      '2026-09-24',
-      '2026-09-25',
-    ]);
-    expect(await service.get(OWNER, { to: '2026-09-22' })).toMatchObject({
+    expect(
+      (await service.get({ userId: OWNER }, { from: '2026-09-24' })).byDay.map((day) => day.date),
+    ).toEqual(['2026-09-24', '2026-09-25']);
+    expect(await service.get({ userId: OWNER }, { to: '2026-09-22' })).toMatchObject({
       from: '2026-09-16',
       to: '2026-09-22',
     });
   });
 
   it('reports zeros for a quiet period', async () => {
-    expect(await service.get(OWNER, { from: '2026-09-24', to: '2026-09-24' })).toMatchObject({
+    expect(await service.get({ userId: OWNER }, { from: '2026-09-24', to: '2026-09-24' })).toMatchObject({
       offersShown: 0,
       bookingsCreated: 0,
       acceptRate: 0,
@@ -241,7 +237,7 @@ describe('venue analytics', () => {
   });
 
   it('allows periods of up to 92 days', async () => {
-    const longest = await service.get(OWNER, { from: '2026-06-26', to: '2026-09-25' });
+    const longest = await service.get({ userId: OWNER }, { from: '2026-06-26', to: '2026-09-25' });
     expect(longest.byDay).toHaveLength(92);
     expect(longest.bookingsCreated).toBe(12);
     for (const period of [
@@ -249,7 +245,10 @@ describe('venue analytics', () => {
       { from: '2026-09-25', to: '2026-09-24' },
       { from: '2026-09-26' },
     ]) {
-      await expect(service.get(OWNER, period)).rejects.toMatchObject({ status: 400, code: 'invalid_period' });
+      await expect(service.get({ userId: OWNER }, period)).rejects.toMatchObject({
+        status: 400,
+        code: 'invalid_period',
+      });
     }
   });
 
@@ -262,7 +261,7 @@ describe('venue analytics', () => {
         status: index < 23 ? 'accepted' : 'shown',
       });
     }
-    expect(await service.get(OWNER, { from: '2026-06-02', to: '2026-06-02' })).toMatchObject({
+    expect(await service.get({ userId: OWNER }, { from: '2026-06-02', to: '2026-06-02' })).toMatchObject({
       offersShown: 40,
       offersAccepted: 23,
       acceptRate: 0.58,
@@ -277,7 +276,7 @@ describe('venue analytics', () => {
       createdAt: at('2026-06-01T05:00:00Z'),
       expiresAt: at('2026-06-01T06:00:00Z'),
     });
-    expect(await service.get(OWNER, { from: '2026-06-01', to: '2026-06-01' })).toMatchObject({
+    expect(await service.get({ userId: OWNER }, { from: '2026-06-01', to: '2026-06-01' })).toMatchObject({
       bookingsCreated: 1,
       bookingsRedeemed: 0,
       bookingsExpired: 1,
@@ -285,12 +284,15 @@ describe('venue analytics', () => {
     });
     const { rows } = await pool.query('select status from bookings where id = $1', [overdue]);
     expect(rows).toEqual([{ status: 'expired' }]);
-    await background.idle();
-    expect(notifier.bookingExpired.mock.calls.map(([notice]) => notice.booking.id)).toEqual([overdue]);
+    expect(
+      recorded.events.flatMap((event) => (event.kind === 'booking_expired' ? [event.booking.id] : [])),
+    ).toEqual([overdue]);
   });
 
   it('validates dates and needs a venue', async () => {
-    await expect(service.get(OWNER, { from: '2026-02-30', to: '25.09.2026' })).rejects.toMatchObject({
+    await expect(
+      service.get({ userId: OWNER }, { from: '2026-02-30', to: '25.09.2026' }),
+    ).rejects.toMatchObject({
       status: 400,
       code: 'validation_failed',
       details: [
@@ -298,7 +300,12 @@ describe('venue analytics', () => {
         { path: 'to', message: 'must be a calendar date in YYYY-MM-DD format' },
       ],
     });
-    await expect(service.get(GUEST, { to: 'today' })).rejects.toMatchObject({ code: 'validation_failed' });
-    await expect(service.get(GUEST, {})).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
+    await expect(service.get({ userId: GUEST }, { to: 'today' })).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+    await expect(service.get({ userId: GUEST }, {})).rejects.toMatchObject({
+      status: 404,
+      code: 'venue_not_found',
+    });
   });
 });

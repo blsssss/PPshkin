@@ -1,8 +1,10 @@
 import type { Venue } from '../../domain/models.ts';
+import { can } from '../../domain/roles.ts';
+import type { Workplace } from '../../services/access.ts';
 import { VENUE_CATEGORIES, VENUE_CATEGORY_LABELS, type VenueCategory } from '../../domain/vocabulary.ts';
 import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
 import { isOpenAt } from '../../shared/time.ts';
-import { answerStale } from '../callbacks.ts';
+import { answerStale, parseId } from '../callbacks.ts';
 import type { BotContext, BotKit, MessageInput } from '../context.ts';
 import { link, locationRequest, routeUrl } from '../keyboards.ts';
 import type { ActiveFlow, Flow } from '../state.ts';
@@ -10,7 +12,16 @@ import { BUTTONS } from '../texts.ts';
 import type { VenueDraft } from './flows.ts';
 import { parseCoordinates, parseHours, parseTitle, VENUE_ADDRESS_LIMIT, VENUE_NAME_LIMIT } from './input.ts';
 import { homeButtons, pairs, startLinkUrl, uploadRow, venueButton } from './keyboards.ts';
-import { clearFlow, findVenue, knownFailure, saveFlow, withDefault, wizardSteps } from './owner.ts';
+import {
+  actorAt,
+  clearFlow,
+  knownFailure,
+  pickScreen,
+  resolveScope,
+  saveFlow,
+  withDefault,
+  wizardSteps,
+} from './owner.ts';
 import {
   ADDRESS_INVALID,
   ADDRESS_QUESTION,
@@ -176,13 +187,16 @@ function inputReply(
 }
 
 export function createWorkspace({ services }: BotKit) {
-  const { venues, bookings, deals, demo } = services;
+  const { venues, bookings, deals, demo, companies } = services;
   const onStep = wizardSteps(createFlowOf, staleScreen);
 
-  async function homeScreen(ctx: BotContext, venue: Venue): Promise<OutgoingMessage> {
-    const [active, live] = await Promise.all([
-      bookings.listForVenue(ctx.user.id, { status: 'active' }),
-      deals.list(ctx.user.id, 'active'),
+  async function homeScreen(ctx: BotContext, place: Workplace): Promise<OutgoingMessage> {
+    const { venue } = place;
+    const actor = actorAt(ctx, venue);
+    const [active, live, places] = await Promise.all([
+      bookings.listForVenue(actor, { status: 'active' }),
+      deals.list(actor, 'active'),
+      companies.workplaces(ctx.user.id),
     ]);
     return {
       text: homeText({
@@ -192,19 +206,24 @@ export function createWorkspace({ services }: BotKit) {
         liveDeals: live.length,
         guestUrl: startLinkUrl(ctx.botUsername, { kind: 'v', value: String(venue.id) }),
       }),
-      buttons: homeButtons(ctx.miniAppEnabled),
+      buttons: homeButtons(place, ctx.miniAppEnabled, places.length > 1),
     };
   }
 
   async function workspaceScreen(ctx: BotContext): Promise<OutgoingMessage> {
-    const venue = await findVenue(venues, ctx.user.id);
-    return venue ? homeScreen(ctx, venue) : connectScreen(demo.enabled);
+    const resolution = await resolveScope(companies, ctx, 'venue.view');
+    if (resolution.kind === 'ok') return homeScreen(ctx, resolution.scope.place);
+    if (resolution.kind === 'pick') return pickScreen(resolution.places);
+    return connectScreen(demo.enabled);
   }
 
-  async function existingScreen(ctx: BotContext, venue: Venue | null): Promise<OutgoingMessage> {
-    if (!venue) return connectScreen(demo.enabled);
-    const home = await homeScreen(ctx, venue);
+  async function existingScreen(ctx: BotContext): Promise<OutgoingMessage> {
+    const home = await workspaceScreen(ctx);
     return { ...home, text: withNote(VENUE_ERROR_TEXTS.venue_exists, home.text) };
+  }
+
+  async function activate(ctx: BotContext, venueId: number): Promise<void> {
+    if (ctx.state.activeVenueId !== venueId) await ctx.saveState({ ...ctx.state, activeVenueId: venueId });
   }
 
   async function showStep(ctx: BotContext, next: CreateState): Promise<void> {
@@ -213,9 +232,12 @@ export function createWorkspace({ services }: BotKit) {
   }
 
   async function begin(ctx: BotContext): Promise<void> {
-    const venue = await findVenue(venues, ctx.user.id);
-    if (venue) await ctx.answer({ message: await existingScreen(ctx, venue) });
-    else await showStep(ctx, { step: 'name', draft: {} });
+    const places = await companies.workplaces(ctx.user.id);
+    const mayCreate =
+      places.length === 0 ||
+      places.some((place) => place.company !== null && can(place.role, 'venue.create'));
+    if (mayCreate) await showStep(ctx, { step: 'name', draft: {} });
+    else await ctx.answer({ message: await existingScreen(ctx) });
   }
 
   const chooseCategory = onStep(['category'], async (ctx, flow, [value]) => {
@@ -247,15 +269,21 @@ export function createWorkspace({ services }: BotKit) {
       return;
     }
     await ctx.answer({ message: { text: venueSummary(venue) } });
+    let created: Venue;
     try {
-      await venues.create(ctx.user.id, venue);
+      created = await venues.create(ctx.user.id, venue);
     } catch (error) {
-      knownFailure(error, ['venue_exists']);
+      const code = knownFailure(error, ['venue_exists', 'venue_forbidden', 'company_required']);
       await clearFlow(ctx, 'venue_create');
-      await ctx.reply(await existingScreen(ctx, await findVenue(venues, ctx.user.id)));
+      await ctx.reply(
+        code === 'venue_exists'
+          ? await existingScreen(ctx)
+          : { text: VENUE_ERROR_TEXTS[code], buttons: [[venueButton(VENUE_BUTTONS.home, 'home')]] },
+      );
       return;
     }
     await clearFlow(ctx, 'venue_create');
+    await activate(ctx, created.id);
     await ctx.reply({
       text: VENUE_CREATED,
       buttons: [uploadRow(), [venueButton(VENUE_BUTTONS.later, 'home')]],
@@ -272,11 +300,17 @@ export function createWorkspace({ services }: BotKit) {
       venue = await demo.claimVenue(ctx.user.id);
     } catch (error) {
       knownFailure(error, ['venue_exists']);
-      await ctx.answer({ message: await existingScreen(ctx, await findVenue(venues, ctx.user.id)) });
+      await ctx.answer({ message: await existingScreen(ctx) });
       return;
     }
     await clearFlow(ctx, 'venue_create');
-    const home = await homeScreen(ctx, venue);
+    await activate(ctx, venue.id);
+    const place = (await companies.workplaces(ctx.user.id)).find((entry) => entry.venue.id === venue.id);
+    if (!place) {
+      await ctx.answer({ message: await workspaceScreen(ctx) });
+      return;
+    }
+    const home = await homeScreen(ctx, place);
     await ctx.answer({ message: { ...home, text: withNote(DEMO_VENUE_CLAIMED, home.text) } });
   }
 
@@ -293,6 +327,22 @@ export function createWorkspace({ services }: BotKit) {
       await ctx.answer({ message: await workspaceScreen(ctx) });
     },
     claimDemo,
+    pick: async (ctx: BotContext, [value]: string[]) => {
+      const venueId = parseId(value);
+      const places = await companies.workplaces(ctx.user.id);
+      if (venueId === null || !places.some((place) => place.venue.id === venueId)) {
+        await answerStale(ctx);
+        return;
+      }
+      await activate(ctx, venueId);
+      await ctx.answer({ message: await workspaceScreen(ctx) });
+    },
+    switchVenue: async (ctx: BotContext) => {
+      const places = await companies.workplaces(ctx.user.id);
+      await ctx.answer({
+        message: places.length > 1 ? pickScreen(places) : await workspaceScreen(ctx),
+      });
+    },
     create: withDefault(begin, { cat: chooseCategory, hours: chooseHours, restart, ok: confirm, cancel }),
     onInput: async (ctx: BotContext, message: MessageInput): Promise<boolean> => {
       const flow = createFlowOf(ctx);

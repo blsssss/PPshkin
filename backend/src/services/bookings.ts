@@ -10,7 +10,7 @@ import {
 } from '../domain/bookings.ts';
 import { dealOverAt } from '../domain/deals.ts';
 import type { Booking, Deal, MenuItem, Venue } from '../domain/models.ts';
-import type { BookingNotice, Notifier } from '../ports/notifier.ts';
+import type { Notifications } from '../ports/notifier.ts';
 import * as bookings from '../repositories/bookings.ts';
 import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
@@ -18,16 +18,20 @@ import * as menuItems from '../repositories/menu-items.ts';
 import * as offers from '../repositories/offers.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
-import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, conflict, notFound, unprocessable } from '../shared/errors.ts';
 import { dayRange, isLocalDate, isOpenAt } from '../shared/time.ts';
 import type { ConsentsService } from './consents.ts';
 import { lockMenuItem } from './menu.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { requireUnblockedUser } from './moderation.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
+import type { AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export const BOOKING_LIST_FILTERS = ['active', 'history'] as const;
 export type BookingListFilter = (typeof BOOKING_LIST_FILTERS)[number];
+
+export type BookingChannel = 'bot' | 'miniapp';
 
 export const GUEST_HISTORY_LIMIT = 50;
 export const VENUE_HISTORY_LIMIT = 100;
@@ -53,13 +57,13 @@ export interface VenueBookingsQuery {
 }
 
 export interface BookingsService {
-  create(userId: number, input: BookingInput): Promise<BookingView>;
+  create(userId: number, input: BookingInput, channel: BookingChannel): Promise<BookingView>;
   list(userId: number, status: BookingListFilter): Promise<BookingView[]>;
   get(userId: number, bookingId: number): Promise<BookingView>;
   qr(userId: number, bookingId: number): Promise<Buffer>;
   cancel(userId: number, bookingId: number): Promise<BookingView>;
-  listForVenue(ownerId: number, query: VenueBookingsQuery): Promise<BookingView[]>;
-  redeem(ownerId: number, code: string): Promise<BookingView>;
+  listForVenue(actor: VenueActor, query: VenueBookingsQuery): Promise<BookingView[]>;
+  redeem(actor: VenueActor, code: string, channel: AuditChannel): Promise<BookingView>;
   expireDue(scope: ExpireScope): Promise<Booking[]>;
 }
 
@@ -67,12 +71,15 @@ export interface BookingsDependencies {
   pool: Pool;
   clock: Clock;
   consents: Pick<ConsentsService, 'requirePersonalData'>;
-  notifier: Notifier;
-  background: BackgroundTasks;
+  notifications: Notifications;
   generateCode?: () => string;
+  verificationRequired?: boolean;
 }
 
-type NoticeKind = keyof Notifier;
+interface Reservation {
+  view: BookingView;
+  soldOut: Deal | null;
+}
 
 const CODE_ATTEMPTS = 5;
 const DAY_MS = 86_400_000;
@@ -90,9 +97,10 @@ async function lockBookableItem(
   db: Queryable,
   itemId: number,
   userId: number,
+  verifiedOnly: boolean,
 ): Promise<{ item: MenuItem; venue: Venue }> {
   const [found] = await menuItems.findByIds(db, [itemId]);
-  const venue = found ? await venues.findVisible(db, found.venueId, userId) : null;
+  const venue = found ? await venues.findVisible(db, found.venueId, userId, verifiedOnly) : null;
   if (!found || !venue) throw notFound('menu_item_not_found', 'Menu item not found');
   const item = await lockMenuItem(db, found.venueId, found.id);
   if (!item.isAvailable) {
@@ -141,22 +149,25 @@ export function createBookingsService({
   pool,
   clock,
   consents,
-  notifier,
-  background,
+  notifications,
   generateCode = generateBookingCode,
+  verificationRequired = false,
 }: BookingsDependencies): BookingsService {
-  const notify = (kind: NoticeKind, notice: BookingNotice) => {
-    background.run(`${kind}-${notice.booking.id}`, () => notifier[kind](notice));
-  };
-
   async function expire(scope: ExpireScope): Promise<Booking[]> {
-    const expired = await bookings.expireDue(pool, scope, clock.now());
-    if (expired.length === 0) return expired;
-    const places = await venues.findByIds(pool, [...new Set(expired.map((booking) => booking.venueId))]);
-    for (const booking of expired) {
-      const venue = places.find((place) => place.id === booking.venueId);
-      if (venue) notify('bookingExpired', { booking, venue });
-    }
+    const now = clock.now();
+    const expired = await withTransaction(pool, async (client) => {
+      const released = await bookings.expireDue(client, scope, now);
+      if (released.length === 0) return released;
+      const places = await venues.findByIds(client, [...new Set(released.map((booking) => booking.venueId))]);
+      for (const booking of released) {
+        const venue = places.find((place) => place.id === booking.venueId);
+        if (!venue) continue;
+        await notifications.enqueue(client, { kind: 'booking_expired', booking, venue }, now);
+        await notifications.enqueue(client, { kind: 'venue_booking_expired', booking, venue }, now);
+      }
+      return released;
+    });
+    if (expired.length > 0) notifications.flush();
     return expired;
   }
 
@@ -164,10 +175,12 @@ export function createBookingsService({
     client: Queryable,
     userId: number,
     input: BookingInput,
+    channel: BookingChannel,
     now: Date,
-  ): Promise<BookingView> {
+  ): Promise<Reservation> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
-    const { item, venue } = await lockBookableItem(client, input.menuItemId, userId);
+    await requireUnblockedUser(client, userId);
+    const { item, venue } = await lockBookableItem(client, input.menuItemId, userId, verificationRequired);
     const deal =
       input.dealId === undefined ? null : await lockBookableDeal(client, item, venue, input.dealId, now);
     if (!isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone)) {
@@ -190,11 +203,12 @@ export function createBookingsService({
       });
       if (!accepted) throw notFound('offer_not_found', 'Offer not found');
     }
-    if (deal) {
-      await deals.update(client, deal.id, { quantityLeft: deal.quantityLeft - 1, endsAt: deal.endsAt });
-    }
+    const left = deal
+      ? await deals.update(client, deal.id, { quantityLeft: deal.quantityLeft - 1, endsAt: deal.endsAt })
+      : null;
     const fields = {
       userId,
+      channel,
       venueId: venue.id,
       menuItemId: item.id,
       dealId: deal?.id ?? null,
@@ -207,7 +221,7 @@ export function createBookingsService({
     };
     for (let attempt = 1; attempt <= CODE_ATTEMPTS; attempt += 1) {
       const booking = await bookings.insertIfCodeFree(client, { ...fields, code: generateCode() });
-      if (booking) return { booking, item, venue };
+      if (booking) return { view: { booking, item, venue }, soldOut: left?.quantityLeft === 0 ? left : null };
     }
     throw new Error(`No free booking code in venue ${venue.id} after ${CODE_ATTEMPTS} attempts`);
   }
@@ -215,7 +229,8 @@ export function createBookingsService({
   async function settle(
     lock: (client: Queryable) => Promise<Booking | null>,
     complete: (client: Queryable, booking: Booking, now: Date) => Promise<BookingView>,
-    kind: 'bookingCancelled' | 'bookingRedeemed',
+    kind: 'venue_booking_cancelled' | 'booking_redeemed',
+    expiredKinds: readonly 'booking_expired'[],
   ): Promise<BookingView> {
     const now = clock.now();
     const { view, expired } = await withTransaction(pool, async (client) => {
@@ -223,24 +238,46 @@ export function createBookingsService({
       if (!booking) throw bookingNotFound();
       if (booking.status === 'expired') throw bookingExpired();
       if (booking.status !== 'active') throw bookingNotActive();
-      if (booking.expiresAt <= now) {
-        const released = await bookings.release(client, booking.id, 'expired', now);
-        return { view: await bookingView(client, released), expired: true };
+      const outcome =
+        booking.expiresAt <= now
+          ? {
+              view: await bookingView(client, await bookings.release(client, booking.id, 'expired', now)),
+              expired: true,
+            }
+          : { view: await complete(client, booking, now), expired: false };
+      const { booking: settled, venue } = outcome.view;
+      for (const notice of outcome.expired ? expiredKinds : [kind]) {
+        await notifications.enqueue(client, { kind: notice, booking: settled, venue }, now);
       }
-      return { view: await complete(client, booking, now), expired: false };
+      return outcome;
     });
-    notify(expired ? 'bookingExpired' : kind, { booking: view.booking, venue: view.venue });
+    notifications.flush();
     if (expired) throw bookingExpired();
     return view;
   }
 
   return {
-    async create(userId, input) {
+    async create(userId, input, channel) {
       await consents.requirePersonalData(userId);
       await expire({ userId });
       const now = clock.now();
-      const view = await withTransaction(pool, (client) => reserve(client, userId, input, now));
-      notify('bookingCreated', { booking: view.booking, venue: view.venue });
+      const view = await withTransaction(pool, async (client) => {
+        const reservation = await reserve(client, userId, input, channel, now);
+        const { booking, venue } = reservation.view;
+        await notifications.enqueue(client, { kind: 'venue_booking_created', booking, venue }, now);
+        if (channel === 'miniapp') {
+          await notifications.enqueue(client, { kind: 'booking_confirmed', booking, venue }, now);
+        }
+        if (reservation.soldOut) {
+          await notifications.enqueue(
+            client,
+            { kind: 'venue_deal_sold_out', deal: reservation.soldOut, venue },
+            now,
+          );
+        }
+        return reservation.view;
+      });
+      notifications.flush();
       return view;
     },
 
@@ -271,17 +308,18 @@ export function createBookingsService({
         (client) => bookings.lockForUser(client, userId, bookingId),
         async (client, booking, now) =>
           bookingView(client, await bookings.release(client, booking.id, 'cancelled', now)),
-        'bookingCancelled',
+        'venue_booking_cancelled',
+        ['booking_expired'],
       );
     },
 
-    async listForVenue(ownerId, { status, date }) {
+    async listForVenue(actor, { status, date }) {
       if (date !== undefined && !isLocalDate(date)) {
         throw badRequest('validation_failed', 'Request validation failed', [
           { path: 'date', message: 'must be a calendar date in YYYY-MM-DD format' },
         ]);
       }
-      const venue = await requireOwnedVenue(pool, ownerId);
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       await expire({ venueId: venue.id });
       const created = date === undefined ? null : dayRange(date, venue.timezone);
       const found =
@@ -299,15 +337,27 @@ export function createBookingsService({
       return bookingViews(pool, found);
     },
 
-    async redeem(ownerId, input) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async redeem(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'booking.redeem');
       const code = normalizeBookingCode(input);
       if (code === null) throw bookingNotFound();
       return settle(
         (client) => bookings.lockLatestByCode(client, venue.id, code),
         async (client, booking, now) => {
-          const redeemed = await bookings.markRedeemed(client, booking.id, now);
+          const redeemed = await bookings.markRedeemed(client, booking.id, actor.userId, now);
           const view = await bookingView(client, redeemed);
+          await audit.record(
+            client,
+            {
+              venueId: venue.id,
+              actorUserId: actor.userId,
+              action: 'booking.redeem',
+              target: { type: 'booking', id: redeemed.id },
+              channel,
+              details: { code: redeemed.code, priceRub: redeemed.priceRub },
+            },
+            now,
+          );
           if (redeemed.userId !== null) {
             await meals.insert(client, {
               ...bookingMeal(redeemed, view.item),
@@ -319,7 +369,8 @@ export function createBookingsService({
           }
           return view;
         },
-        'bookingRedeemed',
+        'booking_redeemed',
+        ['booking_expired'],
       );
     },
 

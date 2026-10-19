@@ -1,3 +1,5 @@
+import { can } from '../../domain/roles.ts';
+import type { Workplace } from '../../services/access.ts';
 import type { Button } from '../../ports/messenger.ts';
 import { payload } from '../callbacks.ts';
 import { callback, openApp } from '../keyboards.ts';
@@ -22,11 +24,25 @@ export function homeRow(): Button[] {
   return [venueButton(VENUE_BUTTONS.home, 'home')];
 }
 
-export function homeButtons(miniAppEnabled: boolean): Button[][] {
+export function homeButtons(place: Workplace, miniAppEnabled: boolean, severalVenues: boolean): Button[][] {
+  const { role } = place;
+  const inCompany = place.company !== null;
+  const switchRow = severalVenues ? [[venueButton(VENUE_BUTTONS.switchVenue, 'switch')]] : [];
+  if (!can(role, 'menu.edit')) {
+    return [
+      [venueButton(VENUE_BUTTONS.redeem, 'redeem'), venueButton(VENUE_BUTTONS.bookings, 'bk')],
+      [venueButton(VENUE_BUTTONS.deals, 'deals')],
+      ...switchRow,
+    ];
+  }
+  const statsRow = [venueButton(VENUE_BUTTONS.stats, 'stats', 'today')];
+  if (inCompany && can(role, 'team.invite')) statsRow.push(venueButton(VENUE_BUTTONS.team, 'team'));
   return [
     [venueButton(VENUE_BUTTONS.menu, 'menu'), venueButton(VENUE_BUTTONS.deals, 'deals')],
     [venueButton(VENUE_BUTTONS.bookings, 'bk'), venueButton(VENUE_BUTTONS.redeem, 'redeem')],
-    [venueButton(VENUE_BUTTONS.stats, 'stats', 'today')],
+    statsRow,
+    ...(inCompany && can(role, 'venue.create') ? [[venueButton(VENUE_BUTTONS.create, 'new')]] : []),
+    ...switchRow,
     ...appRow(miniAppEnabled),
   ];
 }

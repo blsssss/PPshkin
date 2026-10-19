@@ -2,6 +2,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
 import { jsonSchemaTransform, jsonSchemaTransformObject } from 'fastify-type-provider-zod';
+import { DOCS_CSP } from './csp.ts';
 import { STANDARD_ERROR_HEADERS } from './schemas/common.ts';
 import { IMAGE_UPLOAD_BODY } from './uploads.ts';
 
@@ -82,10 +83,16 @@ export const API_TAGS = [
   { name: 'consents', description: 'Согласия на обработку данных и персональные предложения' },
   { name: 'diary', description: 'Дневник питания' },
   { name: 'venue', description: 'Кабинет заведения' },
+  { name: 'company', description: 'Компании, сотрудники и приглашения' },
   { name: 'catalog', description: 'Заведения и горящие предложения рядом' },
   { name: 'recommendations', description: 'Подбор блюд рядом и обратная связь' },
   { name: 'insights', description: 'Профиль пищевого поведения' },
   { name: 'bookings', description: 'Брони гостя' },
+  { name: 'complaints', description: 'Жалобы гостя на заведения и брони' },
+  {
+    name: 'admin',
+    description: 'Модерация: проверка компаний, жалобы и блокировки, только для администраторов',
+  },
 ];
 
 export async function registerOpenApi(app: FastifyInstance) {
@@ -121,5 +128,5 @@ export async function registerOpenApi(app: FastifyInstance) {
     },
     transformObject: (input) => tidyDocument(jsonSchemaTransformObject(input)),
   });
-  await app.register(swaggerUi, { routePrefix: '/docs' });
+  await app.register(swaggerUi, { routePrefix: '/docs', staticCSP: DOCS_CSP });
 }

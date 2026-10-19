@@ -1,6 +1,8 @@
 import { Counter } from '@maxhub/max-ui';
 import { Link, useLocation } from 'react-router';
 import { useBookings } from '../features/bookings/queries.ts';
+import { useVenueBookings } from '../features/venue/dealQueries.ts';
+import { useVenue } from '../features/venue/queries.ts';
 import { PixelIcon, type PixelIconName } from '../shared/ui/PixelIcon.tsx';
 import { cx } from '../shared/ui/cx.ts';
 import styles from './TabBar.module.css';
@@ -28,12 +30,15 @@ function isTabActive(tab: Pick<Tab, 'sections'>, pathname: string): boolean {
 export function TabBar() {
   const { pathname } = useLocation();
   const active = useBookings('active').data?.length ?? 0;
+  const hasVenue = Boolean(useVenue().data);
+  const waiting = useVenueBookings('active', null, { enabled: hasVenue }).data?.length ?? 0;
+  const counts: Readonly<Record<string, number>> = { '/bookings': active, '/venue': hasVenue ? waiting : 0 };
   return (
     <nav className={styles.bar} aria-label="Разделы" data-tabbar="">
       <div className={styles.inner}>
         {TABS.map((tab) => {
           const current = isTabActive(tab, pathname);
-          const count = tab.to === '/bookings' ? active : 0;
+          const count = counts[tab.to] ?? 0;
           return (
             <Link
               key={tab.to}

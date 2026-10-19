@@ -2,17 +2,21 @@ import { byAction } from '../callbacks.ts';
 import type { BotKit, BotModule } from '../context.ts';
 import { createBookingScreens } from './bookings.ts';
 import { createDealScreens } from './deals.ts';
-import { createMenuScreens, type ImportWaiting } from './menu.ts';
+import { createMenuScreens } from './menu.ts';
+import { createReportScreens } from './reports.ts';
 import { withDefault } from './owner.ts';
 import { createStatsScreens } from './stats.ts';
+import { createTeamScreens } from './team.ts';
 import { createWorkspace } from './workspace.ts';
 
-export function createVenueModule(kit: BotKit, waiting: ImportWaiting): BotModule {
+export function createVenueModule(kit: BotKit): BotModule {
   const workspace = createWorkspace(kit);
-  const menu = createMenuScreens(kit, waiting);
+  const menu = createMenuScreens(kit);
   const deals = createDealScreens(kit);
   const bookings = createBookingScreens(kit);
   const stats = createStatsScreens(kit);
+  const team = createTeamScreens(kit);
+  const reports = createReportScreens(kit);
 
   return {
     commands: { venue: workspace.open },
@@ -21,6 +25,10 @@ export function createVenueModule(kit: BotKit, waiting: ImportWaiting): BotModul
         home: workspace.home,
         new: workspace.create,
         demo: workspace.claimDemo,
+        pick: workspace.pick,
+        switch: workspace.switchVenue,
+        team: team.team,
+        inv: team.invites,
         menu: withDefault(menu.show, { upload: menu.upload, cancel: menu.cancelUpload }),
         imp: byAction({ apply: menu.apply }),
         deals: deals.list,
@@ -31,6 +39,8 @@ export function createVenueModule(kit: BotKit, waiting: ImportWaiting): BotModul
         rd_ok: bookings.redeem,
         rd_no: bookings.keep,
         stats: stats.show,
+        co: reports.closeout,
+        rp: reports.reports,
       }),
     },
     flows: {
@@ -38,7 +48,8 @@ export function createVenueModule(kit: BotKit, waiting: ImportWaiting): BotModul
       menu_upload: menu.onUpload,
       deal_wizard: deals.onInput,
       redeem_input: bookings.onCode,
+      closeout_input: reports.onWriteOff,
     },
-    startLinks: { r: bookings.staffLink },
+    startLinks: { r: bookings.staffLink, j: team.joinLink },
   };
 }

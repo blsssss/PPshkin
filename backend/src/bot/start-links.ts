@@ -1,4 +1,4 @@
-const START_LINK_KINDS = ['v', 'd', 'r'] as const;
+const START_LINK_KINDS = ['v', 'd', 'r', 'c', 'j'] as const;
 export type StartLinkKind = (typeof START_LINK_KINDS)[number];
 
 export interface StartLink {
@@ -6,7 +6,7 @@ export interface StartLink {
   value: string;
 }
 
-const START_LINK = /^([vdr])_([A-Za-z0-9]{1,32})$/;
+const START_LINK = /^([vdrcj])_([A-Za-z0-9]{1,32})$/;
 
 function isStartLinkKind(value: string | undefined): value is StartLinkKind {
   return START_LINK_KINDS.some((kind) => kind === value);

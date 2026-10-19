@@ -22,6 +22,7 @@ import {
   type RecommendationStatus,
 } from '../services/recommendations.ts';
 import { proactiveOffersJob } from './proactive-offers.ts';
+import { createNotificationSettingsService } from '../services/notification-settings.ts';
 
 const pool = testPool();
 const MOSCOW_16_10 = '2026-09-26T13:10:00Z';
@@ -335,6 +336,23 @@ describe('proactive_offers job', () => {
       await job().run(clock.now());
 
       expect(sendToUser).toHaveBeenCalledTimes(sent);
+    });
+
+    it('follows the quiet hours the guest set and sends at night when they are off', async () => {
+      const settings = createNotificationSettingsService({ pool, clock });
+      clock.set('2026-09-26T11:00:00Z');
+      await users.setLocation(pool, GUEST, BAUMANA, new Date(clock.now().getTime() - HOUR));
+      world.profile = profileWith({ sweetTooth: { share: 0.75, typicalHour: 14 } });
+      await settings.update(GUEST, { quietHours: { from: '13:00', until: '15:00' } });
+
+      await job().run(clock.now());
+      expect(sendToUser).not.toHaveBeenCalled();
+
+      clock.set('2026-09-26T20:00:00Z');
+      world.profile = profileWith({ sweetTooth: { share: 0.75, typicalHour: 23 } });
+      await settings.update(GUEST, { quietHours: null });
+      await job().run(clock.now());
+      expect(sendToUser).toHaveBeenCalledTimes(1);
     });
   });
 

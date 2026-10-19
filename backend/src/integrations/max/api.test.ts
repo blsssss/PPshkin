@@ -530,6 +530,50 @@ describe('MAX attachments', () => {
     ]);
   });
 
+  it('uploads a file in two steps and returns its token', async () => {
+    const data = Buffer.from('%PDF-1.4');
+    const { api, requests } = setup([
+      json({ url: 'https://upload.max.test/f?sig=abc' }),
+      json({ token: 'file-token' }),
+    ]);
+    expect(await api.uploadFile(data, 'report.pdf', 'application/pdf')).toBe('file-token');
+    expect(upload(requests)).toEqual([
+      'https://max.test/uploads?type=file',
+      'https://upload.max.test/f?sig=abc',
+    ]);
+    expect(requests[0]).toMatchObject({ method: 'POST', headers: { authorization: TOKEN } });
+    expect(requests[1]!.headers.authorization).toBeUndefined();
+    expect(requests[1]!.body).toEqual([
+      { name: 'data', filename: 'report.pdf', type: 'application/pdf', bytes: data },
+    ]);
+  });
+
+  it('takes the file token from the upload endpoint when the upload returns none', async () => {
+    const { api } = setup([
+      json({ url: 'https://upload.max.test/f', token: 'endpoint-token' }),
+      json({ fileId: 5 }),
+    ]);
+    expect(await api.uploadFile(Buffer.from('x'), 'report.csv', 'text/csv')).toBe('endpoint-token');
+  });
+
+  it('fails when a file upload has no token anywhere', async () => {
+    const { api } = setup([json({ url: 'https://upload.max.test/f' }), json({})]);
+    await expect(api.uploadFile(Buffer.from('x'), 'report.csv', 'text/csv')).rejects.toMatchObject({
+      name: 'MaxApiError',
+      code: 'unexpected.response',
+    });
+  });
+
+  it('retries sending a message with a file while it is not ready', async () => {
+    const { api, requests, sleeps } = setup([notReady(), sent()]);
+    await api.sendMessage(
+      { userId: 1 },
+      { text: 'Отчёт', attachments: [{ type: 'file', payload: { token: 'file-token' } }] },
+    );
+    expect(requests).toHaveLength(2);
+    expect(sleeps).toEqual([1000]);
+  });
+
   it('fails when the upload returns no token', async () => {
     const { api } = setup([json({ url: 'https://upload.max.test/u' }), json({ photos: {} })]);
     await expect(api.uploadImage(Buffer.from('x'), 'qr.png', 'image/png')).rejects.toMatchObject({

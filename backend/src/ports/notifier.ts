@@ -1,13 +1,7 @@
-import type { Booking, Venue } from '../domain/models.ts';
+import type { Queryable } from '../db/pool.ts';
+import type { NotificationEvent } from '../domain/notifications.ts';
 
-export interface BookingNotice {
-  booking: Booking;
-  venue: Venue;
-}
-
-export interface Notifier {
-  bookingCreated(notice: BookingNotice): Promise<void>;
-  bookingCancelled(notice: BookingNotice): Promise<void>;
-  bookingRedeemed(notice: BookingNotice): Promise<void>;
-  bookingExpired(notice: BookingNotice): Promise<void>;
+export interface Notifications {
+  enqueue(db: Queryable, event: NotificationEvent, now: Date): Promise<void>;
+  flush(): void;
 }

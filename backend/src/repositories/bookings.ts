@@ -56,6 +56,7 @@ export type BookingScope = { userId: number } | { venueId: number } | Record<str
 
 export interface NewBooking {
   userId: number;
+  channel: 'bot' | 'miniapp';
   venueId: number;
   menuItemId: number;
   dealId: number | null;
@@ -84,8 +85,8 @@ export async function insertIfCodeFree(db: Queryable, booking: NewBooking): Prom
     const row = await one<BookingRow>(
       db,
       `insert into bookings as b (user_id, venue_id, menu_item_id, deal_id, offer_id, code, item_name, price_rub,
-                                  kcal, expires_at, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                  kcal, expires_at, created_at, channel)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning ${BOOKING_COLUMNS}`,
       [
         booking.userId,
@@ -99,6 +100,7 @@ export async function insertIfCodeFree(db: Queryable, booking: NewBooking): Prom
         booking.kcal,
         booking.expiresAt,
         booking.createdAt,
+        booking.channel,
       ],
     );
     await db.query('release savepoint booking_code');
@@ -120,6 +122,28 @@ export async function listActiveItemIds(db: Queryable, userId: number): Promise<
     [userId],
   );
   return rows.map((row) => row.menu_item_id);
+}
+
+export async function findById(db: Queryable, id: number): Promise<Booking | null> {
+  const row = await maybeOne<BookingRow>(db, `select ${BOOKING_COLUMNS} from bookings b where b.id = $1`, [
+    id,
+  ]);
+  return row ? mapBooking(row) : null;
+}
+
+export async function listActiveExpiringBetween(
+  db: Queryable,
+  { from, to }: TimeRange,
+  minHoldMs: number,
+): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
+    `select ${BOOKING_COLUMNS} from bookings b
+      where b.status = 'active' and b.expires_at > $1 and b.expires_at <= $2
+        and b.expires_at - b.created_at >= make_interval(secs => $3)
+      order by b.expires_at, b.id`,
+    [from, to, minHoldMs / 1000],
+  );
+  return rows.map(mapBooking);
 }
 
 export async function findForUser(db: Queryable, userId: number, id: number): Promise<Booking | null> {
@@ -232,25 +256,44 @@ export async function release(
   return mapBooking(row);
 }
 
-export async function cancelActiveForUser(db: Queryable, userId: number, at: Date): Promise<void> {
-  await db.query(
+export async function cancelActiveForUser(db: Queryable, userId: number, at: Date): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
     `with cancelled as (
-       update bookings set status = 'cancelled', resolved_at = $2
-        where user_id = $1 and status = 'active'
-       returning deal_id
-     )
-     ${restockDeals('cancelled', '$2')}`,
+       update bookings as b set status = 'cancelled', resolved_at = $2
+        where b.user_id = $1 and b.status = 'active'
+       returning ${BOOKING_COLUMNS}
+     ), restocked as (${restockDeals('cancelled', '$2')})
+     select ${BOOKING_COLUMNS} from cancelled b order by b.id`,
     [userId, at],
   );
+  return rows.map(mapBooking);
 }
 
-export async function markRedeemed(db: Queryable, id: number, at: Date): Promise<Booking> {
+export async function cancelActiveInVenue(db: Queryable, venueId: number, at: Date): Promise<Booking[]> {
+  const { rows } = await db.query<BookingRow>(
+    `with cancelled as (
+       update bookings as b set status = 'cancelled', resolved_at = $2
+        where b.venue_id = $1 and b.status = 'active'
+       returning ${BOOKING_COLUMNS}
+     ), restocked as (${restockDeals('cancelled', '$2')})
+     select ${BOOKING_COLUMNS} from cancelled b order by b.id`,
+    [venueId, at],
+  );
+  return rows.map(mapBooking);
+}
+
+export async function markRedeemed(
+  db: Queryable,
+  id: number,
+  redeemedBy: number,
+  at: Date,
+): Promise<Booking> {
   const row = await one<BookingRow>(
     db,
-    `update bookings as b set status = 'redeemed', resolved_at = $2
+    `update bookings as b set status = 'redeemed', resolved_at = $2, redeemed_by = $3
       where b.id = $1 and b.status = 'active'
       returning ${BOOKING_COLUMNS}`,
-    [id, at],
+    [id, at, redeemedBy],
   );
   return mapBooking(row);
 }

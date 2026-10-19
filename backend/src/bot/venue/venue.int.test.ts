@@ -2,10 +2,13 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { answers, botChat, guestWorld, sent, texts } from '../../../test/bot.ts';
 import { seedGuest } from '../../../test/bookings.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../../test/database.ts';
+import { fakeLogger, fakeMessenger } from '../../../test/max-api.ts';
 import { testConfig } from '../../../test/services.ts';
 import { OWNER_ID } from '../../../test/venue-bot.ts';
 import { createServices } from '../../container.ts';
 import { createDedupingHandler } from '../../integrations/max/dedupe.ts';
+import { createOutbox } from '../../notifications/outbox.ts';
+import type { Messenger } from '../../ports/messenger.ts';
 import { createRecognition } from '../../recognition/index.ts';
 import { createBackgroundTasks } from '../../shared/background.ts';
 import { createBot } from '../index.ts';
@@ -27,6 +30,20 @@ function realVenueChat() {
   const config = testConfig();
   const world = guestWorld();
   const recognitionTasks = createBackgroundTasks({ error: vi.fn() });
+  const sendToUser = vi.fn<Messenger['sendToUser']>(() => Promise.resolve({ messageId: 'mid.notice' }));
+  const outbox = createOutbox({
+    pool,
+    clock: world.clock,
+    bot: () => ({ messenger: fakeMessenger({ sendToUser }), username: 'ppshkin_bot' }),
+    miniAppEnabled: false,
+    diaryDay: (userId) => services.diary.day(userId),
+    reports: {
+      build: (venue, from, to) => services.reports.build(venue, from, to),
+      file: (venue, report, format) => services.reports.file(venue, report, format),
+    },
+    background: recognitionTasks,
+    logger: fakeLogger(),
+  });
   const services = createServices({
     config,
     pool,
@@ -40,6 +57,7 @@ function realVenueChat() {
       menuTimeoutMs: config.CHADGPT_MENU_TIMEOUT_MS,
     }),
     background: recognitionTasks,
+    notifications: outbox,
   });
   Object.assign(world.services, services);
   const states = createChatStateStore(pool);
@@ -48,17 +66,18 @@ function realVenueChat() {
     pool,
     createHandler: (deps) => createDedupingHandler(pool, createBot({ ...deps, states })),
   });
-  const settle = async () => {
+  const notices = async () => {
     await recognitionTasks.idle();
-    await chat.background.idle();
-    return chat.takeOutgoing();
+    const delivered = sendToUser.mock.calls.map(([userId, message]) => ({ userId, ...message }));
+    sendToUser.mockClear();
+    return delivered;
   };
-  return { chat, services, states, settle };
+  return { chat, services, states, notices };
 }
 
 describe('venue bot on Postgres', () => {
   it('connects a venue, imports the menu, publishes a deal and redeems a booking', async () => {
-    const { chat, services, states, settle } = realVenueChat();
+    const { chat, services, states, notices } = realVenueChat();
     await seedGuest(pool, OWNER_ID, chat.world.clock.now());
     await seedGuest(pool, GUEST, chat.world.clock.now());
 
@@ -74,23 +93,35 @@ describe('venue bot on Postgres', () => {
       'Заведение создано. Следующий шаг: загрузите меню, это займёт минуту.',
     );
     const { rows: venues } = await pool.query(
-      'select owner_id, lat, lon, opens_at, closes_at from venues where owner_id = $1',
+      `select v.owner_id, v.lat, v.lon, v.opens_at, v.closes_at, m.role
+         from venues v join memberships m on m.company_id = v.company_id
+        where m.user_id = $1`,
       [OWNER_ID],
     );
     expect(venues).toEqual([
-      { owner_id: OWNER_ID, lat: 55.788712, lon: 49.122134, opens_at: '08:00:00', closes_at: '22:00:00' },
+      {
+        owner_id: null,
+        lat: 55.788712,
+        lon: 49.122134,
+        opens_at: '08:00:00',
+        closes_at: '22:00:00',
+        role: 'owner',
+      },
     ]);
     const { rows: owners } = await pool.query('select location_lat from users where id = $1', [OWNER_ID]);
     expect(owners).toEqual([{ location_lat: null }]);
 
     await chat.press('vn:menu:upload');
-    const [started, summary] = sent([...(await chat.send(MENU)), ...(await settle())]);
+    const [started] = sent(await chat.send(MENU));
     expect(started?.text).toBe('Разбираю меню, это несколько секунд.');
+    const [summary] = await notices();
+    expect(summary?.userId).toBe(OWNER_ID);
     expect(summary?.text).toMatch(/^Распознал 2 позиции:\nЭклер, 200 ₽, около \d+ ккал\nКапучино, 180 ₽, /);
+    const apply = summary?.buttons?.[0]?.[0];
 
-    const applied = await chat.press(summary?.buttons[0]?.[0]?.payload ?? '');
+    const applied = await chat.press(apply?.kind === 'callback' ? apply.payload : '', 'mid.notice');
     expect(texts(applied).at(-1)).toBe('Добавлено 2 позиции.');
-    const menu = await services.menu.list(OWNER_ID);
+    const menu = await services.menu.list({ userId: OWNER_ID });
     expect(menu.map((item) => [item.name, item.priceRub, item.nutritionSource])).toEqual([
       ['Эклер', 200, 'estimate'],
       ['Капучино', 180, 'estimate'],
@@ -104,10 +135,17 @@ describe('venue bot on Postgres', () => {
     await chat.press('vn:dl:until:120');
     const published = await chat.press('vn:dl:ok');
     expect(texts(published).at(-1)).toMatch(/^Опубликовано\. Гости рядом увидят предложение в подборе\./);
-    const [deal] = await services.deals.list(OWNER_ID, 'active');
+    const [deal] = await services.deals.list({ userId: OWNER_ID }, 'active');
     expect(deal?.deal).toMatchObject({ priceRub: 120, quantityTotal: 3, quantityLeft: 3 });
 
-    const booking = await services.bookings.create(GUEST, { menuItemId: eclair.id, dealId: deal?.deal.id });
+    const booking = await services.bookings.create(
+      GUEST,
+      { menuItemId: eclair.id, dealId: deal?.deal.id },
+      'bot',
+    );
+    expect((await notices()).map(({ userId, text }) => [userId, text.split('\n')[0]])).toEqual([
+      [OWNER_ID, `**Новая бронь ${booking.booking.code}**`],
+    ]);
     const [list] = answers(await chat.press('vn:bk', 'mid.home'));
     expect(list?.message?.text).toContain(`${booking.booking.code}: Эклер, 120 ₽, до`);
 
@@ -117,6 +155,8 @@ describe('venue bot on Postgres', () => {
       'Погашено: Эклер, 120 ₽. Блюдо добавлено гостю в дневник.',
     ]);
     expect(texts(await chat.send('/venue')).at(-1)).toContain('Активных броней: 0, горящих позиций: 1');
+    const { rows: redeemers } = await pool.query('select redeemed_by from bookings');
+    expect(redeemers).toEqual([{ redeemed_by: OWNER_ID }]);
     const { rows: meals } = await pool.query('select title, source from meals where user_id = $1', [GUEST]);
     expect(meals).toEqual([{ title: 'Эклер', source: 'booking' }]);
     expect((await states.load(OWNER_ID)).flow).toBeNull();

@@ -1,15 +1,16 @@
 import type { Queryable } from '../db/pool.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
-import type { Sleep } from '../integrations/max/sleep.ts';
 import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
-import type { BackgroundTasks } from '../shared/background.ts';
 import type { Clock } from '../shared/clock.ts';
 import type { BotKit } from './context.ts';
+import { createAdminModule } from './admin/index.ts';
 import { createBookingsModule } from './guest/bookings.ts';
+import { createComplaintsModule } from './guest/complaints.ts';
 import { createMealsModule } from './guest/meals.ts';
 import { createOffersModule } from './guest/offers.ts';
 import { createOnboardingModule } from './guest/onboarding.ts';
+import { createNotificationsModule } from './guest/notifications.ts';
 import { createProfileModule } from './guest/profile.ts';
 import { createVenuesModule } from './guest/venues.ts';
 import { createRegistry } from './registry.ts';
@@ -26,8 +27,6 @@ export interface BotDependencies {
   logger: MaxLogger;
   bot: { username: string; userId: number };
   miniAppEnabled: boolean;
-  background: BackgroundTasks;
-  sleep: Sleep;
 }
 
 const GUEST_MODULES = [
@@ -35,7 +34,9 @@ const GUEST_MODULES = [
   createMealsModule,
   createOffersModule,
   createBookingsModule,
+  createComplaintsModule,
   createProfileModule,
+  createNotificationsModule,
   createVenuesModule,
 ];
 
@@ -49,7 +50,8 @@ export function createBot(deps: BotDependencies): UpdateHandler {
     openStartLink: (ctx, link) => registry.openStartLink(ctx, link),
   };
   for (const createModule of GUEST_MODULES) registry.add(createModule(kit));
-  registry.add(createVenueModule(kit, { clock: deps.clock, background: deps.background, sleep: deps.sleep }));
+  registry.add(createVenueModule(kit));
+  registry.add(createAdminModule(kit));
   return createRouter({
     db: deps.pool,
     services: deps.services,

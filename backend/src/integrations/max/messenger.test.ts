@@ -12,6 +12,7 @@ function setup() {
     answerCallback: vi.fn(() => Promise.resolve()),
     sendAction: vi.fn(() => Promise.resolve()),
     uploadImage: vi.fn(() => Promise.resolve('photo-token')),
+    uploadFile: vi.fn(() => Promise.resolve('file-token')),
     download: vi.fn(() => Promise.resolve(Buffer.from('file'))),
   });
   return { api, messenger: createMaxMessenger(api, BOT) };
@@ -98,6 +99,47 @@ describe('MAX messenger', () => {
         ],
       }),
     );
+  });
+
+  it('attaches files after photos and before the keyboard', async () => {
+    const { api, messenger } = setup();
+    await messenger.sendToUser(101, {
+      text: 'Отчёт',
+      imageTokens: ['qr'],
+      fileTokens: ['csv'],
+      buttons: [[callback()]],
+    });
+    expect(api.sendMessage).toHaveBeenCalledWith(
+      { userId: 101 },
+      expect.objectContaining({
+        attachments: [
+          { type: 'image', payload: { token: 'qr' } },
+          { type: 'file', payload: { token: 'csv' } },
+          expect.objectContaining({ type: 'inline_keyboard' }),
+        ],
+      }),
+    );
+    await messenger.sendToUser(101, { text: 'Файл', fileTokens: ['pdf'] });
+    expect(api.sendMessage).toHaveBeenLastCalledWith(
+      { userId: 101 },
+      expect.objectContaining({ attachments: [{ type: 'file', payload: { token: 'pdf' } }] }),
+    );
+  });
+
+  it('refuses more than four files in one message', async () => {
+    const { messenger } = setup();
+    await expect(
+      messenger.sendToUser(101, { text: 'x', fileTokens: ['1', '2', '3', '4', '5'] }),
+    ).rejects.toThrow('at most 4 are allowed');
+  });
+
+  it('uploads only CSV and PDF files with their content types', async () => {
+    const { api, messenger } = setup();
+    expect(await messenger.uploadFile(Buffer.from('x'), 'report.CSV')).toBe('file-token');
+    await messenger.uploadFile(Buffer.from('x'), 'report.pdf');
+    expect(api.uploadFile).toHaveBeenNthCalledWith(1, Buffer.from('x'), 'report.CSV', 'text/csv');
+    expect(api.uploadFile).toHaveBeenNthCalledWith(2, Buffer.from('x'), 'report.pdf', 'application/pdf');
+    await expect(messenger.uploadFile(Buffer.from('x'), 'report.exe')).rejects.toThrow('Only .csv and .pdf');
   });
 
   it('always sends attachments when editing so the old keyboard disappears', async () => {

@@ -11,7 +11,6 @@ import { dayTotals, remainingKcal } from '../src/domain/nutrition/totals.ts';
 import { onlyKnownTags, type ConsentKind } from '../src/domain/vocabulary.ts';
 import type { MaxApi } from '../src/integrations/max/api.ts';
 import { createMaxMessenger } from '../src/integrations/max/messenger.ts';
-import type { Sleep } from '../src/integrations/max/sleep.ts';
 import type { MaxButton, MaxNewMessageBody } from '../src/integrations/max/types.ts';
 import type { IncomingEvent, UpdateHandler } from '../src/ports/messenger.ts';
 import type { DishEstimate } from '../src/ports/recognition.ts';
@@ -240,6 +239,7 @@ export function guestWorld(options: { now?: string; services?: Partial<Services>
       },
     },
     account: {
+      soleOwnerships: vi.fn(() => Promise.resolve([])),
       deleteAccount: vi.fn(() => {
         meals.splice(0);
         consents.clear();
@@ -286,6 +286,9 @@ export function guestWorld(options: { now?: string; services?: Partial<Services>
 export function worldDatabase(world: GuestWorld): Queryable {
   return {
     query<Row extends QueryResultRow>(text: string) {
+      if (text.includes('update users set last_seen_at')) {
+        return Promise.resolve({ rows: [] as Row[], rowCount: 0 } as QueryResult<Row>);
+      }
       if (!text.includes('insert into users')) {
         return Promise.reject(new Error(`Unexpected query: ${text.slice(0, 40)}`));
       }
@@ -367,7 +370,6 @@ export interface ChatOptions {
   miniAppEnabled?: boolean;
   api?: Partial<MaxApi>;
   pool?: Queryable;
-  sleep?: Sleep;
   createHandler?: (deps: BotDependencies) => UpdateHandler;
 }
 
@@ -376,12 +378,6 @@ export function botChat(options: ChatOptions = {}) {
   const states = options.states ?? memoryStates();
   const logger = fakeLogger();
   const background = createBackgroundTasks(logger);
-  const sleep =
-    options.sleep ??
-    vi.fn<Sleep>((ms) => {
-      world.clock.advance(ms);
-      return Promise.resolve();
-    });
   const screens = new Map<string, Screen>();
   const pressed = new Map<string, string | null>();
   let outbox: Outgoing[] = [];
@@ -432,8 +428,6 @@ export function botChat(options: ChatOptions = {}) {
     logger,
     bot: BOT_IDENTITY,
     miniAppEnabled: options.miniAppEnabled ?? false,
-    background,
-    sleep,
   });
 
   const guest = { id: GUEST_ID, firstName: 'Анна', username: null };
@@ -469,7 +463,6 @@ export function botChat(options: ChatOptions = {}) {
     states,
     logger,
     background,
-    sleep,
     api,
     messenger,
     handler,

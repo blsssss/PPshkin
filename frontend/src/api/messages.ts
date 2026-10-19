@@ -59,6 +59,13 @@ const MESSAGES: Record<string, string> = {
   booking_expired: 'Срок брони истёк',
   booking_not_active: 'Бронь уже погашена или отменена',
   invalid_period: 'Неверный период',
+  deal_not_finished: 'Позиция ещё идёт, отметьте списание после окончания',
+  closeout_locked: 'Списание можно менять только в течение 48 часов после первой отметки',
+  writeoff_too_large: 'Нельзя списать больше, чем осталось непроданных и незабронированных порций',
+  messenger_unavailable: 'Бот сейчас недоступен, попробуйте позже',
+  complaint_exists: 'Жалоба на эту бронь уже отправлена',
+  complaint_limit: 'Сегодня отправлено максимум жалоб, повторите завтра',
+  user_blocked: 'Аккаунт заблокирован, бронирование недоступно. Напишите в поддержку',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {

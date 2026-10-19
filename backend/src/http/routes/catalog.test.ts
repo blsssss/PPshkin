@@ -28,7 +28,13 @@ function catalogStub(overrides: Partial<CatalogService> = {}): CatalogService {
   return {
     venues: () => Promise.resolve({ items: [venueCard], demoCenterUsed: false }),
     venue: () =>
-      Promise.resolve({ venue: sampleVenue, openNow: false, menu: [sampleMenuItem], deals: [dealCard.deal] }),
+      Promise.resolve({
+        venue: sampleVenue,
+        seller: null,
+        openNow: false,
+        menu: [sampleMenuItem],
+        deals: [dealCard.deal],
+      }),
     deals: () => Promise.resolve({ items: [dealCard], demoCenterUsed: false }),
     deal: () => Promise.resolve(dealCard),
     ...overrides,

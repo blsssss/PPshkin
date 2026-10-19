@@ -17,6 +17,7 @@ const BOOKING_TEXT = [
 
 const ROUTE = { type: 'link', text: 'Маршрут', url: 'https://yandex.ru/maps/?pt=49.1221,55.7887&z=17&l=map' };
 const CANCEL = { type: 'callback', text: 'Отменить бронь', payload: 'bk:cancel:31' };
+const PROBLEM = { type: 'callback', text: 'Проблема с бронью', payload: 'cp:new:31' };
 const SHOW_QR = { type: 'callback', text: 'Показать QR', payload: 'bk:qr:31' };
 const PRESSED = 'Эта кнопка уже нажата';
 
@@ -74,15 +75,23 @@ describe('booking from an offer card', () => {
       notification: null,
       message: { text: card?.text, buttons: [], images: [] },
     });
-    expect(chat.world.bookings.create).toHaveBeenCalledWith(GUEST_ID, {
-      menuItemId: 11,
-      dealId: 21,
-      offerId: 501,
-    });
+    expect(chat.world.bookings.create).toHaveBeenCalledWith(
+      GUEST_ID,
+      {
+        menuItemId: 11,
+        dealId: 21,
+        offerId: 501,
+      },
+      'bot',
+    );
     expect(chat.world.bookings.qr).toHaveBeenCalledWith(GUEST_ID, 31);
     expect(chat.uploadImage).toHaveBeenCalledWith(SAMPLE_PNG, 'booking-K7M2QX.png', 'image/png');
     const [booking] = sent(replies);
-    expect(booking).toMatchObject({ text: BOOKING_TEXT, images: ['qr-token'], buttons: [[ROUTE], [CANCEL]] });
+    expect(booking).toMatchObject({
+      text: BOOKING_TEXT,
+      images: ['qr-token'],
+      buttons: [[ROUTE], [CANCEL], [PROBLEM]],
+    });
     expect(chat.states.peek(GUEST_ID).offerQueue).toBeNull();
   });
 
@@ -101,6 +110,7 @@ describe('booking from an offer card', () => {
         },
       ],
       [CANCEL],
+      [PROBLEM],
     ]);
   });
 
@@ -127,7 +137,7 @@ describe('booking from an offer card', () => {
     expect(booking).toMatchObject({
       text: BOOKING_TEXT,
       images: [],
-      buttons: [[SHOW_QR], [ROUTE], [CANCEL]],
+      buttons: [[SHOW_QR], [ROUTE], [CANCEL], [PROBLEM]],
     });
     expect(chat.logger.warn).toHaveBeenCalledWith(
       { err: expect.any(MaxApiError) as unknown, userId: GUEST_ID, bookingId: 31 },
@@ -141,7 +151,7 @@ describe('booking from an offer card', () => {
     const replies = await chat.press('bk:new:11:21:0', 'mid.venue');
 
     expect(answers(replies)[0]?.notification).toBe('Бронирую');
-    expect(chat.world.bookings.create).toHaveBeenCalledWith(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    expect(chat.world.bookings.create).toHaveBeenCalledWith(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
     expect(sent(replies)[0]?.text).toBe(BOOKING_TEXT);
   });
 
@@ -153,13 +163,17 @@ describe('booking from an offer card', () => {
     const replies = await chat.press('bk:new:12:0:502', first?.messageId);
 
     expect(answers(replies)[0]?.notification).toBe('Бронирую');
-    expect(chat.world.bookings.create).toHaveBeenCalledWith(GUEST_ID, { menuItemId: 12, offerId: 502 });
+    expect(chat.world.bookings.create).toHaveBeenCalledWith(
+      GUEST_ID,
+      { menuItemId: 12, offerId: 502 },
+      'bot',
+    );
     expect(sent(replies)[0]?.text).toContain('Круассан с миндалём, 180 ₽');
   });
 
   it('marks demo venues in the booking', async () => {
     const chat = bookingChat();
-    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
     view.venue = { ...sampleVenue, isDemo: true };
 
     const [card] = sent(await chat.send('/bookings'));
@@ -302,7 +316,7 @@ describe('booking cancellation', () => {
     const kept = answers(await chat.press('bk:keep:31', messageId))[0];
     expect(kept?.message).toEqual({
       text: BOOKING_TEXT,
-      buttons: [[SHOW_QR], [ROUTE], [CANCEL]],
+      buttons: [[SHOW_QR], [ROUTE], [CANCEL], [PROBLEM]],
       images: [],
     });
     expect(chat.world.bookings.cancel).not.toHaveBeenCalled();
@@ -355,20 +369,20 @@ describe('booking cancellation', () => {
 describe('«Показать QR»', () => {
   it('attaches the QR to the booking in place', async () => {
     const chat = bookingChat();
-    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
 
     const answer = answers(await chat.press('bk:qr:31', 'mid.list'))[0];
 
     expect(answer?.message).toEqual({
       text: BOOKING_TEXT,
-      buttons: [[ROUTE], [CANCEL]],
+      buttons: [[ROUTE], [CANCEL], [PROBLEM]],
       images: ['qr-token'],
     });
   });
 
   it('says so when the QR cannot be shown', async () => {
     const chat = bookingChat({ upload: () => Promise.reject(new Error('timeout')) });
-    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
 
     const replies = await chat.press('bk:qr:31', 'mid.list');
 
@@ -384,7 +398,7 @@ describe('«Показать QR»', () => {
 
   it('does not show the QR of a finished booking', async () => {
     const chat = bookingChat();
-    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
     await chat.world.bookings.cancel(GUEST_ID, 31);
 
     const answer = answers(await chat.press('bk:qr:31', 'mid.list'))[0];
@@ -410,7 +424,7 @@ describe('/bookings', () => {
     const { bookings } = chat.world;
     const finish = async (menuItemId: number, status: BookingStatus, day: string) => {
       chat.world.clock.set(`2026-09-${day}T09:00:00Z`);
-      const view = await bookings.create(GUEST_ID, { menuItemId });
+      const view = await bookings.create(GUEST_ID, { menuItemId }, 'bot');
       view.booking = { ...view.booking, status, resolvedAt: chat.world.clock.now() };
     };
     await finish(11, 'redeemed', '12');
@@ -420,8 +434,8 @@ describe('/bookings', () => {
     await finish(12, 'redeemed', '16');
     await finish(13, 'cancelled', '17');
     chat.world.clock.set('2026-09-26T09:00:00Z');
-    await bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
-    await bookings.create(GUEST_ID, { menuItemId: 12 });
+    await bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
+    await bookings.create(GUEST_ID, { menuItemId: 12 }, 'bot');
 
     const replies = sent(await chat.send('/bookings'));
 
@@ -441,6 +455,7 @@ describe('/bookings', () => {
       [{ type: 'callback', text: 'Показать QR', payload: 'bk:qr:37' }],
       [ROUTE],
       [{ type: 'callback', text: 'Отменить бронь', payload: 'bk:cancel:37' }],
+      [{ type: 'callback', text: 'Проблема с бронью', payload: 'cp:new:37' }],
     ]);
     expect(bookings.list).toHaveBeenNthCalledWith(1, GUEST_ID, 'active');
     expect(bookings.list).toHaveBeenNthCalledWith(2, GUEST_ID, 'history');
@@ -448,7 +463,7 @@ describe('/bookings', () => {
 
   it('shows the history under the empty list', async () => {
     const chat = bookingChat();
-    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11 });
+    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11 }, 'bot');
     view.booking = { ...view.booking, status: 'redeemed' };
 
     expect(texts(await chat.send('/bookings'))).toEqual([
@@ -459,7 +474,7 @@ describe('/bookings', () => {
 
   it('escapes names in the history', async () => {
     const chat = bookingChat();
-    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11 });
+    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11 }, 'bot');
     view.booking = { ...view.booking, status: 'expired', itemName: 'Торт *дня*' };
 
     expect(texts(await chat.send('/bookings')).at(-1)).toBe(
@@ -476,7 +491,7 @@ describe('/bookings', () => {
 
   it('shows the time until which a booking holds in the venue time zone', async () => {
     const chat = bookingChat();
-    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 });
+    const view = await chat.world.bookings.create(GUEST_ID, { menuItemId: 11, dealId: 21 }, 'bot');
     view.venue = { ...sampleVenue, timezone: 'Asia/Yekaterinburg' };
 
     expect(sent(await chat.send('/bookings'))[0]?.text).toContain('Действует до 15:00.');

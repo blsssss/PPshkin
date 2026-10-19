@@ -8,7 +8,9 @@ import type { Clock } from '../shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../shared/errors.ts';
 import { isOpenAt, nextClosingAt } from '../shared/time.ts';
 import { lockMenuItem } from './menu.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
+import type { AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export const DEAL_STATUSES = ['scheduled', 'active', 'sold_out', 'ended', 'cancelled'] as const;
 export type DealStatus = (typeof DEAL_STATUSES)[number];
@@ -35,10 +37,10 @@ export interface DealPatch {
 }
 
 export interface DealsService {
-  list(ownerId: number, status: DealListFilter): Promise<DealView[]>;
-  create(ownerId: number, input: DealInput): Promise<DealView>;
-  update(ownerId: number, dealId: number, patch: DealPatch): Promise<DealView>;
-  cancel(ownerId: number, dealId: number): Promise<void>;
+  list(actor: VenueActor, status: DealListFilter): Promise<DealView[]>;
+  create(actor: VenueActor, input: DealInput, channel: AuditChannel): Promise<DealView>;
+  update(actor: VenueActor, dealId: number, patch: DealPatch, channel: AuditChannel): Promise<DealView>;
+  cancel(actor: VenueActor, dealId: number, channel: AuditChannel): Promise<void>;
 }
 
 interface DealsDependencies {
@@ -122,8 +124,8 @@ function dealExists() {
 
 export function createDealsService({ pool, clock }: DealsDependencies): DealsService {
   return {
-    async list(ownerId, status) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async list(actor, status) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       const now = clock.now();
       const found =
         status === 'active'
@@ -132,8 +134,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       return dealViews(pool, found, now);
     },
 
-    async create(ownerId, input) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async create(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, input.menuItemId);
         assertSellable(item, input.priceRub);
@@ -147,8 +149,26 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
             venueId: venue.id,
             menuItemId: item.id,
             priceRub: input.priceRub,
+            listPriceRub: item.priceRub,
             quantity: input.quantity,
             endsAt: input.endsAt,
+          },
+          now,
+        );
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'deal.create',
+            target: { type: 'deal', id: deal.id },
+            channel,
+            details: {
+              item: item.name,
+              priceRub: deal.priceRub,
+              quantity: deal.quantityTotal,
+              endsAt: deal.endsAt.toISOString(),
+            },
           },
           now,
         );
@@ -156,8 +176,8 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
       });
     },
 
-    async update(ownerId, dealId, patch) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async update(actor, dealId, patch, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
       return withTransaction(pool, async (client) => {
         const found = await deals.findInVenue(client, venue.id, dealId);
         if (!found) throw dealNotFound();
@@ -188,14 +208,54 @@ export function createDealsService({ pool, clock }: DealsDependencies): DealsSer
           quantityLeft,
           endsAt: patch.endsAt ?? deal.endsAt,
         });
+        const changes = {
+          ...(updated.quantityLeft === deal.quantityLeft ? {} : { quantityLeft: updated.quantityLeft }),
+          ...(updated.endsAt.getTime() === deal.endsAt.getTime()
+            ? {}
+            : { endsAt: updated.endsAt.toISOString() }),
+        };
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'deal.update',
+            target: { type: 'deal', id: deal.id },
+            channel,
+            details: { item: item.name, priceRub: deal.priceRub, changes },
+          },
+          now,
+        );
         return { deal: updated, item, status: dealStatus(updated, venue, now) };
       });
     },
 
-    async cancel(ownerId, dealId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
-      if (!(await deals.findInVenue(pool, venue.id, dealId))) throw dealNotFound();
-      await deals.cancelLiveInVenue(pool, venue.id, dealId, clock.now());
+    async cancel(actor, dealId, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'deal.edit');
+      const deal = await deals.findInVenue(pool, venue.id, dealId);
+      if (!deal) throw dealNotFound();
+      const now = clock.now();
+      await withTransaction(pool, async (client) => {
+        if (!(await deals.cancelLiveInVenue(client, venue.id, dealId, now))) return;
+        const [item] = await menuItems.findByIds(client, [deal.menuItemId]);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'deal.cancel',
+            target: { type: 'deal', id: deal.id },
+            channel,
+            details: {
+              item: item?.name ?? null,
+              priceRub: deal.priceRub,
+              quantityLeft: deal.quantityLeft,
+              endsAt: deal.endsAt.toISOString(),
+            },
+          },
+          now,
+        );
+      });
     },
   };
 }

@@ -28,6 +28,8 @@ const FlowSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('eat_location') }),
   z.object({ name: z.literal('meal_fix'), mealId: z.number().int().positive() }),
   z.object({ name: z.literal('meal_manual') }),
+  z.object({ name: z.literal('admin_block'), venueId: z.number().int().positive() }),
+  z.object({ name: z.literal('admin_reject'), companyId: z.number().int().positive() }),
   z.object({ name: z.literal('meal_text_confirm'), text: z.string().min(1), messageId }),
   z.object({
     name: z.literal('meal_candidates'),
@@ -44,6 +46,7 @@ const ChatStateSchema = z.object({
   offerQueue: OfferQueueSchema.nullable().default(null),
   pendingStart: z.string().max(128).nullable().default(null),
   contextualOfferOn: z.string().refine(isLocalDate).nullable().default(null),
+  activeVenueId: z.number().int().positive().nullable().default(null),
 });
 
 export type MealCandidate = z.infer<typeof MealCandidateSchema>;
@@ -57,6 +60,7 @@ export const EMPTY_CHAT_STATE: Readonly<ChatState> = Object.freeze({
   offerQueue: null,
   pendingStart: null,
   contextualOfferOn: null,
+  activeVenueId: null,
 });
 
 export function parseChatState(raw: unknown): ChatState {

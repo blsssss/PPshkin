@@ -12,6 +12,7 @@ import { LocationStep } from '../features/onboarding/LocationStep.tsx';
 import { OffersStep } from '../features/onboarding/OffersStep.tsx';
 import { WelcomeStep } from '../features/onboarding/WelcomeStep.tsx';
 import { BookingScreen, BookingsScreen, NewBookingScreen } from '../features/bookings/BookingScreens.tsx';
+import { NotificationsScreen } from '../features/profile/NotificationsScreen.tsx';
 import { ProfileScreen } from '../features/profile/ProfileScreen.tsx';
 import { VenueHomeScreen, VenueLinkScreen, VenueSettingsScreen } from '../features/venue/CabinetScreens.tsx';
 import { EditDealScreen, NewDealScreen, VenueDealsScreen } from '../features/venue/DealScreens.tsx';
@@ -72,6 +73,7 @@ export const appRoutes: RouteObject[] = [
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/target', element: <TargetScreen /> },
       { path: 'profile/tags', element: <TagsScreen /> },
+      { path: 'profile/notifications', element: <NotificationsScreen /> },
       { path: 'profile/consents/:kind', element: <ConsentTextScreen /> },
       { path: 'profile/delete', element: <DeleteAccountScreen /> },
       { path: 'profile/*', element: <Navigate to="/profile" replace /> },

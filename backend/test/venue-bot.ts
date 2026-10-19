@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { normalizeBookingCode } from '../src/domain/bookings.ts';
 import { dealOverAt } from '../src/domain/deals.ts';
+import { importScreen } from '../src/bot/venue/menu.ts';
 import { menuNameKey } from '../src/domain/menu-imports.ts';
 import type { Booking, Deal, MenuImport, MenuItem, ParsedMenuItem, Venue } from '../src/domain/models.ts';
 import type { VenueAnalytics } from '../src/services/analytics.ts';
@@ -8,14 +9,16 @@ import type { BookingView } from '../src/services/bookings.ts';
 import { dealStatus, type DealView } from '../src/services/deals.ts';
 import type { Services } from '../src/services/index.ts';
 import { byMenuOrder } from '../src/services/menu.ts';
-import { venueNotFound } from '../src/services/venues.ts';
+import { venueNotFound, type VenueActor, type Workplace } from '../src/services/access.ts';
+import { ROLE_PERMISSIONS, type Role } from '../src/domain/roles.ts';
 import type { Clock } from '../src/shared/clock.ts';
 import { conflict, notFound, unprocessable } from '../src/shared/errors.ts';
 import { addDays, localDate } from '../src/shared/time.ts';
-import { botChat, GUEST_ID, guestWorld, type ChatOptions, type Outgoing } from './bot.ts';
+import { BOT_IDENTITY, botChat, GUEST_ID, guestWorld, type ChatOptions, type Outgoing } from './bot.ts';
 import { sampleMenuItem, sampleVenue } from './venues.ts';
 
 export const OWNER_ID = GUEST_ID;
+export const OWNER_ACTOR = { userId: OWNER_ID, venueId: sampleVenue.id };
 export const VENUE_NOW = '2026-09-26T09:00:00Z';
 
 type VenueServices = Pick<Services, 'venues' | 'menu' | 'menuImports' | 'deals' | 'bookings' | 'analytics'>;
@@ -76,6 +79,8 @@ export function venueFake(clock: Clock) {
   };
   const state = {
     venue: null as Venue | null,
+    role: 'owner' as Role,
+    otherPlaces: [] as Workplace[],
     items: [] as MenuItem[],
     deals: [] as Deal[],
     imports: [] as MenuImport[],
@@ -90,8 +95,9 @@ export function venueFake(clock: Clock) {
   };
   const scripts = new Map<number, Recognized>();
 
-  const ownVenue = (ownerId: number): Venue => {
-    if (state.venue?.ownerId !== ownerId) throw venueNotFound();
+  const ownVenue = (actor: VenueActor): Venue => {
+    if (state.venue?.ownerId !== actor.userId) throw venueNotFound();
+    if (actor.venueId !== undefined && actor.venueId !== state.venue.id) throw venueNotFound();
     return state.venue;
   };
 
@@ -116,10 +122,10 @@ export function venueFake(clock: Clock) {
     return { booking: { ...booking }, item: { ...item }, venue: { ...state.venue } };
   };
 
-  const settleImport = (menuImport: MenuImport): MenuImport => {
+  const settleImport = (menuImport: MenuImport, force = false): MenuImport => {
     const script = scripts.get(menuImport.id);
     if (menuImport.status !== 'processing' || !script) return menuImport;
-    if (clock.now().getTime() < menuImport.createdAt.getTime() + script.afterMs) return menuImport;
+    if (!force && clock.now().getTime() < menuImport.createdAt.getTime() + script.afterMs) return menuImport;
     Object.assign(menuImport, {
       status: script.status,
       items: script.items,
@@ -129,8 +135,8 @@ export function venueFake(clock: Clock) {
     return menuImport;
   };
 
-  const startImport = async (ownerId: number, source: MenuImport['source']): Promise<MenuImport> => {
-    const venue = ownVenue(ownerId);
+  const startImport = async (actor: VenueActor, source: MenuImport['source']): Promise<MenuImport> => {
+    const venue = ownVenue(actor);
     await Promise.resolve();
     const menuImport: MenuImport = {
       id: nextId(),
@@ -148,8 +154,8 @@ export function venueFake(clock: Clock) {
     return { ...menuImport };
   };
 
-  const findImport = (ownerId: number, importId: number): MenuImport => {
-    const venue = ownVenue(ownerId);
+  const findImport = (actor: VenueActor, importId: number): MenuImport => {
+    const venue = ownVenue(actor);
     const found = state.imports.find(
       (candidate) => candidate.id === importId && candidate.venueId === venue.id,
     );
@@ -159,14 +165,14 @@ export function venueFake(clock: Clock) {
 
   const services: VenueServices = {
     venues: {
-      get: vi.fn((ownerId: number) => Promise.resolve().then(() => ({ ...ownVenue(ownerId) }))),
-      create: vi.fn<VenueServices['venues']['create']>(async (ownerId, input) => {
+      get: vi.fn((actor: VenueActor) => Promise.resolve().then(() => ({ ...ownVenue(actor) }))),
+      create: vi.fn<VenueServices['venues']['create']>(async (userId, input) => {
         await Promise.resolve();
         if (state.venue) throw conflict('venue_exists', 'You already have a venue');
         state.venue = {
           ...sampleVenue,
           id: nextId(),
-          ownerId,
+          ownerId: userId,
           name: input.name,
           address: input.address,
           category: input.category,
@@ -180,8 +186,8 @@ export function venueFake(clock: Clock) {
       update: () => Promise.reject(new Error('venues.update is not stubbed')),
     },
     menu: {
-      list: vi.fn(async (ownerId: number) => {
-        const venue = ownVenue(ownerId);
+      list: vi.fn(async (actor: VenueActor) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         return state.items
           .filter((item) => item.venueId === venue.id && item.archivedAt === null)
@@ -193,18 +199,19 @@ export function venueFake(clock: Clock) {
       archive: () => Promise.reject(new Error('menu.archive is not stubbed')),
     },
     menuImports: {
-      fromPhoto: vi.fn((ownerId: number) => startImport(ownerId, 'photo')),
-      fromText: vi.fn((ownerId: number) => startImport(ownerId, 'text')),
-      get: vi.fn((ownerId: number, importId: number) =>
-        Promise.resolve().then(() => ({ ...findImport(ownerId, importId) })),
+      fromPhoto: vi.fn((actor: VenueActor) => startImport(actor, 'photo')),
+      fromText: vi.fn((actor: VenueActor) => startImport(actor, 'text')),
+      get: vi.fn((actor: VenueActor, importId: number) =>
+        Promise.resolve().then(() => ({ ...findImport(actor, importId) })),
       ),
-      apply: vi.fn<VenueServices['menuImports']['apply']>(async (ownerId, importId, items) => {
+      failStale: () => Promise.reject(new Error('menuImports.failStale is not stubbed')),
+      apply: vi.fn<VenueServices['menuImports']['apply']>(async (actor, importId, items) => {
         await Promise.resolve();
-        const found = findImport(ownerId, importId);
+        const found = findImport(actor, importId);
         if (found.status === 'applied') throw conflict('import_already_applied', 'Already applied');
         if (found.status !== 'ready') throw conflict('import_not_ready', 'Not ready');
         found.status = 'applied';
-        const venue = ownVenue(ownerId);
+        const venue = ownVenue(actor);
         const onMenu = new Map(
           state.items
             .filter((item) => item.venueId === venue.id && item.archivedAt === null)
@@ -224,16 +231,16 @@ export function venueFake(clock: Clock) {
       }),
     },
     deals: {
-      list: vi.fn(async (ownerId: number) => {
-        const venue = ownVenue(ownerId);
+      list: vi.fn(async (actor: VenueActor) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         return state.deals
           .filter((deal) => deal.venueId === venue.id && isLive(deal))
           .sort((left, right) => left.endsAt.getTime() - right.endsAt.getTime())
           .map(dealView);
       }),
-      create: vi.fn<VenueServices['deals']['create']>(async (ownerId, input) => {
-        const venue = ownVenue(ownerId);
+      create: vi.fn<VenueServices['deals']['create']>(async (actor, input) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         const item = state.items.find((candidate) => candidate.id === input.menuItemId);
         if (item?.venueId !== venue.id) throw notFound('menu_item_not_found', 'Menu item not found');
@@ -255,8 +262,8 @@ export function venueFake(clock: Clock) {
         return dealView(deal);
       }),
       update: () => Promise.reject(new Error('deals.update is not stubbed')),
-      cancel: vi.fn(async (ownerId: number, dealId: number) => {
-        const venue = ownVenue(ownerId);
+      cancel: vi.fn(async (actor: VenueActor, dealId: number) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         const deal = state.deals.find(
           (candidate) => candidate.id === dealId && candidate.venueId === venue.id,
@@ -271,15 +278,15 @@ export function venueFake(clock: Clock) {
       get: () => Promise.reject(new Error('bookings.get is not stubbed')),
       qr: () => Promise.reject(new Error('bookings.qr is not stubbed')),
       cancel: () => Promise.reject(new Error('bookings.cancel is not stubbed')),
-      listForVenue: vi.fn(async (ownerId: number) => {
-        const venue = ownVenue(ownerId);
+      listForVenue: vi.fn(async (actor: VenueActor) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         return state.bookings
           .filter((booking) => booking.venueId === venue.id && booking.status === 'active')
           .map(bookingView);
       }),
-      redeem: vi.fn(async (ownerId: number, input: string) => {
-        const venue = ownVenue(ownerId);
+      redeem: vi.fn(async (actor: VenueActor, input: string) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         const code = normalizeBookingCode(input);
         const booking = state.bookings.findLast(
@@ -299,8 +306,8 @@ export function venueFake(clock: Clock) {
       expireDue: () => Promise.resolve([]),
     },
     analytics: {
-      get: vi.fn<VenueServices['analytics']['get']>(async (ownerId, period) => {
-        const venue = ownVenue(ownerId);
+      get: vi.fn<VenueServices['analytics']['get']>(async (actor, period) => {
+        const venue = ownVenue(actor);
         await Promise.resolve();
         const to = period.to ?? localDate(clock.now(), venue.timezone);
         return { ...state.analytics, from: period.from ?? addDays(to, -6), to };
@@ -308,9 +315,41 @@ export function venueFake(clock: Clock) {
     },
   };
 
+  const notStubbed = (name: string) => () => Promise.reject(new Error(`${name} is not stubbed`));
+
+  const companies = {
+    listMembers: vi.fn<Services['companies']['listMembers']>(() => Promise.resolve([])),
+    createInvite: vi.fn<Services['companies']['createInvite']>(notStubbed('companies.createInvite')),
+    previewInvite: vi.fn<Services['companies']['previewInvite']>(notStubbed('companies.previewInvite')),
+    acceptInvite: vi.fn<Services['companies']['acceptInvite']>(notStubbed('companies.acceptInvite')),
+    workplaces: vi.fn(() =>
+      Promise.resolve<Workplace[]>([
+        ...(state.venue
+          ? [
+              {
+                venue: { ...state.venue },
+                company: null,
+                role: state.role,
+                permissions: ROLE_PERMISSIONS[state.role],
+                venueScoped: false,
+                hiddenUntilVerified: false,
+              },
+            ]
+          : []),
+        ...state.otherPlaces,
+      ]),
+    ),
+  };
+
   const fake = {
     state,
     services,
+    companies,
+    finishImports(): MenuImport[] {
+      return state.imports
+        .filter((menuImport) => menuImport.status === 'processing')
+        .map((menuImport) => ({ ...settleImport(menuImport, true) }));
+    },
     seedVenue(overrides: Partial<Venue> = {}): Venue {
       state.venue = { ...sampleVenue, ownerId: OWNER_ID, ...overrides };
       return state.venue;
@@ -378,10 +417,26 @@ export function venueChat(
   world.consent('personal_data');
   const fake = venueFake(world.clock);
   Object.assign(world.services, fake.services);
+  Object.assign(world.services.companies, fake.companies);
   return { ...botChat({ ...options, world }), fake };
 }
 
 export type VenueChat = ReturnType<typeof venueChat>;
+
+export async function withImportResult(
+  chat: VenueChat,
+  replies: Promise<Outgoing[]>,
+  miniAppEnabled = false,
+): Promise<Outgoing[]> {
+  const direct = await replies;
+  for (const finished of chat.fake.finishImports()) {
+    await chat.messenger.sendToUser(
+      OWNER_ID,
+      importScreen(finished, { botUsername: BOT_IDENTITY.username, miniAppEnabled }),
+    );
+  }
+  return [...direct, ...chat.takeOutgoing()];
+}
 
 export async function withBackground(chat: VenueChat, replies: Promise<Outgoing[]>): Promise<Outgoing[]> {
   const direct = await replies;

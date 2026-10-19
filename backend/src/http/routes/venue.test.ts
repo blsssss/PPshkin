@@ -9,7 +9,7 @@ import type { DealsService, DealView } from '../../services/deals.ts';
 import type { MenuImportsService } from '../../services/menu-imports.ts';
 import type { MenuService } from '../../services/menu.ts';
 import type { VenuesService } from '../../services/venues.ts';
-import { conflict, notFound, unprocessable } from '../../shared/errors.ts';
+import { badRequest, conflict, forbidden, notFound, unprocessable } from '../../shared/errors.ts';
 
 let app: FastifyInstance | undefined;
 
@@ -20,6 +20,7 @@ afterEach(async () => {
 
 const owner = bearer('venue-token');
 const OWNER_ID = 202;
+const ACTOR = { userId: OWNER_ID };
 
 const dealView: DealView = { deal: sampleDeal, item: sampleMenuItem, status: 'active' };
 
@@ -104,6 +105,7 @@ function importsStub(overrides: Partial<MenuImportsService> = {}): MenuImportsSe
     fromText: () => Promise.resolve({ ...processing, source: 'text' }),
     get: () => Promise.resolve(readyImport),
     apply: () => Promise.resolve({ added: [sampleMenuItem], duplicates: [] }),
+    failStale: () => Promise.resolve([]),
     ...overrides,
   };
 }
@@ -197,14 +199,100 @@ describe('venue profile routes', () => {
       timezone: 'Europe/Moscow',
       isDemo: false,
     });
-    expect(create).toHaveBeenCalledWith(OWNER_ID, {
-      name: 'Кофейня «Зерно»',
+    expect(create).toHaveBeenCalledWith(
+      OWNER_ID,
+      {
+        name: 'Кофейня «Зерно»',
+        address: 'ул. Баумана, 36',
+        category: 'coffee',
+        location: { lat: 55.7887, lon: 49.1221 },
+        opensAt: '20:00',
+        closesAt: '02:00',
+      },
+      {},
+    );
+  });
+
+  it('creates the venue in the chosen company', async () => {
+    const create = vi.fn<VenuesService['create']>(() => Promise.resolve(sampleVenue));
+    app = await buildTestApp({ services: { venues: venuesStub({ create }) } });
+    const base = {
+      name: 'Зерно',
       address: 'ул. Баумана, 36',
       category: 'coffee',
       location: { lat: 55.7887, lon: 49.1221 },
-      opensAt: '20:00',
-      closesAt: '02:00',
+    };
+
+    const inCompany = await app.inject({
+      method: 'POST',
+      url: '/api/v1/venue',
+      headers: owner,
+      payload: { ...base, companyId: 3 },
     });
+    const separate = await app.inject({
+      method: 'POST',
+      url: '/api/v1/venue',
+      headers: owner,
+      payload: { ...base, newCompany: true },
+    });
+
+    expect(inCompany.statusCode).toBe(201);
+    expect(separate.statusCode).toBe(201);
+    expect(create.mock.calls.map(([, , target]) => target)).toEqual([
+      { companyId: 3, newCompany: undefined },
+      { companyId: undefined, newCompany: true },
+    ]);
+  });
+
+  it('refuses a company and a new company together', async () => {
+    const create = vi.fn<VenuesService['create']>();
+    app = await buildTestApp({ services: { venues: venuesStub({ create }) } });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/venue',
+      headers: owner,
+      payload: {
+        name: 'Зерно',
+        address: 'ул. Баумана, 36',
+        category: 'coffee',
+        location: { lat: 55.7887, lon: 49.1221 },
+        companyId: 3,
+        newCompany: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_failed' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('passes the venue id of the query to the service', async () => {
+    const get = vi.fn<VenuesService['get']>(() => Promise.resolve(sampleVenue));
+    app = await buildTestApp({ services: { venues: venuesStub({ get }) } });
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/venue?venueId=8', headers: owner });
+
+    expect(response.statusCode).toBe(200);
+    expectContract(response, 'GET', '/api/v1/venue');
+    expect(get).toHaveBeenCalledWith({ userId: OWNER_ID, venueId: 8 });
+    const bad = await app.inject({ method: 'GET', url: '/api/v1/venue?venueId=abc', headers: owner });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it.each([
+    [400, 'venue_required', badRequest('venue_required', 'Pass venueId')],
+    [403, 'venue_forbidden', forbidden('venue_forbidden', 'No')],
+  ])('answers %s %s from the service', async (status, code, error) => {
+    app = await buildTestApp({
+      services: { venues: venuesStub({ get: () => Promise.reject(error) }) },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/venue', headers: owner });
+
+    expect(response.statusCode).toBe(status);
+    expectContract(response, 'GET', '/api/v1/venue');
+    expect(response.json()).toMatchObject({ code });
   });
 
   it('validates the venue fields', async () => {
@@ -276,7 +364,7 @@ describe('venue profile routes', () => {
     });
     expect(patched.statusCode).toBe(200);
     expectContract(patched, 'PATCH', '/api/v1/venue');
-    expect(update).toHaveBeenCalledWith(OWNER_ID, { closesAt: '23:00' });
+    expect(update).toHaveBeenCalledWith(ACTOR, { closesAt: '23:00' }, 'miniapp');
 
     const empty = await app.inject({ method: 'PATCH', url: '/api/v1/venue', headers: owner, payload: {} });
     expect(empty.statusCode).toBe(400);
@@ -306,7 +394,7 @@ describe('menu routes', () => {
     expect(response.statusCode).toBe(201);
     expectContract(response, 'POST', '/api/v1/venue/menu/items');
     expect(response.json()).toEqual(menuItemDto);
-    expect(create).toHaveBeenCalledWith(OWNER_ID, payload);
+    expect(create).toHaveBeenCalledWith(ACTOR, payload, 'miniapp');
 
     for (const invalid of [
       { ...payload, priceRub: 0 },
@@ -342,7 +430,7 @@ describe('menu routes', () => {
     });
     expect(response.statusCode).toBe(200);
     expectContract(response, 'PATCH', '/api/v1/venue/menu/items/{id}');
-    expect(update).toHaveBeenCalledWith(OWNER_ID, 11, { description: null, isAvailable: false });
+    expect(update).toHaveBeenCalledWith(ACTOR, 11, { description: null, isAvailable: false }, 'miniapp');
 
     for (const [url, payload] of [
       ['/api/v1/venue/menu/items/11', {}],
@@ -394,14 +482,14 @@ describe('menu routes', () => {
     });
     expect(response.statusCode).toBe(204);
     expectContract(response, 'DELETE', '/api/v1/venue/menu/items/{id}');
-    expect(archive).toHaveBeenCalledWith(OWNER_ID, 11);
+    expect(archive).toHaveBeenCalledWith(ACTOR, 11, 'miniapp');
   });
 });
 
 describe('menu import routes', () => {
   it('starts a photo import', async () => {
     const fromPhoto = vi.fn<MenuImportsService['fromPhoto']>(() =>
-      importsStub().fromPhoto(OWNER_ID, Buffer.alloc(0)),
+      importsStub().fromPhoto({ userId: OWNER_ID }, Buffer.alloc(0)),
     );
     app = await buildTestApp({ services: { menuImports: importsStub({ fromPhoto }) } });
     const upload = multipart([
@@ -424,7 +512,7 @@ describe('menu import routes', () => {
       createdAt: '2026-09-25T09:00:00.000Z',
       completedAt: null,
     });
-    expect(fromPhoto).toHaveBeenCalledWith(OWNER_ID, TINY_PNG);
+    expect(fromPhoto).toHaveBeenCalledWith(ACTOR, TINY_PNG);
   });
 
   it('rejects bad photo uploads', async () => {
@@ -485,7 +573,7 @@ describe('menu import routes', () => {
   it('starts a text import and reports import limits', async () => {
     const fromText = vi
       .fn<MenuImportsService['fromText']>()
-      .mockImplementationOnce(() => importsStub().fromText(OWNER_ID, ''))
+      .mockImplementationOnce(() => importsStub().fromText({ userId: OWNER_ID }, ''))
       .mockRejectedValueOnce(conflict('import_in_progress', 'busy'))
       .mockRejectedValueOnce(conflict('import_limit_reached', 'limit'));
     app = await buildTestApp({ services: { menuImports: importsStub({ fromText }) } });
@@ -496,7 +584,7 @@ describe('menu import routes', () => {
     expect(started.statusCode).toBe(202);
     expectContract(started, 'POST', url);
     expect(started.json()).toMatchObject({ source: 'text', status: 'processing' });
-    expect(fromText).toHaveBeenCalledWith(OWNER_ID, 'Эклер 150 г 120 руб');
+    expect(fromText).toHaveBeenCalledWith(ACTOR, 'Эклер 150 г 120 руб');
 
     for (const code of ['import_in_progress', 'import_limit_reached']) {
       const busy = await send('Эклер 150 г 120 руб');
@@ -528,7 +616,7 @@ describe('menu import routes', () => {
       completedAt: '2026-09-25T09:00:20.000Z',
     });
     expect(response.json()).not.toHaveProperty('model');
-    expect(get).toHaveBeenCalledWith(OWNER_ID, 31);
+    expect(get).toHaveBeenCalledWith(ACTOR, 31);
 
     app = await buildTestApp({
       services: {
@@ -560,7 +648,7 @@ describe('menu import routes', () => {
     expect(applied.statusCode).toBe(201);
     expectContract(applied, 'POST', '/api/v1/venue/menu/imports/{id}/apply');
     expect(applied.json()).toEqual({ items: [menuItemDto], duplicates: [] });
-    expect(apply).toHaveBeenCalledWith(OWNER_ID, 31, [item]);
+    expect(apply).toHaveBeenCalledWith(ACTOR, 31, [item], 'miniapp');
 
     const again = await app.inject({ method: 'POST', url, headers: owner, payload: { items: [item] } });
     expect(again.statusCode).toBe(409);
@@ -626,7 +714,7 @@ describe('deal routes', () => {
     expect(active.statusCode).toBe(200);
     expectContract(active, 'GET', '/api/v1/venue/deals');
     expect(active.json()).toEqual({ items: [dealDto] });
-    expect(list).toHaveBeenLastCalledWith(OWNER_ID, 'active');
+    expect(list).toHaveBeenLastCalledWith(ACTOR, 'active');
 
     const finished = await app.inject({
       method: 'GET',
@@ -634,7 +722,7 @@ describe('deal routes', () => {
       headers: owner,
     });
     expect(finished.statusCode).toBe(200);
-    expect(list).toHaveBeenLastCalledWith(OWNER_ID, 'finished');
+    expect(list).toHaveBeenLastCalledWith(ACTOR, 'finished');
 
     const invalid = await app.inject({
       method: 'GET',
@@ -657,12 +745,16 @@ describe('deal routes', () => {
     expect(response.statusCode).toBe(201);
     expectContract(response, 'POST', '/api/v1/venue/deals');
     expect(response.json()).toEqual(dealDto);
-    expect(create).toHaveBeenCalledWith(OWNER_ID, {
-      menuItemId: 11,
-      priceRub: 130,
-      quantity: 5,
-      endsAt: new Date('2026-09-25T11:00:00Z'),
-    });
+    expect(create).toHaveBeenCalledWith(
+      ACTOR,
+      {
+        menuItemId: 11,
+        priceRub: 130,
+        quantity: 5,
+        endsAt: new Date('2026-09-25T11:00:00Z'),
+      },
+      'miniapp',
+    );
   });
 
   it('validates new deals', async () => {
@@ -728,7 +820,7 @@ describe('deal routes', () => {
     expect(soldOut.statusCode).toBe(200);
     expectContract(soldOut, 'PATCH', path);
     expect(soldOut.json()).toMatchObject({ quantityLeft: 0, status: 'sold_out' });
-    expect(update).toHaveBeenCalledWith(OWNER_ID, 21, { quantityLeft: 0, endsAt: undefined });
+    expect(update).toHaveBeenCalledWith(ACTOR, 21, { quantityLeft: 0, endsAt: undefined }, 'miniapp');
 
     const finished = await app.inject({
       method: 'PATCH',
@@ -738,10 +830,12 @@ describe('deal routes', () => {
     });
     expect(finished.statusCode).toBe(409);
     expectContract(finished, 'PATCH', path);
-    expect(update).toHaveBeenLastCalledWith(OWNER_ID, 21, {
-      quantityLeft: undefined,
-      endsAt: new Date('2026-09-25T12:00:00Z'),
-    });
+    expect(update).toHaveBeenLastCalledWith(
+      ACTOR,
+      21,
+      { quantityLeft: undefined, endsAt: new Date('2026-09-25T12:00:00Z') },
+      'miniapp',
+    );
 
     const tooMany = await app.inject({ method: 'PATCH', url, headers: owner, payload: { quantityLeft: 50 } });
     expect(tooMany.statusCode).toBe(422);
@@ -773,7 +867,7 @@ describe('deal routes', () => {
     const cancelled = await app.inject({ method: 'DELETE', url: '/api/v1/venue/deals/21', headers: owner });
     expect(cancelled.statusCode).toBe(204);
     expectContract(cancelled, 'DELETE', '/api/v1/venue/deals/{id}');
-    expect(cancel).toHaveBeenCalledWith(OWNER_ID, 21);
+    expect(cancel).toHaveBeenCalledWith(ACTOR, 21, 'miniapp');
 
     const missing = await app.inject({ method: 'DELETE', url: '/api/v1/venue/deals/21', headers: owner });
     expect(missing.statusCode).toBe(404);

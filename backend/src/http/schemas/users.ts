@@ -38,6 +38,7 @@ export const UserProfileSchema = z
     ),
     locationUpdatedAt: IsoDateTime.nullable().describe('Когда передано местоположение'),
     consents: ConsentStatusSchema,
+    isAdmin: z.boolean().describe('Пользователь указан в ADMIN_USER_IDS и может модерировать'),
   })
   .meta({ id: 'UserProfile', description: 'Профиль пользователя и состояние его согласий' });
 
@@ -73,7 +74,7 @@ export const UserLocationSchema = z
 
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
-export function toUserProfile(user: User, consents: ConsentStatus): UserProfile {
+export function toUserProfile(user: User, consents: ConsentStatus, isAdmin: boolean): UserProfile {
   return {
     id: user.id,
     firstName: user.firstName,
@@ -85,6 +86,7 @@ export function toUserProfile(user: User, consents: ConsentStatus): UserProfile 
     location: user.location,
     locationUpdatedAt: isoOrNull(user.locationUpdatedAt),
     consents: toConsentStatus(consents),
+    isAdmin,
   };
 }
 

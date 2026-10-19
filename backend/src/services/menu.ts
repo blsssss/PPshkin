@@ -5,7 +5,9 @@ import * as deals from '../repositories/deals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import type { Clock } from '../shared/clock.ts';
 import { notFound, unprocessable } from '../shared/errors.ts';
-import { requireOwnedVenue } from './venues.ts';
+import { resolveVenueAccess, type VenueActor } from './access.ts';
+import { changedFields, type AuditChannel } from '../domain/audit.ts';
+import * as audit from '../repositories/audit.ts';
 
 export interface MenuItemInput {
   name: string;
@@ -24,10 +26,10 @@ export interface MenuItemInput {
 export type MenuItemPatch = Partial<MenuItemInput>;
 
 export interface MenuService {
-  list(ownerId: number): Promise<MenuItem[]>;
-  create(ownerId: number, input: MenuItemInput): Promise<MenuItem>;
-  update(ownerId: number, itemId: number, patch: MenuItemPatch): Promise<MenuItem>;
-  archive(ownerId: number, itemId: number): Promise<void>;
+  list(actor: VenueActor): Promise<MenuItem[]>;
+  create(actor: VenueActor, input: MenuItemInput, channel: AuditChannel): Promise<MenuItem>;
+  update(actor: VenueActor, itemId: number, patch: MenuItemPatch, channel: AuditChannel): Promise<MenuItem>;
+  archive(actor: VenueActor, itemId: number, channel: AuditChannel): Promise<void>;
 }
 
 interface MenuDependencies {
@@ -102,18 +104,34 @@ export async function lockMenuItem(db: Queryable, venueId: number, itemId: numbe
 
 export function createMenuService({ pool, clock }: MenuDependencies): MenuService {
   return {
-    async list(ownerId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async list(actor) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'venue.view');
       return (await menuItems.listOnMenu(pool, venue.id)).sort(byMenuOrder);
     },
 
-    async create(ownerId, input) {
-      const venue = await requireOwnedVenue(pool, ownerId);
-      return menuItems.insert(pool, venue.id, menuItemFields(input, 'venue'), clock.now());
+    async create(actor, input, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
+      return withTransaction(pool, async (client) => {
+        const now = clock.now();
+        const item = await menuItems.insert(client, venue.id, menuItemFields(input, 'venue'), now);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'menu_item.create',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: { name: item.name, priceRub: item.priceRub },
+          },
+          now,
+        );
+        return item;
+      });
     },
 
-    async update(ownerId, itemId, patch) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async update(actor, itemId, patch, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       return withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
@@ -126,17 +144,64 @@ export function createMenuService({ pool, clock }: MenuDependencies): MenuServic
             );
           }
         }
-        return menuItems.update(client, item.id, patchedFields(item, patch), now);
+        const updated = await menuItems.update(client, item.id, patchedFields(item, patch), now);
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'menu_item.update',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: {
+              fields: changedFields(patch),
+              ...(patch.priceRub === undefined ? {} : { priceRub: updated.priceRub }),
+            },
+          },
+          now,
+        );
+        return updated;
       });
     },
 
-    async archive(ownerId, itemId) {
-      const venue = await requireOwnedVenue(pool, ownerId);
+    async archive(actor, itemId, channel) {
+      const { venue } = await resolveVenueAccess(pool, actor, 'menu.edit');
       await withTransaction(pool, async (client) => {
         const item = await lockMenuItem(client, venue.id, itemId);
         const now = clock.now();
         await menuItems.archive(client, item.id, now);
-        await deals.cancelLiveForItem(client, item.id, now);
+        const cancelled = await deals.cancelLiveForItem(client, item.id, now);
+        for (const deal of cancelled) {
+          await audit.record(
+            client,
+            {
+              venueId: venue.id,
+              actorUserId: actor.userId,
+              action: 'deal.cancel',
+              target: { type: 'deal', id: deal.id },
+              channel,
+              details: {
+                item: item.name,
+                priceRub: deal.priceRub,
+                quantityLeft: deal.quantityLeft,
+                endsAt: deal.endsAt.toISOString(),
+              },
+            },
+            now,
+          );
+        }
+        await audit.record(
+          client,
+          {
+            venueId: venue.id,
+            actorUserId: actor.userId,
+            action: 'menu_item.archive',
+            target: { type: 'menu_item', id: item.id },
+            channel,
+            details: { name: item.name },
+          },
+          now,
+        );
       });
     },
   };

@@ -12,6 +12,15 @@ const commaList = z.string().transform((value) =>
     .filter((item) => item.length > 0),
 );
 
+const positiveIdList = commaList.pipe(
+  z.array(
+    z
+      .string()
+      .regex(/^[1-9]\d{0,14}$/, 'expected a positive whole user id')
+      .transform(Number),
+  ),
+);
+
 const emptyAsUndefined = (value: unknown) => (value === '' ? undefined : value);
 
 const IP_OR_CIDR = /^[0-9a-f:.]+(\/\d{1,3})?$/i;
@@ -42,6 +51,8 @@ const baseSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   LOG_PRETTY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
+  ADMIN_USER_IDS: z.preprocess(emptyAsUndefined, positiveIdList.default([])),
+  VENUE_VERIFICATION_REQUIRED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   TRUST_PROXY: z.preprocess(emptyAsUndefined, trustProxySetting.default(false)),
   DATABASE_URL: z.string().min(1),
@@ -63,12 +74,15 @@ const baseSchema = z.object({
   ),
   MINI_APP_ENABLED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   PROACTIVE_OFFERS: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
+  PURGE_INACTIVE_ACCOUNTS: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   SESSION_SECRET: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
+  SESSION_SECRET_PREVIOUS: z.preprocess(emptyAsUndefined, z.string().min(32).optional()),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   DEMO_MODE: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   DEMO_GUEST_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
   DEMO_VENUE_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(24).optional()),
+  DADATA_API_KEY: z.preprocess(emptyAsUndefined, z.string().trim().min(1).optional()),
   CHADGPT_API_KEY: z.preprocess(emptyAsUndefined, z.string().trim().min(1).optional()),
   CHADGPT_BASE_URL: z.preprocess(
     emptyAsUndefined,
@@ -110,6 +124,23 @@ export const configSchema = baseSchema.superRefine((config, context) => {
       code: 'custom',
       path: ['DEMO_MODE'],
       message: 'demo tokens are set but DEMO_MODE is not true',
+    });
+  }
+  if (config.SESSION_SECRET_PREVIOUS !== undefined && config.SESSION_SECRET === undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['SESSION_SECRET_PREVIOUS'],
+      message: 'SESSION_SECRET_PREVIOUS needs SESSION_SECRET',
+    });
+  }
+  if (
+    config.SESSION_SECRET_PREVIOUS !== undefined &&
+    config.SESSION_SECRET_PREVIOUS === config.SESSION_SECRET
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['SESSION_SECRET_PREVIOUS'],
+      message: 'SESSION_SECRET_PREVIOUS must differ from SESSION_SECRET',
     });
   }
   if (config.BOT_MODE === 'webhook') {

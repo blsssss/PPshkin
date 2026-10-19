@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { answers } from '../../../test/bot.ts';
-import { analyticsFor, OWNER_ID, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
+import { analyticsFor, OWNER_ACTOR, venueChat, type VenueChat } from '../../../test/venue-bot.ts';
 
 const PERIOD_BUTTONS = [
   { type: 'callback', text: 'Сегодня', payload: 'vn:stats:today' },
   { type: 'callback', text: '7 дней', payload: 'vn:stats:week' },
 ];
+const REPORT_BUTTON = { type: 'callback', text: 'Итоги дня', payload: 'vn:rp:day' };
 const HOME = { type: 'callback', text: 'Главное меню', payload: 'vn:home' };
 
 function ownerChat(options: Parameters<typeof venueChat>[0] = {}): VenueChat {
@@ -20,7 +21,7 @@ describe('venue statistics', () => {
 
     const [reply] = answers(await chat.press('vn:stats:today', 'mid.home'));
 
-    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ID, {
+    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ACTOR, {
       from: '2026-09-26',
       to: '2026-09-26',
     });
@@ -34,7 +35,7 @@ describe('venue statistics', () => {
         'Топ: Эклер (3), Капучино (2)',
       ].join('\n'),
     );
-    expect(reply?.message?.buttons).toEqual([PERIOD_BUTTONS, [HOME]]);
+    expect(reply?.message?.buttons).toEqual([PERIOD_BUTTONS, [REPORT_BUTTON], [HOME]]);
   });
 
   it('shows the last seven days with the default period', async () => {
@@ -42,10 +43,11 @@ describe('venue statistics', () => {
 
     const [reply] = answers(await chat.press('vn:stats:week', 'mid.stats'));
 
-    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ID, {});
+    expect(chat.fake.services.analytics.get).toHaveBeenCalledWith(OWNER_ACTOR, {});
     expect(reply?.message?.text).toMatch(/^\*\*Статистика за 7 дней, 20-26 сентября\*\*\n/);
     expect(reply?.message?.buttons).toEqual([
       PERIOD_BUTTONS,
+      [REPORT_BUTTON],
       [{ type: 'open_app', text: 'Открыть кабинет' }],
       [HOME],
     ]);

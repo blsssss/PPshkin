@@ -1,6 +1,7 @@
 import type { MenuItem, ParsedMenuItem, Venue } from '../../domain/models.ts';
 import { MENU_CATEGORY_LABELS, VENUE_CATEGORY_LABELS } from '../../domain/vocabulary.ts';
 import { escapeMarkdown } from '../../integrations/max/messenger.ts';
+import type { ReportData } from '../../domain/reports.ts';
 import { DEFAULT_ANALYTICS_DAYS, type VenueAnalytics } from '../../services/analytics.ts';
 import type { BookingView } from '../../services/bookings.ts';
 import type { DealView } from '../../services/deals.ts';
@@ -75,6 +76,24 @@ export const VENUE_BUTTONS = {
   redeemMore: 'Погасить ещё',
   today: 'Сегодня',
   week: '7 дней',
+  switchVenue: 'Сменить заведение',
+  team: 'Сотрудники',
+  closeoutNone: 'Не списывали',
+  closeoutOther: 'Другое число',
+  reportDay: 'Итоги дня',
+  reportPdf: 'PDF',
+  reportCsv: 'CSV',
+  openReport: 'Открыть в приложении',
+  inviteCashier: 'Пригласить кассира',
+  inviteManager: 'Пригласить управляющего',
+  accept: 'Принять',
+  decline: 'Отказаться',
+} as const;
+
+export const ROLE_LABELS = {
+  owner: 'владелец',
+  manager: 'управляющий',
+  cashier: 'кассир',
 } as const;
 
 export const VENUE_ERROR_TEXTS = {
@@ -93,12 +112,32 @@ export const VENUE_ERROR_TEXTS = {
   menu_item_unavailable: 'Позиция скрыта от гостей, включите её в кабинете',
   menu_item_not_found: 'Позиция уже удалена, обновите список',
   deal_not_found: 'Позиция уже удалена, обновите список',
+  venue_forbidden: 'Это действие доступно владельцу или управляющему.',
+  invite_not_found: 'Приглашение не найдено или отозвано. Попросите новое',
+  invite_expired: 'Срок приглашения вышел. Попросите новое',
+  invite_used: 'Это приглашение уже принято',
+  already_member: 'Вы уже работаете в этой компании: кабинет в /venue',
+  invite_limit: 'Действующих приглашений уже 20, отзовите лишние в кабинете',
+  company_required:
+    'Вы владеете несколькими компаниями: подключите заведение в кабинете, там можно выбрать компанию',
+  company_forbidden: 'Это действие доступно владельцу или управляющему.',
   booking_not_found: 'Бронь с таким кодом не найдена в вашем заведении',
   booking_expired: 'Срок брони истёк. Гость может оформить новую',
   booking_not_active: 'Бронь уже погашена или отменена',
+  deal_not_finished: 'Горящее ещё идёт: списание можно отметить после окончания',
+  closeout_locked: 'Списание можно менять только в течение 48 часов после первой отметки',
+  writeoff_too_large: 'Нельзя списать больше, чем осталось непроданных и незабронированных порций',
 } as const;
 
 export type VenueErrorCode = keyof typeof VENUE_ERROR_TEXTS;
+
+export const PICK_VENUE = 'Выберите заведение';
+export const TEAM_EMPTY = 'Пока вы здесь одни. Пригласите сотрудника ссылкой.';
+export const INVITE_DECLINED = 'Хорошо, приглашение не принято.';
+export const INVITE_ACCEPTED = [
+  'Готово, кабинет в /venue.',
+  'Для работы в кабинете мы обрабатываем ваш id и имя в MAX, вашу роль и ваши действия в кабинете. Согласие гостя на дневник питания для этого не нужно.',
+].join('\n');
 
 export const WIZARD_STALE = 'Мастер устарел, начните заново';
 
@@ -138,7 +177,6 @@ export const MENU_TEXT_WITHOUT_PRICES =
   'Не вижу цен. Вставьте текст меню: каждая позиция с новой строки, с ценой, например: Эклер 150 г 200 ₽';
 export const RECOGNIZING_PHOTO = 'Распознаю меню, обычно это 15-30 секунд. Пришлю результат сюда.';
 export const RECOGNIZING_TEXT = 'Разбираю меню, это несколько секунд.';
-export const IMPORT_TIMEOUT = 'Распознавание затянулось. Попробуйте ещё раз или откройте кабинет.';
 export const IMPORT_FAILED = 'Не получилось распознать меню, попробуйте ещё раз.';
 const ESTIMATE_NOTE = 'Калорийность оценочная, её можно поправить в кабинете.';
 export const NO_PRICES = 'Ни у одной позиции нет цены. Пришлите меню с ценами или добавьте их в кабинете.';
@@ -163,6 +201,10 @@ export const CODE_PROMPT = 'Введите код с экрана гостя: 6 
 export const CODE_INVALID = 'Код состоит из 6 латинских букв и цифр, попробуйте ещё раз';
 export const CODE_RETRY = 'Проверьте код и введите его ещё раз.';
 export const REDEEM_KEPT = 'Хорошо, бронь не погашена.';
+export function whichVenueText(code: string): string {
+  return `Бронь ${code} есть в нескольких ваших заведениях. В каком погасить?`;
+}
+
 export const STAFF_ONLY = 'Эта ссылка для сотрудников заведения.';
 
 function itemName(name: string): string {
@@ -444,5 +486,45 @@ export function statsText(stats: VenueAnalytics): string {
     `Выручка по погашенным броням: ${rub(stats.revenueRub)}`,
     `Горящее: продано ${stats.surplusUnitsSold} шт. на ${rub(stats.surplusRevenueRub)}`,
     ...(top.length > 0 ? [`Топ: ${top.join(', ')}`] : []),
+  ].join('\n');
+}
+
+export const CLOSEOUT_PROMPT = 'Сколько порций списали? Напишите число, 0 если ничего.';
+export const CLOSEOUT_INVALID = 'Нужно целое число от 0 до 1000, например: 2';
+export const CLOSEOUT_CANCELLED = 'Хорошо, списание не отмечено. Незакрытая позиция останется в отчёте.';
+export const REPORT_FILE_SENT = 'Файл придёт в чат с ботом';
+export const REPORT_UNAVAILABLE = 'Отчёт сейчас недоступен, попробуйте позже';
+export const DAY_REPORT_EMPTY = 'Горящих позиций за этот день не было.';
+
+function reportPercent(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+export function reportRangeLabel(from: string, to: string): string {
+  if (from === to) return localDateLabel(from);
+  return from.slice(0, 7) === to.slice(0, 7)
+    ? `${Number(from.slice(8))}-${localDateLabel(to)}`
+    : `${localDateLabel(from)} - ${localDateLabel(to)}`;
+}
+
+export function dayCloseHeader(venueName: string, report: ReportData): string[] {
+  return [
+    bold(`Итоги дня, ${venueName}, ${localDateLabel(report.from)}`),
+    `Выставлено ${report.listed}, продано по броням ${report.soldViaApp} (${reportPercent(report.soldShare)}), выручка ${rub(report.revenueRub)}`,
+  ];
+}
+
+export function dayClosedText(report: ReportData): string {
+  return `День закрыт: списано ${report.writtenOff} из ${report.listed} (${reportPercent(report.writeOffShare)}). Отчёт за неделю придёт в понедельник.`;
+}
+
+export function weekReportText(venueName: string, report: ReportData): string {
+  return [
+    bold(`Отчёт за неделю ${reportRangeLabel(report.from, report.to)} готов`),
+    escapeMarkdown(venueName),
+    `Выставлено ${report.listed}, продано по броням ${report.soldViaApp} (${reportPercent(report.soldShare)})`,
+    `Списано ${report.writtenOff}, не отмечено позиций ${report.notClosed}`,
+    `Выручка ${rub(report.revenueRub)}, скидка ${rub(report.discountRub)}`,
+    `Новых гостей: ${report.newGuests}`,
   ].join('\n');
 }

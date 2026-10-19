@@ -57,6 +57,7 @@ interface RecommendationsDependencies {
   clock: Clock;
   consents: Pick<ConsentsService, 'requirePersonalData'>;
   demoMode: boolean;
+  verificationRequired?: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -120,6 +121,7 @@ export function createRecommendationsService({
   clock,
   consents,
   demoMode,
+  verificationRequired = false,
 }: RecommendationsDependencies): RecommendationsService {
   return {
     async recommend(userId, request) {
@@ -153,7 +155,13 @@ export function createRecommendationsService({
       const [offeredToday, declined, candidates] = await Promise.all([
         offers.listItemsShownSince(pool, user.id, dayStart),
         offers.listItemsDeclinedSince(pool, user.id, hiddenSince(now)),
-        loadCandidates(pool, user.id, location ? boundingBox(location, DEFAULT_MAX_DISTANCE_M) : null, now),
+        loadCandidates(
+          pool,
+          user.id,
+          location ? boundingBox(location, DEFAULT_MAX_DISTANCE_M) : null,
+          now,
+          verificationRequired,
+        ),
       ]);
       const ranked = rankCandidates(
         { ...context, offeredTodayItemIds: new Set(offeredToday), declinedItemIds: new Set(declined) },

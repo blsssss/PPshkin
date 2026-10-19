@@ -80,12 +80,12 @@ describe('OpenAPI document', () => {
     }
   });
 
-  it('protects every API operation except sign in', () => {
+  it('protects every API operation except sign in and browser CSP reports', () => {
     const open = operations
       .filter(({ path }) => path.startsWith('/api/'))
       .filter(({ operation }) => !operation.security?.length)
       .map(({ method, path }) => `${method.toUpperCase()} ${path}`);
-    expect(open).toEqual(['POST /api/v1/auth/max']);
+    expect(open).toEqual(['POST /api/v1/csp-reports', 'POST /api/v1/auth/max']);
   });
 });
 

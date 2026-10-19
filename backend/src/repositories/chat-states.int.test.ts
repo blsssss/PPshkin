@@ -70,6 +70,7 @@ describe('chat state store', () => {
       offerQueue: { messageId: 'mid.7', cards: [eclairCard], expiresAt: fixFlow.expiresAt },
       pendingStart: null,
       contextualOfferOn: '2026-09-26',
+      activeVenueId: null,
     };
     await store.save(101, state);
     expect(await store.load(101)).toEqual(state);

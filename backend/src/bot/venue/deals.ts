@@ -1,5 +1,7 @@
 import type { MenuItem, Venue } from '../../domain/models.ts';
 import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
+import { can } from '../../domain/roles.ts';
+import type { VenueActor } from '../../services/access.ts';
 import type { DealView } from '../../services/deals.ts';
 import { formatLocalTime, isOpenAt, localParts, minutesOfDay, nextClosingAt } from '../../shared/time.ts';
 import { answerStale, byAction, parseId } from '../callbacks.ts';
@@ -10,12 +12,13 @@ import type { DealDraft } from './flows.ts';
 import { parsePrice, parseQuantity } from './input.ts';
 import { homeRow, newDealRow, pairs, startLinkUrl, uploadRow, venueButton } from './keyboards.ts';
 import {
+  actorAt,
   clearFlow,
-  findVenue,
   knownFailure,
-  ownerCallback,
-  ownerFlow,
+  resolveScope,
   saveFlow,
+  venueCallback,
+  venueFlow,
   wizardSteps,
   type WizardHandler,
 } from './owner.ts';
@@ -287,18 +290,18 @@ function acceptText(state: DealState, text: string): { next: DealState; error?: 
 }
 
 export function createDealScreens({ services }: BotKit) {
-  const { venues, menu, deals } = services;
+  const { companies, menu, deals } = services;
   const onStep = wizardSteps(dealFlowOf, staleScreen);
 
-  async function pickableItems(ownerId: number): Promise<{ items: MenuItem[]; available: number }> {
-    const [items, live] = await Promise.all([menu.list(ownerId), deals.list(ownerId, 'active')]);
+  async function pickableItems(actor: VenueActor): Promise<{ items: MenuItem[]; available: number }> {
+    const [items, live] = await Promise.all([menu.list(actor), deals.list(actor, 'active')]);
     const onDeal = new Set(live.map(({ deal }) => deal.menuItemId));
     const available = items.filter((item) => item.isAvailable && item.priceRub > 1);
     return { items: available.filter((item) => !onDeal.has(item.id)), available: available.length };
   }
 
-  async function renderItems(ctx: BotContext, page: number): Promise<Rendered> {
-    const { items, available } = await pickableItems(ctx.user.id);
+  async function renderItems(ctx: BotContext, venue: Venue, page: number): Promise<Rendered> {
+    const { items, available } = await pickableItems(actorAt(ctx, venue));
     if (items.length === 0) {
       return {
         state: null,
@@ -317,7 +320,7 @@ export function createDealScreens({ services }: BotKit) {
     if (!window) return { state: null, screen: pausedScreen(venue, ctx.now), paused: true };
     const screen = stepScreen(state, window, venue, ctx.now);
     if (screen) return { state, screen };
-    return renderItems(ctx, state.step === 'item' ? state.page : 1);
+    return renderItems(ctx, venue, state.step === 'item' ? state.page : 1);
   }
 
   async function present(ctx: BotContext, venue: Venue, next: DealState, how: Presentation): Promise<void> {
@@ -337,20 +340,33 @@ export function createDealScreens({ services }: BotKit) {
 
   function step(steps: readonly DealState['step'][], handler: DealStepHandler) {
     const withVenue: WizardHandler<ActiveFlow & DealFlow> = async (ctx, flow, args) => {
-      const venue = await findVenue(venues, ctx.user.id);
-      if (venue) {
+      const resolution = await resolveScope(companies, ctx, 'deal.edit');
+      if (resolution.kind === 'ok') {
+        const { venue } = resolution.scope.place;
         await handler(ctx, venue, { step: flow.step, page: flow.page, draft: flow.draft }, args);
         return;
       }
       await clearFlow(ctx, 'deal_wizard');
-      await ctx.answer({ message: { text: VENUE_ERROR_TEXTS.venue_not_found } });
+      await ctx.answer({
+        message: {
+          text:
+            resolution.kind === 'forbidden'
+              ? VENUE_ERROR_TEXTS.venue_forbidden
+              : VENUE_ERROR_TEXTS.venue_not_found,
+        },
+      });
     };
     return onStep(steps, withVenue);
   }
 
-  function dealsScreen(live: readonly DealView[], venue: Venue, note?: string): OutgoingMessage {
+  function dealsScreen(
+    live: readonly DealView[],
+    venue: Venue,
+    canEdit: boolean,
+    note?: string,
+  ): OutgoingMessage {
     const text = live.length === 0 ? NO_DEALS : dealsText(live, venue.timezone);
-    const stops = live
+    const stops = (canEdit ? live : [])
       .slice(0, STOP_BUTTONS_LIMIT)
       .map(({ deal, item }) => [
         venueButton(
@@ -362,15 +378,16 @@ export function createDealScreens({ services }: BotKit) {
       ]);
     return {
       text: note === undefined ? text : withNote(note, text),
-      buttons: [...stops, newDealRow(), homeRow()],
+      buttons: [...stops, ...(canEdit ? [newDealRow()] : []), homeRow()],
     };
   }
 
-  const list = ownerCallback(venues, async (ctx, venue) => {
-    await ctx.answer({ message: dealsScreen(await deals.list(ctx.user.id, 'active'), venue) });
+  const list = venueCallback(companies, 'venue.view', async (ctx, venue, _args, role) => {
+    const live = await deals.list(actorAt(ctx, venue), 'active');
+    await ctx.answer({ message: dealsScreen(live, venue, can(role, 'deal.edit')) });
   });
 
-  const begin = ownerCallback(venues, async (ctx, venue) => {
+  const begin = venueCallback(companies, 'deal.edit', async (ctx, venue) => {
     await present(ctx, venue, FIRST_PAGE, { via: 'answer' });
   });
 
@@ -386,7 +403,7 @@ export function createDealScreens({ services }: BotKit) {
       await answerStale(ctx);
       return;
     }
-    const { items } = await pickableItems(ctx.user.id);
+    const { items } = await pickableItems(actorAt(ctx, venue));
     const item = items.find((candidate) => candidate.id === itemId);
     if (!item) {
       await present(ctx, venue, state, { via: 'answer', error: ITEM_GONE });
@@ -445,7 +462,7 @@ export function createDealScreens({ services }: BotKit) {
       return;
     }
     if (code === 'deal_price_not_lower') {
-      const item = (await menu.list(ctx.user.id)).find(
+      const item = (await menu.list(actorAt(ctx, venue))).find(
         (candidate) => candidate.id === state.draft.menuItemId && candidate.isAvailable,
       );
       if (item) {
@@ -474,12 +491,16 @@ export function createDealScreens({ services }: BotKit) {
     await ctx.answer({ message: { text: `${dealSummary(offer, end, venue.timezone)}.` } });
     let created: DealView;
     try {
-      created = await deals.create(ctx.user.id, {
-        menuItemId: offer.menuItemId,
-        priceRub: offer.priceRub,
-        quantity: offer.quantity,
-        endsAt: end,
-      });
+      created = await deals.create(
+        actorAt(ctx, venue),
+        {
+          menuItemId: offer.menuItemId,
+          priceRub: offer.priceRub,
+          quantity: offer.quantity,
+          endsAt: end,
+        },
+        'bot',
+      );
     } catch (error) {
       await recover(ctx, venue, state, knownFailure(error, PUBLISH_FAILURES));
       return;
@@ -499,16 +520,16 @@ export function createDealScreens({ services }: BotKit) {
     await ctx.answer({ message: { text: DEAL_CANCELLED, buttons: [dealsRow()] } });
   }
 
-  const askStop = ownerCallback(venues, async (ctx, venue, [value]) => {
+  const askStop = venueCallback(companies, 'deal.edit', async (ctx, venue, [value]) => {
     const dealId = parseId(value);
     if (dealId === null) {
       await answerStale(ctx);
       return;
     }
-    const live = await deals.list(ctx.user.id, 'active');
+    const live = await deals.list(actorAt(ctx, venue), 'active');
     const view = live.find(({ deal }) => deal.id === dealId);
     if (!view) {
-      await ctx.answer({ message: dealsScreen(live, venue, DEAL_GONE) });
+      await ctx.answer({ message: dealsScreen(live, venue, true, DEAL_GONE) });
       return;
     }
     await ctx.answer({
@@ -524,14 +545,14 @@ export function createDealScreens({ services }: BotKit) {
     });
   });
 
-  const confirmStop = ownerCallback(venues, async (ctx, _venue, [value]) => {
+  const confirmStop = venueCallback(companies, 'deal.edit', async (ctx, venue, [value]) => {
     const dealId = parseId(value);
     if (dealId === null) {
       await answerStale(ctx);
       return;
     }
     try {
-      await deals.cancel(ctx.user.id, dealId);
+      await deals.cancel(actorAt(ctx, venue), dealId, 'bot');
     } catch (error) {
       knownFailure(error, ['deal_not_found']);
       await ctx.answer({ message: { text: VENUE_ERROR_TEXTS.deal_not_found, buttons: [dealsRow()] } });
@@ -540,8 +561,9 @@ export function createDealScreens({ services }: BotKit) {
     await ctx.answer({ message: { text: DEAL_STOPPED, buttons: [dealsRow()] } });
   });
 
-  const onInput = ownerFlow(
-    venues,
+  const onInput = venueFlow(
+    companies,
+    'deal.edit',
     (flow, message) => flow.name === 'deal_wizard' && message.text !== null,
     async (ctx, venue, message: MessageInput) => {
       const flow = dealFlowOf(ctx);

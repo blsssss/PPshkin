@@ -1,0 +1,5 @@
+{
+  "family": "UNAUTHORIZED",
+  "reason": "Forbidden",
+  "message": "Invalid API key"
+}

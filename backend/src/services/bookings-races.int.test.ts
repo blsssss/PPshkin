@@ -3,13 +3,15 @@ import { seedGuest, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { raceBehindLock, waitForLockWaits, type RowLock } from '../../test/locks.ts';
+import { fakeLogger } from '../../test/max-api.ts';
+import { queuedNotifications } from '../../test/notifications.ts';
 import { seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
 import type { Booking, Deal, MenuItem } from '../domain/models.ts';
-import type { Notifier } from '../ports/notifier.ts';
 import * as deals from '../repositories/deals.ts';
 import * as meals from '../repositories/meals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
-import { createBackgroundTasks, type BackgroundTasks } from '../shared/background.ts';
+import { createOutbox } from '../notifications/outbox.ts';
+import { createBackgroundTasks } from '../shared/background.ts';
 import { createAccountService } from './account.ts';
 import { createBookingsService, type BookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
@@ -17,7 +19,20 @@ import { createConsentsService } from './consents.ts';
 const pool = testPool();
 const clock = fixedClock('2026-09-25T09:00:00Z');
 const consents = createConsentsService({ pool, clock });
-const account = createAccountService({ pool, clock });
+const notifications = createOutbox({
+  pool,
+  clock,
+  bot: () => null,
+  miniAppEnabled: false,
+  diaryDay: () => Promise.reject(new Error('diary is not used here')),
+  reports: {
+    build: () => Promise.reject(new Error('reports are not used here')),
+    file: () => Promise.reject(new Error('reports are not used here')),
+  },
+  background: createBackgroundTasks({ error: () => undefined }),
+  logger: fakeLogger(),
+});
+const account = createAccountService({ pool, clock, notifications });
 
 const OWNER = 202;
 const GUEST = 101;
@@ -25,14 +40,10 @@ const SECOND_GUEST = 102;
 const THIRD_GUEST = 103;
 const HOUR = 3_600_000;
 
-const notifier = {
-  bookingCreated: vi.fn<Notifier['bookingCreated']>(() => Promise.resolve()),
-  bookingCancelled: vi.fn<Notifier['bookingCancelled']>(() => Promise.resolve()),
-  bookingRedeemed: vi.fn<Notifier['bookingRedeemed']>(() => Promise.resolve()),
-  bookingExpired: vi.fn<Notifier['bookingExpired']>(() => Promise.resolve()),
-} satisfies Notifier;
+async function queuedKinds(): Promise<string[]> {
+  return (await queuedNotifications(pool)).map((row) => row.kind);
+}
 
-let background: BackgroundTasks;
 let service: BookingsService;
 let eclair: MenuItem;
 let tart: MenuItem;
@@ -90,8 +101,7 @@ beforeEach(async () => {
   await resetDatabase(pool);
   clock.set('2026-09-25T09:00:00Z');
   vi.clearAllMocks();
-  background = createBackgroundTasks({ error: () => undefined });
-  service = createBookingsService({ pool, clock, consents, notifier, background });
+  service = createBookingsService({ pool, clock, consents, notifications });
   const venue = await seedVenue(pool, OWNER);
   eclair = await seedMenuItem(pool, venue.id, { name: 'Эклер', priceRub: 200 });
   tart = await seedMenuItem(pool, venue.id, { name: 'Тарт', priceRub: 250 });
@@ -110,10 +120,10 @@ afterAll(async () => {
 
 describe('concurrent bookings', () => {
   it('sells the last portion to exactly one of two guests', async () => {
-    await service.create(THIRD_GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    await service.create(THIRD_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const results = await raceBehindLock(pool, itemLock(eclair), [
-      () => service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }),
-      () => service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }),
+      () => service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot'),
+      () => service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot'),
     ]);
     const { fulfilled, rejected } = outcomes(results);
     expect(fulfilled).toHaveLength(1);
@@ -128,8 +138,8 @@ describe('concurrent bookings', () => {
   it('turns a double tap into a single booking', async () => {
     for (const input of [{ menuItemId: eclair.id, dealId: deal.id }, { menuItemId: tart.id }]) {
       const results = await raceBehindLock(pool, itemLock(input.menuItemId === eclair.id ? eclair : tart), [
-        () => service.create(GUEST, input),
-        () => service.create(GUEST, input),
+        () => service.create(GUEST, input, 'bot'),
+        () => service.create(GUEST, input, 'bot'),
       ]);
       const { fulfilled, rejected } = outcomes(results);
       expect(fulfilled).toHaveLength(1);
@@ -142,14 +152,14 @@ describe('concurrent bookings', () => {
   it('keeps the limit of 3 active bookings when a guest books two items at once', async () => {
     const coffee = await seedMenuItem(pool, eclair.venueId, { name: 'Капучино', category: 'drink' });
     const bun = await seedMenuItem(pool, eclair.venueId, { name: 'Булочка', category: 'bakery' });
-    await service.create(GUEST, { menuItemId: eclair.id });
-    await service.create(GUEST, { menuItemId: tart.id });
+    await service.create(GUEST, { menuItemId: eclair.id }, 'bot');
+    await service.create(GUEST, { menuItemId: tart.id }, 'bot');
     const results = await raceBehindLock(
       pool,
       { text: 'select id from users where id = $1 for update', values: [GUEST] },
       [
-        () => service.create(GUEST, { menuItemId: coffee.id }),
-        () => service.create(GUEST, { menuItemId: bun.id }),
+        () => service.create(GUEST, { menuItemId: coffee.id }, 'bot'),
+        () => service.create(GUEST, { menuItemId: bun.id }, 'bot'),
       ],
     );
     const { fulfilled, rejected } = outcomes(results);
@@ -162,7 +172,7 @@ describe('concurrent bookings', () => {
     const results = await raceBehindLock(
       pool,
       itemLock(eclair),
-      [() => service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id })],
+      [() => service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot')],
       async (owner) => {
         await owner.query('select id from deals where id = $1 for update nowait', [deal.id]);
         await menuItems.archive(owner, eclair.id, clock.now());
@@ -179,10 +189,10 @@ describe('concurrent bookings', () => {
 
 describe('account deletion during bookings', () => {
   it('waits for an in-flight booking instead of deadlocking on its deal and offer', async () => {
-    const { booking: held } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking: held } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const offerId = await seedOffer(pool, { userId: GUEST, item: tart, createdAt: clock.now() });
     const [created, deleted] = await raceBehindLock<unknown>(pool, itemLock(tart), [
-      () => service.create(GUEST, { menuItemId: tart.id, offerId }),
+      () => service.create(GUEST, { menuItemId: tart.id, offerId }, 'bot'),
       afterFirstWaiter(() => account.deleteAccount(GUEST)),
     ]);
     expect(created).toMatchObject({ status: 'fulfilled', value: { booking: { status: 'active' } } });
@@ -201,9 +211,9 @@ describe('account deletion during bookings', () => {
   });
 
   it('lets a redemption finish while the guest deletes the account', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const [redeemed, deleted] = await raceBehindLock<unknown>(pool, bookingLock(booking), [
-      () => service.redeem(OWNER, booking.code),
+      () => service.redeem({ userId: OWNER }, booking.code, 'miniapp'),
       afterFirstWaiter(() => account.deleteAccount(GUEST)),
     ]);
     expect(redeemed).toMatchObject({ status: 'fulfilled', value: { booking: { status: 'redeemed' } } });
@@ -219,7 +229,7 @@ describe('account deletion during bookings', () => {
       { text: 'select id from users where id = $1 for no key update', values: [GUEST] },
       [
         () => account.deleteAccount(GUEST),
-        afterFirstWaiter(() => service.create(GUEST, { menuItemId: tart.id })),
+        afterFirstWaiter(() => service.create(GUEST, { menuItemId: tart.id }, 'bot')),
       ],
     );
     expect(results).toMatchObject([
@@ -231,7 +241,7 @@ describe('account deletion during bookings', () => {
 
 describe('concurrent resolutions', () => {
   it('returns the portion once when cancel and expiry meet', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.set(booking.expiresAt);
     const [cancelled, expired] = await raceBehindLock<unknown>(pool, bookingLock(booking), [
       () => service.cancel(GUEST, booking.id),
@@ -241,16 +251,16 @@ describe('concurrent resolutions', () => {
     expect(expired?.status).toBe('fulfilled');
     expect(await statusOf(booking.id)).toBe('expired');
     expect(await quantityLeft(deal.id)).toBe(2);
-    await background.idle();
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(1);
-    expect(notifier.bookingCancelled).not.toHaveBeenCalled();
+    const kinds = await queuedKinds();
+    expect(kinds.filter((kind) => kind === 'booking_expired')).toHaveLength(1);
+    expect(kinds.filter((kind) => kind === 'venue_booking_expired').length).toBeLessThanOrEqual(1);
   });
 
   it('redeems once when two cashiers scan the same code', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const results = await raceBehindLock(pool, bookingLock(booking), [
-      () => service.redeem(OWNER, booking.code),
-      () => service.redeem(OWNER, booking.code.toLowerCase()),
+      () => service.redeem({ userId: OWNER }, booking.code, 'miniapp'),
+      () => service.redeem({ userId: OWNER }, booking.code.toLowerCase(), 'miniapp'),
     ]);
     const { fulfilled, rejected } = outcomes(results);
     expect(fulfilled.map((view) => view.booking.status)).toEqual(['redeemed']);
@@ -260,10 +270,10 @@ describe('concurrent resolutions', () => {
   });
 
   it('lets either cancel or redeem win, never both', async () => {
-    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const { booking } = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     const results = await raceBehindLock(pool, bookingLock(booking), [
       () => service.cancel(GUEST, booking.id),
-      () => service.redeem(OWNER, booking.code),
+      () => service.redeem({ userId: OWNER }, booking.code, 'miniapp'),
     ]);
     const { fulfilled, rejected } = outcomes(results);
     expect(fulfilled).toHaveLength(1);
@@ -280,9 +290,9 @@ describe('concurrent resolutions', () => {
   });
 
   it('expires every booking once across overlapping scopes', async () => {
-    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id });
-    await service.create(GUEST, { menuItemId: tart.id });
-    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id });
+    const first = await service.create(GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
+    await service.create(GUEST, { menuItemId: tart.id }, 'bot');
+    await service.create(SECOND_GUEST, { menuItemId: eclair.id, dealId: deal.id }, 'bot');
     clock.advance(HOUR);
     const results = await raceBehindLock(pool, bookingLock(first.booking), [
       () => service.expireDue({ userId: GUEST }),
@@ -293,7 +303,8 @@ describe('concurrent resolutions', () => {
     expect(new Set(expiredIds).size).toBe(3);
     expect(await quantityLeft(deal.id)).toBe(2);
     expect(await service.expireDue({})).toEqual([]);
-    await background.idle();
-    expect(notifier.bookingExpired).toHaveBeenCalledTimes(3);
+    const kinds = await queuedKinds();
+    expect(kinds.filter((kind) => kind === 'booking_expired')).toHaveLength(3);
+    expect(kinds.filter((kind) => kind === 'venue_booking_expired')).toHaveLength(3);
   });
 });
