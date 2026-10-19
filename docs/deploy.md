@@ -277,6 +277,8 @@ docker run --rm -v "$PWD/rclone.conf:/config/rclone/rclone.conf:ro" rclone/rclon
 
 `backup.sh` пишет в `/opt/ppshkin/metrics/backup.prom` время последней успешной копии `ppshkin_backup_last_success_timestamp_seconds`, её размер `ppshkin_backup_size_bytes` и размер предыдущей `ppshkin_backup_previous_size_bytes`. Раз в неделю, в воскресенье в 05:00 по времени сервера, `restore-check.sh` разворачивает самую свежую локальную копию в отдельную базу `ppshkin_restore_check` на том же PostgreSQL, проверяет число строк `users` и `bookings` и последнюю версию в `schema_migrations`, удаляет базу и пишет `ppshkin_restore_check_success_timestamp_seconds` в `/opt/ppshkin/metrics/restore_check.prom`. Каталог `metrics` подключён в node-exporter как каталог текстовых метрик. При первом выкате роль сразу делает копию и проверку, чтобы метрики появились до первой ночи.
 
+Если внешняя копия включена, `restore-check.sh` дополнительно проверяет, что самый свежий объект в хранилище не пустой и не старше 26 часов (`rclone lsl`), и пишет `ppshkin_restore_check_offsite_verified 1`. Содержимое внешней копии на сервере не расшифровывается: закрытый ключ `age` на сервер не кладётся намеренно. Тот, кто взломает сервер, получил бы и ключ, и доступ к хранилищу, и защита шифрованием потеряла бы смысл, а персональные данные гостей нельзя выносить в открытом виде. Поэтому автоматически восстановление проверяется на локальной копии, а наличие и свежесть внешней - по метаданным хранилища. Расшифровку внешней копии закрытым ключом проверяйте вручную раз в квартал вне сервера: `rclone copyto offsite:<бакет>/<файл>.dump.age .`, `age -d -i ppshkin-backup.key -o x.dump x.dump.age`, `pg_restore` в чистую базу.
+
 Ручной запуск и проверка метрики:
 
 ```bash
@@ -356,6 +358,8 @@ docker rm -f ppshkin-restore
 | `JobFailing` | фоновая задача падает 3 запуска подряд |
 | `JobStale` | ни один экземпляр не выполнил задачу успешно: `expire_bookings` 5 минут, `fail_stale_imports` 15 минут, `purge_processed_updates` 3 часа, `deliver_notifications` 2 минуты |
 | `BackupStale` | нет успешной ночной копии 26 часов |
+| `OffsiteBackupNotUploaded` | `ppshkin_backup_offsite == 0` дольше 26 часов: копии не уходят с сервера. В dev и CI это ожидаемо (хранилище не задано), на продакшене алерт значит, что нет `BACKUP_AGE_RECIPIENT` или параметров хранилища |
+| `OffsiteBackupStale` | самый свежий объект в хранилище (`ppshkin_backup_offsite_last_object_timestamp_seconds`, из `rclone lsl`) старше 26 часов при включённой выгрузке |
 | `BackupShrunk` | последняя копия меньше половины предыдущей |
 | `RestoreCheckStale` | проверка восстановления не проходила больше 8 дней |
 
@@ -371,7 +375,7 @@ docker rm -f ppshkin-restore
 
 Сгорание в 14,4 раза означает, что при таком темпе бюджет на 28 дней кончится меньше чем за 2 дня, в 6 раз - меньше чем за 5 дней. Алерт требует превышения в обоих окнах сразу: длинное окно отсекает короткие всплески, короткое быстро гасит алерт после исправления.
 
-Метрики фоновых задач пишет планировщик backend: `ppshkin_job_runs_total{name, result}` с результатом `ok`, `failed` или `locked` (задачу выполняет другой экземпляр), `ppshkin_job_duration_seconds{name}`, `ppshkin_job_last_success_timestamp_seconds{name}` и `ppshkin_job_consecutive_failures{name}`. Имя задачи лежит в метке `name`, потому что метку `job` Prometheus занимает именем цели сбора. Время успеха пишет только экземпляр, который взял блокировку задачи, поэтому `JobStale` берёт максимум по экземплярам. Пока задача ни разу не выполнилась успешно (например, `deliver_notifications` до её появления), ряда нет и `JobStale` по ней молчит.
+Метрики фоновых задач пишет планировщик backend: `ppshkin_job_runs_total{name, result}` с результатом `ok`, `failed` или `locked` (задачу выполняет другой экземпляр), `ppshkin_job_duration_seconds{name}`, `ppshkin_job_last_success_timestamp_seconds{name}` и `ppshkin_job_consecutive_failures{name}`. Имя задачи лежит в метке `name`, потому что метку `job` Prometheus занимает именем цели сбора. Время успеха пишет только экземпляр, который взял блокировку задачи, поэтому `JobStale` берёт максимум по экземплярам. При старте процесса каждая известная планировщику задача получает в `ppshkin_job_last_success_timestamp_seconds` время старта, поэтому задача, которая ни разу не выполнилась успешно с запуска, тоже вызывает `JobStale` через свой срок. Задачи, которых планировщик не знает, ряда не имеют и алерта не вызывают: правило для `deliver_notifications` (задача из #86) начнёт работать, когда задача появится в планировщике, а до тех пор оно безвредно.
 
 ### Что делать при алерте
 
@@ -389,6 +393,8 @@ docker rm -f ppshkin-restore
 | `DiskAlmostFull`, `MemoryHigh`, `CpuHigh` | `df -h`, `docker system df`, `docker stats`; старые образы удаляет каждый выкат, копии базы старше срока удаляет `backup.sh` |
 | `BackupStale` | `journalctl -t ppshkin-backup` покажет ошибку; частые причины - остановлена база, кончился диск, неверные ключи хранилища. Исправьте и запустите `./backup.sh` вручную, метрика обновится сразу |
 | `BackupShrunk` | сравните число строк основных таблиц с прошлой неделей (`restore-check.sh` пишет `users` и `bookings` в журнал и метрики). Если данные пропали, не удаляйте старые копии и восстановите базу по разделу 10 |
+| `OffsiteBackupNotUploaded` | задайте переменные внешней копии из раздела 10 и выкатите текущий коммит `main`; в dev и CI алерт не нужен |
+| `OffsiteBackupStale` | `journalctl -t ppshkin-backup`, затем `rclone ls` по хранилищу (раздел 10): частые причины - ключи хранилища, квота бакета, недоступность S3 |
 | `RestoreCheckStale` | `journalctl -t ppshkin-restore-check` и ручной запуск `./restore-check.sh`: ошибка `pg_restore` значит, что копия повреждена, и нужно срочно проверить ночные копии |
 
 Правила покрыты юнит-тестами `promtool test rules` ([deploy/monitoring/rules.test.yml](../deploy/monitoring/rules.test.yml)), их запускает CI.

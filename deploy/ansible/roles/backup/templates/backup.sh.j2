@@ -19,6 +19,9 @@ rclone() {
 }
 rclone copyto "/backups/$name.age" "offsite:{{ backup_s3_bucket }}/$name.age"
 rclone delete --min-age {{ backup_offsite_retention_days }}d "offsite:{{ backup_s3_bucket }}"
+newest=$(rclone lsl "offsite:{{ backup_s3_bucket }}" | sort -k2,3 | tail -n 1)
+newest_date=$(echo "$newest" | awk '{print $2" "substr($3,1,8)}')
+offsite_ts=$(date -u -d "$newest_date" +%s)
 echo "backup $name uploaded to offsite:{{ backup_s3_bucket }}"
 {% else %}
 echo "backup $name kept locally, off-site upload skipped: storage is not configured" >&2
@@ -29,6 +32,9 @@ ppshkin_backup_last_success_timestamp_seconds $(date +%s)
 ppshkin_backup_size_bytes $size
 ppshkin_backup_previous_size_bytes ${previous:-0}
 ppshkin_backup_offsite {{ 1 if backup_offsite_enabled | bool else 0 }}
+{% if backup_offsite_enabled | bool %}
+ppshkin_backup_offsite_last_object_timestamp_seconds $offsite_ts
+{% endif %}
 EOF
 chmod 644 "$metrics.partial"
 mv "$metrics.partial" "$metrics"
