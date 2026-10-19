@@ -243,8 +243,13 @@ jobs:
           test "$jobs" = "alertmanager,backend,blackbox,node,prometheus"
           query ppshkin_active_deals | jq -e '.data.result | length == 1'
           query ppshkin_job_runs_total | jq -e '[.data.result[].metric.name] | index("expire_bookings") != null'
-          query ppshkin_backup_last_success_timestamp_seconds | jq -e '.data.result | length == 1'
-          query ppshkin_restore_check_success_timestamp_seconds | jq -e '.data.result | length == 1'
+          for metric in ppshkin_backup_last_success_timestamp_seconds ppshkin_restore_check_success_timestamp_seconds; do
+            for attempt in $(seq 1 24); do
+              if query "$metric" | jq -e '.data.result | length == 1' > /dev/null; then break; fi
+              sleep 5
+            done
+            query "$metric" | jq -e '.data.result | length == 1'
+          done
           query http_request_duration_seconds_count | jq -e '[.data.result[].metric.route] | index("/ready") != null'
       - name: Grafana serves the provisioned dashboard to anonymous viewers under /grafana
         run: |
