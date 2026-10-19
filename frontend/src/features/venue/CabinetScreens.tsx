@@ -41,6 +41,7 @@ import {
 import { useVenueBookings, useVenueDeals } from './dealQueries.ts';
 import {
   useClaimDemoVenue,
+  useHiddenUntilVerified,
   useReloadVenue,
   useSaveVenue,
   useVenue,
@@ -95,10 +96,12 @@ function VenueHome({ venue }: { venue: Venue }) {
   const menu = useVenueMenu();
   const deals = useVenueDeals('active');
   const bookings = useVenueBookings('active', null, { poll: false });
+  const hidden = useHiddenUntilVerified(venue.id);
   const open = isOpenNow(venue.opensAt, venue.closesAt, venue.timezone, new Date());
   const count = menu.data?.length;
   return (
     <>
+      {hidden && <Notice>Заведение появится у гостей после проверки</Notice>}
       <section className={styles.head} aria-label="Заведение">
         <p className={styles.meta}>
           {VENUE_CATEGORY_LABELS[venue.category]}, {venue.address}

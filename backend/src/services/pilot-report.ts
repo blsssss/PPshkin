@@ -27,7 +27,6 @@ export interface VenueCounts {
   newGuestListPriceRub: number;
   bookingsCreated: number;
   bookingsRedeemed: number;
-  bookingsWithoutGuest: number;
 }
 
 export interface VenueMetrics extends VenueCounts {
@@ -51,6 +50,7 @@ export interface PilotReport {
   period: { from: string; to: string; days: number };
   venues: ({ venueId: number; name: string } & VenueMetrics)[];
   total: VenueMetrics;
+  deletedAccountBookings: number;
   retentionD7: Ratio;
   channels: ChannelMetrics[];
   funnel: metrics.Funnel;
@@ -74,7 +74,6 @@ const EMPTY_COUNTS: VenueCounts = {
   newGuestListPriceRub: 0,
   bookingsCreated: 0,
   bookingsRedeemed: 0,
-  bookingsWithoutGuest: 0,
 };
 
 function withRatios(counts: VenueCounts, days: number): VenueMetrics {
@@ -177,7 +176,6 @@ export async function buildPilotReport(
     newGuestListPriceRub: cost.get(venue.id)?.listPriceRub ?? 0,
     bookingsCreated: outcomes.get(venue.id)?.created ?? 0,
     bookingsRedeemed: outcomes.get(venue.id)?.redeemed ?? 0,
-    bookingsWithoutGuest: outcomes.get(venue.id)?.withoutGuest ?? 0,
   }));
   const acquisitionNames = [
     ...new Set([...cohorts.map((c) => c.acquisition), ...acquisitions.map((a) => a.acquisition)]),
@@ -186,6 +184,7 @@ export async function buildPilotReport(
     period: { from: query.from, to: query.to, days },
     venues: counted.map((venue) => ({ ...venue, ...withRatios(venue, days) })),
     total: withRatios(sum(counted), days),
+    deletedAccountBookings: [...outcomes.values()].reduce((total, row) => total + row.withoutGuest, 0),
     retentionD7: ratio(
       cohorts.reduce((total, cohort) => total + cohort.retained, 0),
       cohorts.reduce((total, cohort) => total + cohort.cohort, 0),
@@ -227,7 +226,6 @@ const VENUE_COLUMNS = [
   'bookings_created',
   'bookings_redeemed',
   'redeem_share',
-  'bookings_without_guest',
 ] as const;
 
 function venueCells(id: number | null, name: string, row: VenueMetrics): (string | number | null)[] {
@@ -256,7 +254,6 @@ function venueCells(id: number | null, name: string, row: VenueMetrics): (string
     row.bookingsCreated,
     row.bookingsRedeemed,
     row.redeemShare.value,
-    row.bookingsWithoutGuest,
   ];
 }
 
@@ -269,6 +266,9 @@ export function renderPilotReport(report: PilotReport, format: ReportFormat): st
     csvLine(VENUE_COLUMNS),
     ...report.venues.map((venue) => csvLine(venueCells(venue.venueId, venue.name, venue))),
     csvLine(venueCells(null, 'Итого', report.total)),
+    '',
+    csvLine(['row', 'bookings']),
+    csvLine(['Брони удалённых аккаунтов', report.deletedAccountBookings]),
     '',
     csvLine(['acquisition', 'new_guests', 'cohort_d7', 'retained_d7', 'retention_d7']),
     ...report.channels.map((channel) =>

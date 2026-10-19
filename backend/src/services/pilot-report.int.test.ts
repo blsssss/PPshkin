@@ -241,7 +241,6 @@ describe('pilot report', () => {
       newGuestShare: { numerator: 1, denominator: 2, value: 0.5 },
       costPerGuest: { numerator: 160, denominator: 400, value: 0.4 },
       redeemShare: { numerator: 4, denominator: 6, value: 0.6667 },
-      bookingsWithoutGuest: 1,
     });
     expect(b).toMatchObject({
       venueId: venueB,
@@ -282,8 +281,8 @@ describe('pilot report', () => {
       soldShare: { value: 0.2632 },
       costPerGuest: { numerator: 200, denominator: 500, value: 0.4 },
       redeemShare: { numerator: 5, denominator: 7, value: 0.7143 },
-      bookingsWithoutGuest: 1,
     });
+    expect(report.deletedAccountBookings).toBe(1);
   });
 
   it('counts day 7 retention in the time zone of each guest and splits it by the first link', () => {
@@ -319,12 +318,13 @@ describe('pilot report', () => {
     expect(csv.split('\n').slice(0, 3)).toEqual([
       'period,2026-11-02,2026-11-08,7',
       '',
-      'venue_id,venue,listed,sold,sold_share,written_off,closed_listed,written_off_share,offers_shown,offers_accepted,offer_acceptance,catalog_bookings,deal_impressions,catalog_conversion,new_guests,new_guests_per_week,redeeming_guests,new_guest_share,new_guest_discount_rub,new_guest_list_price_rub,cost_per_guest,bookings_created,bookings_redeemed,redeem_share,bookings_without_guest',
+      'venue_id,venue,listed,sold,sold_share,written_off,closed_listed,written_off_share,offers_shown,offers_accepted,offer_acceptance,catalog_bookings,deal_impressions,catalog_conversion,new_guests,new_guests_per_week,redeeming_guests,new_guest_share,new_guest_discount_rub,new_guest_list_price_rub,cost_per_guest,bookings_created,bookings_redeemed,redeem_share',
     ]);
     expect(csv).toContain(
-      `${String(venueA)},"Зерно, на Баумана",14,4,0.2857,3,10,0.3,3,1,0.3333,5,10,0.5,1,1,2,0.5,160,400,0.4,6,4,0.6667,1`,
+      `${String(venueA)},"Зерно, на Баумана",14,4,0.2857,3,10,0.3,3,1,0.3333,5,10,0.5,1,1,2,0.5,160,400,0.4,6,4,0.6667`,
     );
     expect(csv).toContain(',Итого,19,5,');
+    expect(csv).toContain('row,bookings\nБрони удалённых аккаунтов,1\n');
     expect(csv).toContain('all,2,3,2,0.6667');
     expect(csv).toContain('first_redeemed,1');
     expect(JSON.parse(json)).toMatchObject({ period: { from: '2026-11-02', to: '2026-11-08', days: 7 } });

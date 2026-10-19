@@ -138,6 +138,35 @@ describe('cabinet', () => {
     expect(await screen.findByText('Заведение создано')).toBeTruthy();
   });
 
+  it.each([
+    [true, true],
+    [false, false],
+  ])('shows the verification banner only when hiddenUntilVerified is %s', async (hidden, shown) => {
+    await start();
+    server.on('GET', '/api/v1/me/workplaces', () =>
+      json({
+        items: [
+          {
+            venue: VENUE,
+            company: { id: 3, name: 'ООО «Зерно»', verification: 'pending' },
+            role: 'owner',
+            permissions: ['venue.view'],
+            venueScoped: false,
+            hiddenUntilVerified: hidden,
+          },
+        ],
+      }),
+    );
+    await renderApp('/venue');
+    await screen.findByRole('heading', { name: VENUE.name });
+    await waitFor(() => {
+      expect(server.callsTo('GET', '/api/v1/me/workplaces')).toHaveLength(1);
+    });
+    const banner = 'Заведение появится у гостей после проверки';
+    if (shown) expect(await screen.findByText(banner)).toBeTruthy();
+    else expect(screen.queryByText(banner)).toBeNull();
+  });
+
   it('shows the demo venue button only in demo mode', async () => {
     await start(null);
     await renderApp('/venue');
