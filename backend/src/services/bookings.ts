@@ -230,7 +230,7 @@ export function createBookingsService({
     lock: (client: Queryable) => Promise<Booking | null>,
     complete: (client: Queryable, booking: Booking, now: Date) => Promise<BookingView>,
     kind: 'venue_booking_cancelled' | 'booking_redeemed',
-    expiredKinds: readonly ('booking_expired' | 'venue_booking_expired')[],
+    expiredKinds: readonly 'booking_expired'[],
   ): Promise<BookingView> {
     const now = clock.now();
     const { view, expired } = await withTransaction(pool, async (client) => {
@@ -309,7 +309,7 @@ export function createBookingsService({
         async (client, booking, now) =>
           bookingView(client, await bookings.release(client, booking.id, 'cancelled', now)),
         'venue_booking_cancelled',
-        ['booking_expired', 'venue_booking_expired'],
+        ['booking_expired'],
       );
     },
 

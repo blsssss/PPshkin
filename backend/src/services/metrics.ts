@@ -55,18 +55,21 @@ async function pilotSnapshot(db: Queryable, now: Date): Promise<DomainSnapshot['
 export function createMetricsService(db: Queryable, clock: Clock): MetricsService {
   return {
     async snapshot() {
+      const now = clock.now();
       const totals = await db.query<{ users: number; meals_last_day: number; active_deals: number }>(
         `select
            (select count(*)::int from users where id > 0) as users,
-           (select count(*)::int from meals where created_at > now() - interval '1 day') as meals_last_day,
+           (select count(*)::int from meals where created_at > $1::timestamptz - interval '1 day') as meals_last_day,
            (select count(*)::int from deals
-             where cancelled_at is null and quantity_left > 0 and starts_at <= now() and ends_at > now()) as active_deals`,
+             where cancelled_at is null and quantity_left > 0 and starts_at <= $1::timestamptz and ends_at > $1::timestamptz) as active_deals`,
+        [now],
       );
       const queue = await db.query<{ pending: number; oldest_due_seconds: number }>(
         `select count(*)::int as pending,
-                coalesce(extract(epoch from now() - min(send_after) filter (where send_after <= now())), 0)::float8
+                coalesce(extract(epoch from $1::timestamptz - min(send_after) filter (where send_after <= $1::timestamptz)), 0)::float8
                   as oldest_due_seconds
            from notifications where status = 'pending'`,
+        [now],
       );
       const row = totals.rows[0];
       return {
@@ -79,7 +82,7 @@ export function createMetricsService(db: Queryable, clock: Clock): MetricsServic
           pending: queue.rows[0]?.pending ?? 0,
           oldestDueSeconds: queue.rows[0]?.oldest_due_seconds ?? 0,
         },
-        pilot: await pilotSnapshot(db, clock.now()),
+        pilot: await pilotSnapshot(db, now),
       };
     },
   };

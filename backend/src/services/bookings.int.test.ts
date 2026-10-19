@@ -630,7 +630,7 @@ describe('cancelling bookings', () => {
     expect(await storedStatus(booking.id)).toEqual({ status: 'expired', resolved_at: booking.expiresAt });
     expect(await quantityLeft(deal.id)).toBe(2);
     await expect(service.cancel(GUEST, booking.id)).rejects.toMatchObject({ code: 'booking_expired' });
-    expect(recorded.kinds()).toEqual(['venue_booking_created', 'booking_expired', 'venue_booking_expired']);
+    expect(recorded.kinds()).toEqual(['venue_booking_created', 'booking_expired']);
   });
 });
 
