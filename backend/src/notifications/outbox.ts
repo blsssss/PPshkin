@@ -15,8 +15,8 @@ import {
   SENDING_TIMEOUT_MS,
   type NotificationEvent,
   type NotificationSubject,
-  type VenuePermission,
 } from '../domain/notifications.ts';
+import type { Permission } from '../domain/roles.ts';
 import { MaxApiError, UserUnreachableError } from '../integrations/max/errors.ts';
 import type { MaxLogger } from '../integrations/max/poller.ts';
 import type { Messenger, OutgoingMessage } from '../ports/messenger.ts';
@@ -25,6 +25,8 @@ import * as bookings from '../repositories/bookings.ts';
 import * as complaints from '../repositories/complaints.ts';
 import * as moderation from '../repositories/moderation.ts';
 import * as deals from '../repositories/deals.ts';
+import * as companies from '../repositories/companies.ts';
+import * as memberships from '../repositories/memberships.ts';
 import * as menuImports from '../repositories/menu-imports.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as settings from '../repositories/notification-settings.ts';
@@ -37,6 +39,9 @@ import type { Clock } from '../shared/clock.ts';
 import type { NotificationStats } from './stats.ts';
 import {
   accountInactiveMessage,
+  companyPendingMessage,
+  staffJoinedMessage,
+  staffRemovedMessage,
   bookingCancelledMessage,
   bookingVenueBlockedMessage,
   complaintCreatedMessage,
@@ -100,8 +105,9 @@ function emptyReport(): DeliveryReport {
   return { sent: 0, skipped: 0, unreachable: 0, failed: 0, expired: 0, retried: 0 };
 }
 
-function venueRecipients(_db: Queryable, venue: Venue, _permission: VenuePermission): Promise<number[]> {
-  return Promise.resolve(venue.ownerId === null ? [] : [venue.ownerId]);
+async function venueRecipients(db: Queryable, venue: Venue, permission: Permission): Promise<number[]> {
+  if (venue.companyId === null) return venue.ownerId === null ? [] : [venue.ownerId];
+  return memberships.recipients(db, { id: venue.id, companyId: venue.companyId }, permission);
 }
 
 function isPermanentRejection(error: unknown): boolean {
@@ -121,7 +127,7 @@ function describe(error: unknown): string {
 
 function idOf(
   subject: NotificationSubject,
-  field: 'bookingId' | 'dealId' | 'importId' | 'complaintId' | 'venueId',
+  field: 'bookingId' | 'dealId' | 'importId' | 'complaintId' | 'venueId' | 'companyId' | 'userId',
 ): number | null {
   const value = (subject as Partial<Record<typeof field, unknown>>)[field];
   return typeof value === 'number' ? value : null;
@@ -255,6 +261,30 @@ export function createOutbox({
       : skip('complaint is already decided');
   }
 
+  async function composeStaff(kind: string, subject: NotificationSubject): Promise<Composed> {
+    const companyId = idOf(subject, 'companyId');
+    const company = companyId === null ? null : await companies.findById(pool, companyId);
+    if (!company) return skip('company is gone');
+    const venueId = idOf(subject, 'venueId');
+    const venue = venueId === null ? null : await findVenue(venueId);
+    const scope = venue ? venue.name : null;
+    if (kind === 'staff_removed') return send(staffRemovedMessage(company.name, scope));
+    const userId = idOf(subject, 'userId');
+    const member = userId === null ? null : await memberships.find(pool, company.id, userId);
+    if (!member || userId === null) return skip('the member has already left');
+    const user = await users.findById(pool, userId);
+    return send(staffJoinedMessage(user?.firstName ?? null, member.role, company.name, scope));
+  }
+
+  async function composeCompanyPending(subject: NotificationSubject): Promise<Composed> {
+    const id = idOf(subject, 'companyId');
+    const company = id === null ? null : await companies.findById(pool, id);
+    if (!company) return skip('company is gone');
+    return company.verification === 'pending'
+      ? send(companyPendingMessage(company))
+      : skip('company is no longer pending');
+  }
+
   function compose(
     kind: string,
     subject: NotificationSubject,
@@ -289,6 +319,11 @@ export function createOutbox({
       case 'complaint_created':
       case 'complaint_decided':
         return composeComplaint(kind, subject);
+      case 'staff_joined':
+      case 'staff_removed':
+        return composeStaff(kind, subject);
+      case 'company_pending':
+        return composeCompanyPending(subject);
     }
   }
 

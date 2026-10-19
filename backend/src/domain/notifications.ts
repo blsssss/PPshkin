@@ -1,5 +1,6 @@
 import { addDays, atLocalTime, localDate, localParts, minutesOfDay } from '../shared/time.ts';
 import { dealOverAt } from './deals.ts';
+import type { Permission } from './roles.ts';
 import type { Booking, Deal, MenuImport, Venue } from './models.ts';
 
 export const SETTINGS_KINDS = [
@@ -25,6 +26,9 @@ const NOTIFICATION_KINDS = [
   'venue_complaint',
   'complaint_created',
   'complaint_decided',
+  'staff_joined',
+  'staff_removed',
+  'company_pending',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -34,8 +38,6 @@ export type NotificationStatus =
 export type NotificationResult = Exclude<NotificationStatus, 'pending' | 'sending'>;
 
 type ReportPeriod = 'day' | 'week';
-
-export type VenuePermission = 'booking.redeem' | 'deal.edit' | 'menu.edit' | 'analytics.view';
 
 type GuestBookingKind = 'booking_confirmed' | 'booking_reminder' | 'booking_redeemed' | 'booking_expired';
 type VenueBookingKind = 'venue_booking_created' | 'venue_booking_cancelled' | 'venue_booking_expired';
@@ -52,7 +54,16 @@ export type NotificationEvent =
   | { kind: 'venue_blocked'; venue: Venue; blockedAt: Date }
   | { kind: 'venue_complaint'; complaintId: number; venue: Venue }
   | { kind: 'complaint_created'; complaintId: number; adminId: number }
-  | { kind: 'complaint_decided'; complaintId: number; reporterId: number | null };
+  | { kind: 'complaint_decided'; complaintId: number; reporterId: number | null }
+  | {
+      kind: 'staff_joined';
+      companyId: number;
+      userId: number;
+      venueId: number | null;
+      inviterId: number | null;
+    }
+  | { kind: 'staff_removed'; companyId: number; userId: number; venueId: number | null }
+  | { kind: 'company_pending'; companyId: number; adminId: number };
 
 export type NotificationSubject =
   | { bookingId: number }
@@ -61,10 +72,12 @@ export type NotificationSubject =
   | { venueId: number; period: ReportPeriod; date: string }
   | { venueId: number; blockedAt: string }
   | { complaintId: number }
+  | { companyId: number; userId: number; venueId: number | null }
+  | { companyId: number }
   | { userId: number };
 
 type NotificationAudience =
-  { kind: 'guest'; userId: number | null } | { kind: 'venue'; permission: VenuePermission };
+  { kind: 'guest'; userId: number | null } | { kind: 'venue'; permission: Permission };
 
 interface NotificationTarget {
   subject: NotificationSubject;
@@ -90,8 +103,8 @@ export const BOOKING_REMINDER_MIN_HOLD_MS = 20 * MINUTE_MS;
 const DEAL_ENDING_LEAD_MS = 30 * MINUTE_MS;
 export const DEAL_ENDING_MIN_AGE_MS = 30 * MINUTE_MS;
 
-const VENUE_BOOKING_PERMISSION: VenuePermission = 'booking.redeem';
-const REPORT_PERMISSIONS: Record<ReportPeriod, VenuePermission> = {
+const VENUE_BOOKING_PERMISSION: Permission = 'booking.redeem';
+const REPORT_PERMISSIONS: Record<ReportPeriod, Permission> = {
   day: 'deal.edit',
   week: 'analytics.view',
 };
@@ -197,6 +210,27 @@ export function notificationTarget(event: NotificationEvent, now: Date): Notific
         subject: { complaintId: event.complaintId },
         subjectKey: String(event.complaintId),
         audience: { kind: 'guest', userId: event.reporterId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'staff_joined':
+      return {
+        subject: { companyId: event.companyId, userId: event.userId, venueId: event.venueId },
+        subjectKey: `${String(event.companyId)}:${String(event.userId)}:${now.toISOString()}`,
+        audience: { kind: 'guest', userId: event.inviterId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'staff_removed':
+      return {
+        subject: { companyId: event.companyId, userId: event.userId, venueId: event.venueId },
+        subjectKey: `${String(event.companyId)}:${String(event.userId)}:${now.toISOString()}`,
+        audience: { kind: 'guest', userId: event.userId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'company_pending':
+      return {
+        subject: { companyId: event.companyId },
+        subjectKey: `${String(event.companyId)}:${now.toISOString()}`,
+        audience: { kind: 'guest', userId: event.adminId },
         expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
       };
   }
@@ -400,6 +434,27 @@ export const NOTIFICATION_KIND_DESCRIPTIONS: Record<NotificationKind, KindDescri
     audience: 'guest',
     editable: false,
     urgent: false,
+  },
+  staff_joined: {
+    label: 'Новый сотрудник',
+    hint: 'Приглашённый сотрудник принял приглашение',
+    audience: 'venue',
+    editable: false,
+    urgent: true,
+  },
+  staff_removed: {
+    label: 'Доступ закрыт',
+    hint: 'Вас исключили из компании',
+    audience: 'venue',
+    editable: false,
+    urgent: true,
+  },
+  company_pending: {
+    label: 'Компания на проверку',
+    hint: 'Только для администраторов',
+    audience: 'guest',
+    editable: false,
+    urgent: true,
   },
 };
 

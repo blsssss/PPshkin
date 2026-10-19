@@ -6,7 +6,15 @@ import { fakeLogger, fakeMessenger } from '../../test/max-api.ts';
 import { queuedNotifications } from '../../test/notifications.ts';
 import { testConfig } from '../../test/services.ts';
 import { parsedItem } from '../../test/venue-bot.ts';
-import { seedDeal, seedMenuItem, seedVenue } from '../../test/venues.ts';
+import {
+  seedCompany,
+  seedCompanyVenue,
+  seedDeal,
+  seedMember,
+  seedMenuItem,
+  seedUser,
+  seedVenue,
+} from '../../test/venues.ts';
 import { createServices } from '../container.ts';
 import { withTransaction } from '../db/pool.ts';
 import type { Deal, MenuItem, Venue } from '../domain/models.ts';
@@ -393,7 +401,7 @@ describe('booking reminders', () => {
     const { booking } = await services.bookings.create(GUEST, { menuItemId: tart.id }, 'bot');
     clock.set(new Date(booking.expiresAt.getTime() - 5 * MINUTE));
     await remind.run(clock.now());
-    await services.bookings.redeem(OWNER, booking.code, 'miniapp');
+    await services.bookings.redeem({ userId: OWNER }, booking.code, 'miniapp');
     await settle();
     live = true;
     await outbox.deliverDue(clock.now());
@@ -529,7 +537,7 @@ describe('menu import result', () => {
   it('sends the result of a recognition that took four minutes', async () => {
     const { promise, resolve } = Promise.withResolvers<MenuParseResult>();
     menus.fromPhoto.mockReturnValue(promise);
-    const started = await services.menuImports.fromPhoto(OWNER, Buffer.from('jpeg'));
+    const started = await services.menuImports.fromPhoto({ userId: OWNER }, Buffer.from('jpeg'));
     clock.advance(4 * MINUTE);
     resolve(recognized);
     await settle();
@@ -555,7 +563,7 @@ describe('menu import result', () => {
   it('sends the failure of an import closed by fail_stale_imports', async () => {
     const { promise, resolve } = Promise.withResolvers<MenuParseResult>();
     menus.fromText.mockReturnValue(promise);
-    await services.menuImports.fromText(OWNER, 'Сырники 350 ₽');
+    await services.menuImports.fromText({ userId: OWNER }, 'Сырники 350 ₽');
     clock.advance(31 * MINUTE);
     await services.menuImports.failStale(clock.now());
     resolve(recognized);
@@ -572,9 +580,9 @@ describe('menu import result', () => {
   it('skips the result once the import is applied from the mini app', async () => {
     live = false;
     menus.fromText.mockResolvedValue(recognized);
-    const started = await services.menuImports.fromText(OWNER, 'Сырники 350 ₽');
+    const started = await services.menuImports.fromText({ userId: OWNER }, 'Сырники 350 ₽');
     await settle();
-    await services.menuImports.apply(OWNER, started.id, [syrniki], 'miniapp');
+    await services.menuImports.apply({ userId: OWNER }, started.id, [syrniki], 'miniapp');
     await settle();
     live = true;
     await outbox.deliverDue(clock.now());
@@ -685,5 +693,163 @@ describe('account inactive warning', () => {
       { userId: GUEST, status: 'sent' },
       { userId: SECOND_GUEST, status: 'skipped', lastError: 'user came back' },
     ]);
+  });
+});
+
+describe('staff of a company', () => {
+  const COMPANY_OWNER = 301;
+  const MANAGER = 302;
+  const CASHIER = 303;
+  const OTHER_MANAGER = 304;
+  const ADMIN = 900;
+  let companyId: number;
+  let zerno: Venue;
+  let kazan: Venue;
+  let item: MenuItem;
+
+  beforeEach(async () => {
+    const company = await seedCompany(pool, COMPANY_OWNER, 'Кофейни');
+    companyId = company.id;
+    zerno = await seedCompanyVenue(pool, companyId, { name: 'Зерно' });
+    kazan = await seedCompanyVenue(pool, companyId, { name: 'Казань' });
+    await seedMember(pool, companyId, MANAGER, 'manager', zerno.id);
+    await seedMember(pool, companyId, CASHIER, 'cashier');
+    await seedMember(pool, companyId, OTHER_MANAGER, 'manager', kazan.id);
+    await seedUser(pool, ADMIN);
+    item = await seedMenuItem(pool, zerno.id, { name: 'Капучино', priceRub: 200 });
+  });
+
+  const recipientsOf = (kind: string) =>
+    statusesOf(kind).then((rows) => rows.map((row) => row.userId).sort((left, right) => left - right));
+
+  it('tells everybody who can redeem about a new booking and the cancellation', async () => {
+    const created = await services.bookings.create(GUEST, { menuItemId: item.id }, 'bot');
+    await deliver();
+
+    expect(await recipientsOf('venue_booking_created')).toEqual([COMPANY_OWNER, MANAGER, CASHIER]);
+    const [owner] = sendToUser.mock.calls.filter(([userId]) => userId === COMPANY_OWNER);
+    const buttons = owner?.[1].buttons?.flat() ?? [];
+    expect(buttons).toContainEqual({
+      kind: 'callback',
+      text: 'Погасить',
+      payload: `vn:rd:${created.booking.code}:${String(zerno.id)}`,
+    });
+
+    sendToUser.mockClear();
+    await services.bookings.cancel(GUEST, created.booking.id);
+    await deliver();
+    expect(await recipientsOf('venue_booking_cancelled')).toEqual([COMPANY_OWNER, MANAGER, CASHIER]);
+    expect(
+      sentTo()
+        .map(([userId]) => userId)
+        .sort(),
+    ).toEqual([COMPANY_OWNER, MANAGER, CASHIER].sort());
+  });
+
+  it('keeps deal and menu notices away from the cashier', async () => {
+    const event = { kind: 'venue_deal_sold_out' as const, venue: zerno };
+    const soldOut = await seedDeal(pool, item, {
+      priceRub: 120,
+      quantity: 1,
+      startsAt: later(-HOUR),
+      endsAt: later(5 * HOUR),
+    });
+    await withTransaction(pool, (client) => outbox.enqueue(client, { ...event, deal: soldOut }, clock.now()));
+
+    expect(await recipientsOf('venue_deal_sold_out')).toEqual([COMPANY_OWNER, MANAGER]);
+  });
+
+  it('tells the staff of the venue that it was blocked, and nobody else', async () => {
+    await pool.query("update venues set blocked_at = $2, blocked_reason = 'жалобы' where id = $1", [
+      zerno.id,
+      clock.now(),
+    ]);
+    await withTransaction(pool, (client) =>
+      outbox.enqueue(client, { kind: 'venue_blocked', venue: zerno, blockedAt: clock.now() }, clock.now()),
+    );
+    await deliver();
+
+    expect(await recipientsOf('venue_blocked')).toEqual([COMPANY_OWNER, MANAGER]);
+    expect(sentTo().map(([, text]) => text)).toEqual([
+      expect.stringContaining('Заведение приостановлено: жалобы') as string,
+      expect.stringContaining('Заведение приостановлено: жалобы') as string,
+    ]);
+  });
+
+  it('still reaches the owner of a venue that has no company', async () => {
+    const legacy = await seedVenue(pool, 305, { name: 'Старое' });
+    await withTransaction(pool, (client) =>
+      outbox.enqueue(client, { kind: 'venue_blocked', venue: legacy, blockedAt: clock.now() }, clock.now()),
+    );
+    expect(await recipientsOf('venue_blocked')).toEqual([305]);
+  });
+
+  it('tells the inviter who joined and the removed person about the closed access', async () => {
+    await pool.query("update users set first_name = 'Анна' where id = $1", [CASHIER]);
+    await withTransaction(pool, async (client) => {
+      await outbox.enqueue(
+        client,
+        { kind: 'staff_joined', companyId, userId: CASHIER, venueId: zerno.id, inviterId: COMPANY_OWNER },
+        clock.now(),
+      );
+      await outbox.enqueue(
+        client,
+        { kind: 'staff_removed', companyId, userId: CASHIER, venueId: zerno.id },
+        clock.now(),
+      );
+    });
+    await deliver();
+
+    expect(sentTo()).toEqual([
+      [COMPANY_OWNER, expect.stringContaining('Анна принял приглашение') as string],
+      [CASHIER, '**Доступ к «Зерно» закрыт**'],
+    ]);
+    expect(sentTo()[0]?.[1]).toContain('кассир, «Зерно», компания «Кофейни»');
+  });
+
+  it('skips the joined notice when the member has already left', async () => {
+    await withTransaction(pool, (client) =>
+      outbox.enqueue(
+        client,
+        { kind: 'staff_joined', companyId, userId: CASHIER, venueId: null, inviterId: COMPANY_OWNER },
+        clock.now(),
+      ),
+    );
+    await pool.query('delete from memberships where user_id = $1', [CASHIER]);
+    await deliver();
+
+    expect(sentTo()).toEqual([]);
+    expect((await statusesOf('staff_joined')).map((row) => row.status)).toEqual(['skipped']);
+  });
+
+  it('gives the admins the card of a company that waits for the check', async () => {
+    await pool.query(
+      "update companies set kind = 'legal', inn = '7707083893', ogrn = '1027700132195', okved = '56.30', verification = 'pending' where id = $1",
+      [companyId],
+    );
+    await withTransaction(pool, (client) =>
+      outbox.enqueue(client, { kind: 'company_pending', companyId, adminId: ADMIN }, clock.now()),
+    );
+    await deliver();
+
+    const [card] = sentTo();
+    expect(card?.[0]).toBe(ADMIN);
+    expect(card?.[1]).toContain('Компания на проверку');
+    expect(card?.[1]).toContain('ИНН 7707083893, ОГРН 1027700132195');
+    expect(card?.[1]).toContain('ОКВЭД 56.30');
+  });
+
+  it('skips the card when the company was already decided', async () => {
+    await pool.query(
+      "update companies set kind = 'legal', inn = '7707083893', verification = 'verified' where id = $1",
+      [companyId],
+    );
+    await withTransaction(pool, (client) =>
+      outbox.enqueue(client, { kind: 'company_pending', companyId, adminId: ADMIN }, clock.now()),
+    );
+    await deliver();
+
+    expect(sentTo()).toEqual([]);
+    expect((await statusesOf('company_pending')).map((row) => row.status)).toEqual(['skipped']);
   });
 });

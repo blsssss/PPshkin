@@ -1,8 +1,10 @@
 import { payload } from '../bot/callbacks.ts';
 import { callback, command } from '../bot/keyboards.ts';
 import { bold, dayProgress, distance } from '../bot/texts.ts';
+import { ROLE_LABELS } from '../bot/venue/texts.ts';
 import { dealOverAt } from '../domain/deals.ts';
-import type { Booking, Deal, Venue } from '../domain/models.ts';
+import type { Booking, Company, Deal, Venue } from '../domain/models.ts';
+import type { Role } from '../domain/roles.ts';
 import {
   COMPLAINT_REASON_TEXTS,
   SIGNAL_OPEN_COMPLAINTS,
@@ -110,14 +112,14 @@ export function bookingReminderMessage(notice: BookingNotice, now: Date): Outgoi
 }
 
 export function bookingCreatedMessage(notice: BookingNotice): OutgoingMessage {
-  const { booking } = notice;
+  const { booking, venue } = notice;
   return message(
     [
       bold(`Новая бронь ${booking.code}`),
       `${escapeMarkdown(booking.itemName)}, ${booking.priceRub} ₽`,
       `Действует до ${expiryTime(notice)}`,
     ],
-    [[callback(NOTICE_BUTTONS.redeem, payload('vn', 'rd', booking.code)), venueBookingsButton()]],
+    [[callback(NOTICE_BUTTONS.redeem, payload('vn', 'rd', booking.code, venue.id)), venueBookingsButton()]],
   );
 }
 
@@ -296,5 +298,46 @@ export function proactiveOfferMessage(offer: RecommendedOffer): OutgoingMessage 
         callback(NOTICE_BUTTONS.unsubscribe, payload('cs', 'ad', 'off')),
       ],
     ],
+  );
+}
+
+export function staffJoinedMessage(
+  name: string | null,
+  role: Role,
+  companyName: string,
+  venueName: string | null,
+): OutgoingMessage {
+  const who = name === null ? 'Сотрудник' : escapeMarkdown(name);
+  return message(
+    [
+      bold(`${who} принял приглашение`),
+      `${ROLE_LABELS[role]}, ${venueName === null ? 'все заведения' : `«${escapeMarkdown(venueName)}»`}, компания «${escapeMarkdown(companyName)}».`,
+    ],
+    [],
+  );
+}
+
+export function staffRemovedMessage(companyName: string, venueName: string | null): OutgoingMessage {
+  return message(
+    [
+      bold(
+        venueName === null
+          ? `Доступ к заведениям компании «${escapeMarkdown(companyName)}» закрыт`
+          : `Доступ к «${escapeMarkdown(venueName)}» закрыт`,
+      ),
+    ],
+    [],
+  );
+}
+
+export function companyPendingMessage(company: Company): OutgoingMessage {
+  return message(
+    [
+      bold('Компания на проверку'),
+      escapeMarkdown(company.name),
+      `ИНН ${company.inn ?? 'не указан'}${company.ogrn === null ? '' : `, ОГРН ${company.ogrn}`}`,
+      ...(company.okved === null ? [] : [`ОКВЭД ${company.okved}`]),
+    ],
+    [],
   );
 }

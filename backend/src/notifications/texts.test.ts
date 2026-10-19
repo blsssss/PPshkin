@@ -220,7 +220,7 @@ describe('venue booking messages', () => {
       notify: true,
       buttons: [
         [
-          { kind: 'callback', text: 'Погасить', payload: 'vn:rd:K7MP4X' },
+          { kind: 'callback', text: 'Погасить', payload: 'vn:rd:K7MP4X:7' },
           { kind: 'callback', text: 'Все брони', payload: 'vn:bk' },
         ],
       ],
