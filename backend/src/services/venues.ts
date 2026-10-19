@@ -96,9 +96,9 @@ export function createVenuesService({ pool, clock }: VenuesDependencies): Venues
 
     async create(userId, input, target = {}) {
       assertTimeZone(input.timezone);
-      await requireUnblockedUser(pool, userId);
       return withTransaction(pool, async (client) => {
         await users.lock(client, userId);
+        await requireUnblockedUser(client, userId);
         const now = clock.now();
         const name = input.name.trim();
         const companyId = await targetCompany(client, userId, name, target, now);

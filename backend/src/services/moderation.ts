@@ -69,6 +69,7 @@ export interface ModerationDependencies {
   adminIds: readonly number[];
   companies: Pick<CompaniesService, 'createOwnerInviteAsAdmin' | 'listForVerification' | 'findView'>;
   reports: Pick<ReportsService, 'venuesWithNotClosedStreak'>;
+  verificationRequired?: boolean;
 }
 
 export const REVIEW_LIMIT = 50;
@@ -102,6 +103,7 @@ export function createModerationService({
   adminIds,
   companies: companyViews,
   reports,
+  verificationRequired = false,
 }: ModerationDependencies): ModerationService {
   const admins = new Set(adminIds);
   const isAdmin = (userId: number) => admins.has(userId);
@@ -193,7 +195,7 @@ export function createModerationService({
         if (input.bookingId !== undefined && booking?.venueId !== input.venueId) throw bookingNotFound();
         const venue = booking
           ? (await venues.findByIds(client, [booking.venueId]))[0]
-          : await venues.findVisible(client, input.venueId, userId);
+          : await venues.findVisible(client, input.venueId, userId, verificationRequired);
         if (!venue) throw venueNotFound();
         if (booking && (await complaints.existsForBooking(client, booking.id))) {
           throw conflict('complaint_exists', 'A complaint about this booking is already filed');

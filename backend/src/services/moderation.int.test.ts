@@ -4,7 +4,14 @@ import { fixedClock } from '../../test/clock.ts';
 import { closeTestPool, resetDatabase, testPool } from '../../test/database.ts';
 import { fakeLogger, fakeMessenger } from '../../test/max-api.ts';
 import { queuedNotifications } from '../../test/notifications.ts';
-import { seedDeal, seedMenuItem, seedUser, seedVenue } from '../../test/venues.ts';
+import {
+  seedCompany,
+  seedCompanyVenue,
+  seedDeal,
+  seedMenuItem,
+  seedUser,
+  seedVenue,
+} from '../../test/venues.ts';
 import { one } from '../db/pool.ts';
 import type { Deal, MenuItem, Venue } from '../domain/models.ts';
 import { createOutbox } from '../notifications/outbox.ts';
@@ -399,6 +406,42 @@ describe('complaints', () => {
     await expect(
       moderation.createComplaint(GUEST, { venueId: 9999, reason: 'quality' }),
     ).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
+  });
+
+  it('treats a venue hidden by verification or blocked as missing when verification is required', async () => {
+    const strict = createModerationService({
+      pool,
+      clock,
+      notifications: outbox,
+      adminIds: [ADMIN],
+      companies,
+      reports,
+      verificationRequired: true,
+    });
+    await expect(
+      strict.createComplaint(GUEST, { venueId: venue.id, reason: 'quality' }),
+    ).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
+
+    const company = await seedCompany(pool, 404);
+    await pool.query(
+      `update companies set verification = 'verified', kind = 'legal', inn = '7700000001', verified_at = now() where id = $1`,
+      [company.id],
+    );
+    const verified = await seedCompanyVenue(pool, company.id);
+    await expect(
+      strict.createComplaint(GUEST, { venueId: verified.id, reason: 'quality' }),
+    ).resolves.toMatchObject({ venueId: verified.id });
+
+    await pool.query('update venues set blocked_at = $2 where id = $1', [verified.id, clock.now()]);
+    await expect(
+      strict.createComplaint(GUEST, { venueId: verified.id, reason: 'other' }),
+    ).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
+    await expect(
+      moderation.createComplaint(GUEST, { venueId: verified.id, reason: 'other' }),
+    ).rejects.toMatchObject({ status: 404, code: 'venue_not_found' });
+    await expect(
+      moderation.createComplaint(GUEST, { venueId: venue.id, reason: 'other' }),
+    ).resolves.toMatchObject({ venueId: venue.id });
   });
 
   it('limits a guest to five complaints a day by the clock', async () => {

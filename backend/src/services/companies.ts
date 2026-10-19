@@ -10,6 +10,7 @@ import * as audit from '../repositories/audit.ts';
 import * as companies from '../repositories/companies.ts';
 import * as invites from '../repositories/invites.ts';
 import * as memberships from '../repositories/memberships.ts';
+import * as users from '../repositories/users.ts';
 import type { Clock } from '../shared/clock.ts';
 import { badRequest, conflict, forbidden, notFound, unavailable, unprocessable } from '../shared/errors.ts';
 import { listWorkplaces, type Workplace } from './access.ts';
@@ -328,10 +329,11 @@ export function createCompaniesService({
     },
 
     async create(userId, inn) {
-      await requireUnblockedUser(pool, userId);
       const requisites = await resolveRequisites(inn, `ИНН ${inn}`);
       try {
         const created = await withTransaction(pool, async (client) => {
+          await users.lock(client, userId);
+          await requireUnblockedUser(client, userId);
           if (await companies.findByInn(client, inn)) throw companyExists();
           const now = clock.now();
           const company = await companies.insert(client, requisites.name, userId, requisites, now);

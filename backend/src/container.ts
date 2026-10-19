@@ -143,6 +143,7 @@ export function createServices({
       adminIds: config.ADMIN_USER_IDS,
       companies,
       reports,
+      verificationRequired: config.VENUE_VERIFICATION_REQUIRED,
     }),
   };
 }
