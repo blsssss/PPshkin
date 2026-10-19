@@ -57,6 +57,7 @@ jobs:
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          SESSION_SECRET_PREVIOUS: ${{ secrets.SESSION_SECRET_PREVIOUS }}
           MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
           MAX_BOT_USERNAME: ${{ vars.MAX_BOT_USERNAME }}
           MAX_WEBHOOK_SECRET: ${{ secrets.MAX_WEBHOOK_SECRET }}

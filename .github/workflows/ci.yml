@@ -45,6 +45,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:coverage
@@ -66,10 +67,29 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  security:
+    name: security
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: the repository has no known fixable HIGH or CRITICAL vulnerabilities and no secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
 
   docker:
     name: docker
@@ -93,6 +113,26 @@ jobs:
           tags: ppshkin-frontend:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+      - name: the backend image has no known fixable HIGH or CRITICAL vulnerabilities and no secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ppshkin-backend:latest
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+      - name: the frontend image has no known fixable HIGH or CRITICAL vulnerabilities and no secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ppshkin-frontend:latest
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
       - run: docker compose config --quiet
       - run: docker compose up --detach --wait --wait-timeout 120
       - run: curl --fail --silent --show-error http://127.0.0.1:3000/health
@@ -194,6 +234,28 @@ jobs:
           echo "$status"
           test "$status" = 200
           grep -F 'st.max.ru/js/max-web-app.js' "$page"
+      - name: https://localhost/ and /index.html send the mini app content security policy
+        run: |
+          for path in / /index.html; do
+            policy=$(curl -sk --dump-header - --output /dev/null "https://localhost$path" | grep -i '^content-security-policy-report-only:')
+            echo "$path $policy"
+            grep -Fq "script-src 'self' https://st.max.ru;" <<< "$policy"
+            grep -Fq "img-src 'self' data: blob:;" <<< "$policy"
+            grep -Fq 'report-uri /api/v1/csp-reports' <<< "$policy"
+          done
+      - name: the API and Swagger UI send their own content security policies
+        run: |
+          api=$(curl -sk --dump-header - --output /dev/null https://localhost/api/v1/me | grep -i '^content-security-policy:')
+          echo "$api"
+          grep -Fq "default-src 'none';frame-ancestors 'none'" <<< "$api"
+          docs=$(curl -sk --location --dump-header - --output /dev/null https://localhost/docs | grep -i '^content-security-policy:' | tail -n 1)
+          echo "$docs"
+          grep -Fq "script-src 'self';" <<< "$docs"
+      - name: POST https://localhost/api/v1/csp-reports accepts a browser report
+        run: |
+          status=$(curl -sk -X POST -H 'Content-Type: application/csp-report' --data '{"csp-report":{"effective-directive":"img-src","blocked-uri":"https://example.com/a.png"}}' --output /dev/null --write-out '%{http_code}' https://localhost/api/v1/csp-reports)
+          echo "$status"
+          test "$status" = 204
       - name: POST https://localhost/max/webhook answers 404
         run: |
           status=$(curl -sk -X POST --output /dev/null --write-out '%{http_code}' https://localhost/max/webhook)
@@ -272,10 +334,11 @@ jobs:
   ci:
     name: ci
     if: always()
-    needs: [backend, frontend, docker, deploy]
+    needs: [backend, frontend, security, docker, deploy]
     runs-on: ubuntu-24.04
     steps:
       - run: test "${{ needs.backend.result }}" = success
       - run: test "${{ needs.frontend.result }}" = success
+      - run: test "${{ needs.security.result }}" = success
       - run: test "${{ needs.docker.result }}" = success
       - run: test "${{ needs.deploy.result }}" = success
