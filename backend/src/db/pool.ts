@@ -43,6 +43,11 @@ export function createPool(connectionString: string, { max = 10, onError }: Pool
     idle_in_transaction_session_timeout: 30_000,
   });
   pool.on('error', onError);
+  const checkedOut = (error: Error) => {
+    onError(error);
+  };
+  pool.on('acquire', (client) => client.on('error', checkedOut));
+  pool.on('release', (_error, client) => client.removeListener('error', checkedOut));
   return pool;
 }
 

@@ -63,3 +63,321 @@ tests:
             exp_annotations:
               summary: "Сайт недоступен по HTTPS"
               description: "https://hackathon.easymythic.dev/ready не отвечает 200 больше 2 минут: бот, мини-приложение и API недоступны пользователям."
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox",instance="https://hackathon.easymythic.dev/ready"}'
+        values: 1x60 0x20
+    alert_rule_test:
+      - eval_time: 64m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Бюджет доступности сгорает в 14 раз быстрее нормы"
+              description: "За час не прошли 16.67% проверок /ready при цели 99,5%: в таком темпе бюджет на 28 дней кончится меньше чем за 2 дня."
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox",instance="https://hackathon.easymythic.dev/ready"}'
+        values: 1x360 0x40
+    alert_rule_test:
+      - eval_time: 400m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Бюджет доступности сгорает в 6 раз быстрее нормы"
+              description: "За 6 часов не прошли 11.11% проверок /ready при цели 99,5%: в таком темпе бюджет на 28 дней кончится меньше чем за 5 дней."
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/bookings",status_code="201"}'
+        values: 0+98x30
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/venue/bookings/redeem",status_code="500"}'
+        values: 0+2x30
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BookingsBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Бюджет ошибок броней сгорает в 14 раз быстрее нормы"
+              description: "За час 2% броней и погашений закончились ошибкой 5xx при цели 99,9%: в таком темпе бюджет на 28 дней кончится меньше чем за 2 дня."
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/bookings",status_code="201"}'
+        values: 0+99x40
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/bookings",status_code="503"}'
+        values: 0+1x40
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: BookingsBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: BookingsBudgetBurnSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Бюджет ошибок броней сгорает в 6 раз быстрее нормы"
+              description: "За 6 часов 1% броней и погашений закончились ошибкой 5xx при цели 99,9%: в таком темпе бюджет на 28 дней кончится меньше чем за 5 дней."
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/bookings",status_code="201"}'
+        values: 0+100x40
+      - series: 'http_request_duration_seconds_count{job="backend",method="GET",route="/api/v1/me",status_code="500"}'
+        values: 0+50x40
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: BookingsBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: BookingsBudgetBurnSlow
+        exp_alerts: []
+    promql_expr_test:
+      - expr: slo:booking_errors:ratio_rate1h
+        eval_time: 30m
+        exp_samples:
+          - labels: 'slo:booking_errors:ratio_rate1h'
+            value: 0
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{job="backend",method="GET",route="/api/v1/deals",status_code="200",le="0.8"}'
+        values: 0+45x20
+      - series: 'http_request_duration_seconds_count{job="backend",method="GET",route="/api/v1/deals",status_code="200"}'
+        values: 0+60x20
+      - series: 'http_request_duration_seconds_bucket{job="backend",method="POST",route="/api/v1/diary/meals/photo",status_code="201",le="0.8"}'
+        values: 0x20
+      - series: 'http_request_duration_seconds_count{job="backend",method="POST",route="/api/v1/diary/meals/photo",status_code="201"}'
+        values: 0+100x20
+    promql_expr_test:
+      - expr: slo:api_slow:ratio_rate5m
+        eval_time: 15m
+        exp_samples:
+          - labels: 'slo:api_slow:ratio_rate5m'
+            value: 0.25
+      - expr: slo:api_slow:ratio_rate30m
+        eval_time: 15m
+        exp_samples:
+          - labels: 'slo:api_slow:ratio_rate30m'
+            value: 0.25
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_job_consecutive_failures{job="backend",instance="backend:3000",name="expire_bookings"}'
+        values: 0 1 2 3 3
+      - series: 'ppshkin_job_consecutive_failures{job="backend",instance="backend:3000",name="purge_processed_updates"}'
+        values: 0 0 0 0 0
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: JobFailing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: JobFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              name: expire_bookings
+            exp_annotations:
+              summary: "Фоновая задача expire_bookings падает несколько запусков подряд"
+              description: "Запусков с ошибкой подряд: 3. Причина в журнале backend по строке job failed."
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_job_last_success_timestamp_seconds{job="backend",instance="backend:3000",name="expire_bookings"}'
+        values: 0x10
+      - series: 'ppshkin_job_last_success_timestamp_seconds{job="backend",instance="backend:3000",name="purge_processed_updates"}'
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: JobStale
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: JobStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              name: expire_bookings
+            exp_annotations:
+              summary: "Фоновая задача expire_bookings не выполнялась 6m 0s"
+              description: "Ни один экземпляр backend не выполнил expire_bookings успешно дольше допустимого: проверьте журнал backend и блокировки задач в базе."
+
+  - interval: 1m
+    input_series:
+      - series: 'ppshkin_job_last_success_timestamp_seconds{job="backend",instance="backend-1:3000",name="expire_bookings"}'
+        values: 0x10
+      - series: 'ppshkin_job_last_success_timestamp_seconds{job="backend",instance="backend-2:3000",name="expire_bookings"}'
+        values: 240x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: JobStale
+        exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_job_last_success_timestamp_seconds{job="backend",instance="backend:3000",name="purge_processed_updates"}'
+        values: 0x6
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: JobStale
+        exp_alerts: []
+      - eval_time: 4h
+        alertname: JobStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              name: purge_processed_updates
+            exp_annotations:
+              summary: "Фоновая задача purge_processed_updates не выполнялась 4h 0m 0s"
+              description: "Ни один экземпляр backend не выполнил purge_processed_updates успешно дольше допустимого: проверьте журнал backend и блокировки задач в базе."
+
+  - interval: 4m
+    input_series:
+      - series: 'ppshkin_backup_offsite{job="node",instance="node-exporter:9100"}'
+        values: 0x500
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: OffsiteBackupNotUploaded
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: OffsiteBackupNotUploaded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node
+              instance: node-exporter:9100
+            exp_annotations:
+              summary: "Копии базы не уходят с сервера"
+              description: "Внешняя выгрузка не настроена больше 26 часов: копии лежат только на этом сервере. В dev и CI это ожидаемо, на продакшене задайте BACKUP_AGE_RECIPIENT и параметры хранилища."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_offsite{job="node",instance="node-exporter:9100"}'
+        values: 1x40
+      - series: 'ppshkin_backup_offsite_last_object_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: OffsiteBackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: OffsiteBackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Самый свежий объект во внешнем хранилище старше 26 часов"
+              description: "Новая зашифрованная копия не появилась в хранилище: проверьте доступ к S3 и журнал ppshkin-backup."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_offsite{job="node",instance="node-exporter:9100"}'
+        values: 0x40
+      - series: 'ppshkin_backup_offsite_last_object_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: OffsiteBackupStale
+        exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_last_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x30
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Нет успешной копии базы больше 26 часов"
+              description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_last_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0+86400x2
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: BackupStale
+        exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'up{job="node",instance="node-exporter:9100"}'
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Нет успешной копии базы больше 26 часов"
+              description: "Ночной backup.sh не отработал: смотрите journalctl -t ppshkin-backup на сервере."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 10485760 4194304
+      - series: 'ppshkin_backup_previous_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 10000000 10485760
+    alert_rule_test:
+      - eval_time: 0h
+        alertname: BackupShrunk
+        exp_alerts: []
+      - eval_time: 1h
+        alertname: BackupShrunk
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node
+              instance: node-exporter:9100
+            exp_annotations:
+              summary: "Копия базы уменьшилась больше чем вдвое"
+              description: "Последняя копия весит 4MiB, меньше половины предыдущей: проверьте, не потеряны ли данные."
+
+  - interval: 1h
+    input_series:
+      - series: 'ppshkin_backup_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 4194304
+      - series: 'ppshkin_backup_previous_size_bytes{job="node",instance="node-exporter:9100"}'
+        values: 0
+    alert_rule_test:
+      - eval_time: 0h
+        alertname: BackupShrunk
+        exp_alerts: []
+
+  - interval: 6h
+    input_series:
+      - series: 'ppshkin_restore_check_success_timestamp_seconds{job="node",instance="node-exporter:9100"}'
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 7d
+        alertname: RestoreCheckStale
+        exp_alerts: []
+      - eval_time: 8d6h
+        alertname: RestoreCheckStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Проверка восстановления не проходила больше 8 дней"
+              description: "Еженедельный restore-check.sh не отработал: смотрите journalctl -t ppshkin-restore-check на сервере."

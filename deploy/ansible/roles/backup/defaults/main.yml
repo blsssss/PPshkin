@@ -2,3 +2,17 @@ backup_app_dir: /opt/ppshkin
 backup_retention_days: 7
 backup_hour: "3"
 backup_minute: "30"
+backup_metrics_dir: "{{ backup_app_dir }}/metrics"
+backup_restore_check_weekday: "0"
+backup_restore_check_hour: "5"
+backup_restore_check_minute: "0"
+backup_age_version: v1.3.2
+backup_age_sha256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+backup_rclone_image: rclone/rclone:1.75.2
+backup_age_recipient: "{{ lookup('ansible.builtin.env', 'BACKUP_AGE_RECIPIENT') }}"
+backup_s3_endpoint: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_ENDPOINT') }}"
+backup_s3_region: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_REGION') }}"
+backup_s3_bucket: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_BUCKET') }}"
+backup_s3_access_key_id: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_ACCESS_KEY_ID') }}"
+backup_s3_secret_access_key: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_SECRET_ACCESS_KEY') }}"
+backup_offsite_retention_days: 30

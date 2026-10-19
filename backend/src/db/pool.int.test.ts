@@ -50,6 +50,23 @@ describe('database helpers', () => {
     }
   });
 
+  it('survives the server closing a connection that a request holds', async () => {
+    const errors: Error[] = [];
+    const fragile = createPool(TEST_DATABASE_URL, { max: 1, onError: (error) => errors.push(error) });
+    try {
+      const failed = withTransaction(fragile, async (client) => {
+        const { rows } = await client.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await pool.query('select pg_terminate_backend($1)', [rows[0]?.pid]);
+        await expect.poll(() => errors.length, { timeout: 5_000 }).toBe(1);
+        await client.query('select 1');
+      });
+      await expect(failed).rejects.toThrow();
+      expect(await one(fragile, 'select 1 as ok')).toEqual({ ok: 1 });
+    } finally {
+      await fragile.end();
+    }
+  });
+
   it('commits a successful transaction', async () => {
     await withTransaction(pool, async (client) => {
       await client.query('insert into users (id) values (1)');

@@ -1,3 +1,4 @@
+import { Registry } from 'prom-client';
 import { createBotRuntime, maxBotSettings } from './bot/runtime.ts';
 import { loadConfig } from './config.ts';
 import { createServices } from './container.ts';
@@ -5,6 +6,7 @@ import { loadMigrations, migrate } from './db/migrate.ts';
 import { createPool } from './db/pool.ts';
 import { loadDemoDataset } from './demo/dataset.ts';
 import { buildApp } from './http/app.ts';
+import { createJobMetrics } from './http/metrics.ts';
 import { createMaxApi } from './integrations/max/api.ts';
 import type { MaxLogger } from './integrations/max/poller.ts';
 import { MAX_UPDATE_TYPES } from './integrations/max/updates.ts';
@@ -118,15 +120,21 @@ const lockPool = createPool(config.DATABASE_URL, {
     app.log.warn({ err: error }, 'idle job lock client failed');
   },
 });
+const metricsRegistry = new Registry();
 const scheduler = createScheduler({
   lock: createAdvisoryLock(lockPool),
   clock: systemClock,
   logger: botLogger,
   jobs,
+  metrics: createJobMetrics(
+    metricsRegistry,
+    jobs.map((job) => job.name),
+  ),
 });
 const app = await buildApp({
   config,
   services,
+  metricsRegistry,
   maxWebhook:
     webhook && botRuntime ? { secret: webhook.secret, handler: botRuntime.handle, background } : undefined,
 });
