@@ -216,8 +216,15 @@ jobs:
           test "$(cat release)" = sha-good
           test "$(stat -c %a .env)" = 600
           crontab -l | grep -F "$APP_DIR/backup.sh"
+          crontab -l | grep -F "$APP_DIR/restore-check.sh"
+          test ! -e rclone.conf
           ./backup.sh
           test -s "backups/ppshkin-$(date +%F).dump"
+          grep -E '^ppshkin_backup_size_bytes [1-9][0-9]*$' metrics/backup.prom
+          grep -Fx 'ppshkin_backup_offsite 0' metrics/backup.prom
+          ./restore-check.sh
+          grep -E '^ppshkin_restore_check_success_timestamp_seconds [0-9]+$' metrics/restore_check.prom
+          test -x "bin/age-v1.3.2/age"
       - name: Prometheus and Alertmanager accept the rendered configuration
         working-directory: ${{ env.APP_DIR }}
         run: |
@@ -235,6 +242,9 @@ jobs:
           done
           test "$jobs" = "alertmanager,backend,blackbox,node,prometheus"
           query ppshkin_active_deals | jq -e '.data.result | length == 1'
+          query ppshkin_job_runs_total | jq -e '[.data.result[].metric.name] | index("expire_bookings") != null'
+          query ppshkin_backup_last_success_timestamp_seconds | jq -e '.data.result | length == 1'
+          query ppshkin_restore_check_success_timestamp_seconds | jq -e '.data.result | length == 1'
           query http_request_duration_seconds_count | jq -e '[.data.result[].metric.route] | index("/ready") != null'
       - name: Grafana serves the provisioned dashboard to anonymous viewers under /grafana
         run: |

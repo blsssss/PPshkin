@@ -1,0 +1,40 @@
+name: load
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: load
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PROFILE: short
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: backend
+          load: true
+          tags: ppshkin-backend:latest
+          cache-from: type=gha,scope=backend
+      - name: the load stand starts
+        run: >-
+          docker compose -f compose.yaml -f deploy/load/compose.load.yaml
+          up --detach --wait --wait-timeout 180 backend fake-max
+      - name: k6 runs the short profile and the stand sells no portion twice
+        run: sh deploy/load/run.sh
+      - if: always()
+        run: docker compose -f compose.yaml -f deploy/load/compose.load.yaml logs --no-color backend fake-max
+      - if: always()
+        run: docker compose -f compose.yaml -f deploy/load/compose.load.yaml down --volumes
