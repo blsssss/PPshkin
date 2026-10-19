@@ -30,6 +30,7 @@ function place(role: Role, companyId: number | null, venueId = sampleVenue.id): 
     role,
     permissions: ROLE_PERMISSIONS[role],
     venueScoped: false,
+    hiddenUntilVerified: false,
   };
 }
 

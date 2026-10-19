@@ -23,15 +23,25 @@ export interface Workplace {
   role: Role;
   permissions: readonly Permission[];
   venueScoped: boolean;
+  hiddenUntilVerified: boolean;
 }
 
 export function venueNotFound() {
   return notFound('venue_not_found', 'You have no venue yet, create one first');
 }
 
-export async function listWorkplaces(db: Queryable, userId: number): Promise<Workplace[]> {
+export async function listWorkplaces(
+  db: Queryable,
+  userId: number,
+  verificationRequired = false,
+): Promise<Workplace[]> {
   const records = await memberships.listWorkplaces(db, userId);
-  return records.map((record) => ({ ...record, permissions: ROLE_PERMISSIONS[record.role] }));
+  return records.map((record) => ({
+    ...record,
+    permissions: ROLE_PERMISSIONS[record.role],
+    hiddenUntilVerified:
+      verificationRequired && !record.venue.isDemo && record.company?.verification !== 'verified',
+  }));
 }
 
 function pick(places: readonly Workplace[], venueId: number | undefined): Workplace {

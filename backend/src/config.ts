@@ -52,6 +52,7 @@ const baseSchema = z.object({
   LOG_PRETTY: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   CORS_ORIGINS: z.preprocess(emptyAsUndefined, commaList.default([])),
   ADMIN_USER_IDS: z.preprocess(emptyAsUndefined, positiveIdList.default([])),
+  VENUE_VERIFICATION_REQUIRED: z.preprocess(emptyAsUndefined, booleanFlag.default(false)),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   TRUST_PROXY: z.preprocess(emptyAsUndefined, trustProxySetting.default(false)),
   DATABASE_URL: z.string().min(1),

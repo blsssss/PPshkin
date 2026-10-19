@@ -19,10 +19,11 @@ export async function loadCandidates(
   viewerId: number,
   area: venues.GeoBox | null,
   now: Date,
+  verifiedOnly = false,
 ): Promise<Candidate[]> {
   const found = area
-    ? await venues.listVisibleWithin(db, area, viewerId)
-    : await venues.listVisible(db, viewerId);
+    ? await venues.listVisibleWithin(db, area, viewerId, verifiedOnly)
+    : await venues.listVisible(db, viewerId, verifiedOnly);
   const venueIds = found.map((venue) => venue.id);
   const items = await menuItems.listAvailableInVenues(db, venueIds);
   const dealByItem = soonestEndingByItem(await deals.listVisible(db, venueIds, now));

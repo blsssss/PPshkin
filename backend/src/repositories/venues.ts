@@ -134,7 +134,7 @@ export async function findByIds(db: Queryable, ids: readonly number[]): Promise<
   return rows.map(mapVenue);
 }
 
-export function visibleVenueCondition(alias: string, viewerParam: string): string {
+export function visibleVenueCondition(alias: string, viewerParam: string, verifiedOnly = false): string {
   return `${alias}.blocked_at is null and case
       when ${alias}.demo_source_id is not null or (${alias}.is_demo and ${alias}.owner_id > 0)
         then coalesce(${alias}.owner_id = ${viewerParam}, false)
@@ -142,31 +142,45 @@ export function visibleVenueCondition(alias: string, viewerParam: string): strin
         select 1 from venues demo_copy
          where demo_copy.demo_source_id = ${alias}.id and demo_copy.owner_id = ${viewerParam}
       )
-      else true
+      else ${
+        verifiedOnly
+          ? `exists (select 1 from companies vc where vc.id = ${alias}.company_id and vc.verification = 'verified')`
+          : 'true'
+      }
     end`;
 }
 
-export async function findVisible(db: Queryable, id: number, viewerId: number): Promise<Venue | null> {
+export async function findVisible(
+  db: Queryable,
+  id: number,
+  viewerId: number,
+  verifiedOnly = false,
+): Promise<Venue | null> {
   const row = await maybeOne<VenueRow>(
     db,
-    `select ${VENUE_COLUMNS} from venues v where v.id = $1 and ${visibleVenueCondition('v', '$2')}`,
+    `select ${VENUE_COLUMNS} from venues v where v.id = $1 and ${visibleVenueCondition('v', '$2', verifiedOnly)}`,
     [id, viewerId],
   );
   return row ? mapVenue(row) : null;
 }
 
-export async function listVisible(db: Queryable, viewerId: number): Promise<Venue[]> {
+export async function listVisible(db: Queryable, viewerId: number, verifiedOnly = false): Promise<Venue[]> {
   const { rows } = await db.query<VenueRow>(
-    `select ${VENUE_COLUMNS} from venues v where ${visibleVenueCondition('v', '$1')} order by v.id`,
+    `select ${VENUE_COLUMNS} from venues v where ${visibleVenueCondition('v', '$1', verifiedOnly)} order by v.id`,
     [viewerId],
   );
   return rows.map(mapVenue);
 }
 
-export async function listVisibleWithin(db: Queryable, box: GeoBox, viewerId: number): Promise<Venue[]> {
+export async function listVisibleWithin(
+  db: Queryable,
+  box: GeoBox,
+  viewerId: number,
+  verifiedOnly = false,
+): Promise<Venue[]> {
   const { rows } = await db.query<VenueRow>(
     `select ${VENUE_COLUMNS} from venues v
-      where v.lat between $1 and $2 and v.lon between $3 and $4 and ${visibleVenueCondition('v', '$5')}
+      where v.lat between $1 and $2 and v.lon between $3 and $4 and ${visibleVenueCondition('v', '$5', verifiedOnly)}
       order by v.id`,
     [box.minLat, box.maxLat, box.minLon, box.maxLon, viewerId],
   );

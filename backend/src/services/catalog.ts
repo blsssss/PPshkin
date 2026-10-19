@@ -62,6 +62,7 @@ interface CatalogDependencies {
   pool: Pool;
   clock: Clock;
   demoMode: boolean;
+  verificationRequired?: boolean;
 }
 
 interface Nearby {
@@ -126,7 +127,12 @@ function bySoonestEnd(left: DealCardView, right: DealCardView): number {
   );
 }
 
-export function createCatalogService({ pool, clock, demoMode }: CatalogDependencies): CatalogService {
+export function createCatalogService({
+  pool,
+  clock,
+  demoMode,
+  verificationRequired = false,
+}: CatalogDependencies): CatalogService {
   async function savedPoint(userId: number): Promise<GeoPoint | null> {
     return (await users.findById(pool, userId))?.location ?? null;
   }
@@ -142,13 +148,18 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
   async function nearby(userId: number, query: CatalogQuery, now: Date): Promise<Nearby> {
     const { point, demoCenterUsed } = resolveDemoPoint(query.point ?? (await savedPoint(userId)), demoMode);
     if (!point) {
-      const everywhere = await venues.listVisible(pool, userId);
+      const everywhere = await venues.listVisible(pool, userId, verificationRequired);
       return {
         placed: everywhere.map((venue) => place(venue, null, now)).sort(byOpenThenName),
         demoCenterUsed,
       };
     }
-    const candidates = await venues.listVisibleWithin(pool, boundingBox(point, query.radiusM), userId);
+    const candidates = await venues.listVisibleWithin(
+      pool,
+      boundingBox(point, query.radiusM),
+      userId,
+      verificationRequired,
+    );
     const placed = candidates
       .filter((venue) => distanceMeters(point, venue.location) <= query.radiusM)
       .map((venue) => place(venue, point, now))
@@ -186,7 +197,7 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
     },
 
     async venue(userId, venueId) {
-      const venue = await venues.findVisible(pool, venueId, userId);
+      const venue = await venues.findVisible(pool, venueId, userId, verificationRequired);
       if (!venue) throw notFound('venue_not_found', 'Venue not found');
       const now = clock.now();
       const [menu, visibleDeals] = await Promise.all([
@@ -242,7 +253,7 @@ export function createCatalogService({ pool, clock, demoMode }: CatalogDependenc
       if (!found) throw dealNotFound();
       const [[view], venue, point] = await Promise.all([
         dealViews(pool, [found], now),
-        venues.findVisible(pool, found.venueId, userId),
+        venues.findVisible(pool, found.venueId, userId, verificationRequired),
         savedPoint(userId),
       ]);
       if (!venue) throw dealNotFound();

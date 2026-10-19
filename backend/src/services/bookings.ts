@@ -73,6 +73,7 @@ export interface BookingsDependencies {
   consents: Pick<ConsentsService, 'requirePersonalData'>;
   notifications: Notifications;
   generateCode?: () => string;
+  verificationRequired?: boolean;
 }
 
 interface Reservation {
@@ -96,9 +97,10 @@ async function lockBookableItem(
   db: Queryable,
   itemId: number,
   userId: number,
+  verifiedOnly: boolean,
 ): Promise<{ item: MenuItem; venue: Venue }> {
   const [found] = await menuItems.findByIds(db, [itemId]);
-  const venue = found ? await venues.findVisible(db, found.venueId, userId) : null;
+  const venue = found ? await venues.findVisible(db, found.venueId, userId, verifiedOnly) : null;
   if (!found || !venue) throw notFound('menu_item_not_found', 'Menu item not found');
   const item = await lockMenuItem(db, found.venueId, found.id);
   if (!item.isAvailable) {
@@ -149,6 +151,7 @@ export function createBookingsService({
   consents,
   notifications,
   generateCode = generateBookingCode,
+  verificationRequired = false,
 }: BookingsDependencies): BookingsService {
   async function expire(scope: ExpireScope): Promise<Booking[]> {
     const now = clock.now();
@@ -177,7 +180,7 @@ export function createBookingsService({
   ): Promise<Reservation> {
     if (!(await users.lock(client, userId))) throw notFound('user_not_found', 'User not found');
     await requireUnblockedUser(client, userId);
-    const { item, venue } = await lockBookableItem(client, input.menuItemId, userId);
+    const { item, venue } = await lockBookableItem(client, input.menuItemId, userId, verificationRequired);
     const deal =
       input.dealId === undefined ? null : await lockBookableDeal(client, item, venue, input.dealId, now);
     if (!isOpenAt(venue.opensAt, venue.closesAt, now, venue.timezone)) {

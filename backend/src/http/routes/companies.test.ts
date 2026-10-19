@@ -102,6 +102,7 @@ describe('GET /api/v1/me/workplaces', () => {
           role: 'cashier',
           permissions: ROLE_PERMISSIONS.cashier,
           venueScoped: true,
+          hiddenUntilVerified: false,
         },
       ]),
     );
@@ -117,6 +118,7 @@ describe('GET /api/v1/me/workplaces', () => {
           role: 'cashier',
           permissions: ['venue.view', 'booking.redeem'],
           venueScoped: true,
+          hiddenUntilVerified: false,
         },
       ],
     });
@@ -444,6 +446,7 @@ describe('invite routes', () => {
           role: 'cashier',
           permissions: ROLE_PERMISSIONS.cashier,
           venueScoped: true,
+          hiddenUntilVerified: false,
         },
         companyName: 'Компания',
         inviterId: 202,

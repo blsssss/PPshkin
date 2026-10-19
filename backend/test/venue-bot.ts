@@ -332,6 +332,7 @@ export function venueFake(clock: Clock) {
                 role: state.role,
                 permissions: ROLE_PERMISSIONS[state.role],
                 venueScoped: false,
+                hiddenUntilVerified: false,
               },
             ]
           : []),

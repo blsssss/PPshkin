@@ -218,6 +218,19 @@ describe('loadConfig', () => {
     }
   });
 
+  it('keeps the venue verification off unless it is switched on', () => {
+    expect(loadConfig(required).VENUE_VERIFICATION_REQUIRED).toBe(false);
+    expect(loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: '' }).VENUE_VERIFICATION_REQUIRED).toBe(
+      false,
+    );
+    expect(loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: 'true' }).VENUE_VERIFICATION_REQUIRED).toBe(
+      true,
+    );
+    expect(() => loadConfig({ ...required, VENUE_VERIFICATION_REQUIRED: 'sometimes' })).toThrow(
+      /VENUE_VERIFICATION_REQUIRED/,
+    );
+  });
+
   it('keeps proactive offers off unless they are switched on', () => {
     expect(loadConfig(required).PROACTIVE_OFFERS).toBe(false);
     expect(loadConfig({ ...required, PROACTIVE_OFFERS: '' }).PROACTIVE_OFFERS).toBe(false);
