@@ -10,6 +10,11 @@ interface MaxBotIdentity {
 
 const MAX_TEXT_LENGTH = 4000;
 const MAX_IMAGES = 12;
+const MAX_FILES = 4;
+const FILE_TYPES = new Map([
+  ['.csv', 'text/csv'],
+  ['.pdf', 'application/pdf'],
+]);
 const MAX_ROWS = 30;
 const MAX_ROW_BUTTONS = 7;
 const MAX_WIDE_ROW_BUTTONS = 3;
@@ -76,6 +81,10 @@ function checkMessage(message: OutgoingMessage): void {
   if (images > MAX_IMAGES) {
     throw new Error(`Message has ${images} images, at most ${MAX_IMAGES} are allowed`);
   }
+  const files = message.fileTokens?.length ?? 0;
+  if (files > MAX_FILES) {
+    throw new Error(`Message has ${files} files, at most ${MAX_FILES} are allowed`);
+  }
   checkKeyboard(message.buttons ?? []);
 }
 
@@ -104,10 +113,15 @@ export function createMaxMessenger(api: MaxApi, bot: MaxBotIdentity): Messenger 
       type: 'image',
       payload: { token },
     }));
+    const files = (message.fileTokens ?? []).map((token): MaxAttachmentRequest => ({
+      type: 'file',
+      payload: { token },
+    }));
     const rows = message.buttons ?? [];
-    if (rows.length === 0) return images;
+    if (rows.length === 0) return [...images, ...files];
     return [
       ...images,
+      ...files,
       { type: 'inline_keyboard', payload: { buttons: rows.map((row) => row.map(toButton)) } },
     ];
   };
@@ -145,6 +159,12 @@ export function createMaxMessenger(api: MaxApi, bot: MaxBotIdentity): Messenger 
       const contentType = IMAGE_TYPES.get(extname(filename).toLowerCase());
       if (!contentType) throw new Error('Only .png, .jpg and .jpeg images can be uploaded');
       return api.uploadImage(data, filename, contentType);
+    },
+
+    async uploadFile(data, filename) {
+      const contentType = FILE_TYPES.get(extname(filename).toLowerCase());
+      if (!contentType) throw new Error('Only .csv and .pdf files can be uploaded');
+      return api.uploadFile(data, filename, contentType);
     },
 
     async sendTyping(chatId) {

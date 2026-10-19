@@ -11,6 +11,7 @@ export interface OutgoingMessage {
   format?: 'markdown' | 'html';
   buttons?: Button[][];
   imageTokens?: string[];
+  fileTokens?: string[];
   notify?: boolean;
 }
 
@@ -28,6 +29,7 @@ export interface Messenger {
   editMessage(messageId: string, message: OutgoingMessage): Promise<void>;
   answerCallback(callbackId: string, answer: CallbackAnswer): Promise<void>;
   uploadImage(data: Buffer, filename: string): Promise<string>;
+  uploadFile(data: Buffer, filename: string): Promise<string>;
   sendTyping(chatId: number): Promise<void>;
   downloadFile(url: string): Promise<Buffer>;
 }

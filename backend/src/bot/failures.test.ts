@@ -44,6 +44,7 @@ function fakeMessenger(): Messenger & {
     editMessage: vi.fn(() => Promise.resolve()),
     answerCallback: vi.fn(() => Promise.resolve()),
     uploadImage: vi.fn(() => Promise.resolve('token')),
+    uploadFile: vi.fn(() => Promise.resolve('token')),
     sendTyping: vi.fn(() => Promise.resolve()),
     downloadFile: vi.fn(() => Promise.resolve(Buffer.alloc(0))),
   };

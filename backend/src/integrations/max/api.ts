@@ -34,6 +34,7 @@ export interface MaxApi {
   answerCallback(callbackId: string, answer: MaxCallbackAnswer): Promise<void>;
   sendAction(chatId: number, action: 'typing_on'): Promise<void>;
   uploadImage(data: Buffer, filename: string, contentType: string): Promise<string>;
+  uploadFile(data: Buffer, filename: string, contentType: string): Promise<string>;
   listSubscriptions(): Promise<MaxSubscription[]>;
   subscribe(url: string, secret: string, types: readonly MaxUpdateType[]): Promise<void>;
   unsubscribe(url: string): Promise<void>;
@@ -65,7 +66,8 @@ const SubscriptionsSchema = z.object({
     z.object({ url: z.string(), time: z.number(), update_types: z.array(z.string()).nullish() }),
   ),
 });
-const UploadEndpointSchema = z.object({ url: z.url() });
+const UploadEndpointSchema = z.object({ url: z.url(), token: z.string().min(1).nullish() });
+const UploadedFileSchema = z.object({ token: z.string().min(1).nullish() });
 const UploadedPhotosSchema = z.object({
   photos: z.record(z.string(), z.object({ token: z.string().min(1) })),
 });
@@ -372,6 +374,29 @@ export function createMaxApi(options: MaxApiOptions): MaxApi {
       const [photo] = Object.values(uploaded.photos);
       if (!photo) throw unexpected(response.status);
       return photo.token;
+    },
+
+    async uploadFile(data, filename, contentType) {
+      const endpoint = await call({
+        method: 'POST',
+        path: 'uploads',
+        query: { type: 'file' },
+        schema: UploadEndpointSchema,
+      });
+      const form = new FormData();
+      form.append('data', new Blob([new Uint8Array(data)], { type: contentType }), filename);
+      const response = await perform({
+        method: 'POST',
+        url: new URL(endpoint.url),
+        headers: {},
+        body: form,
+        rateKey: null,
+        timeoutMs: FILE_TIMEOUT_MS,
+      });
+      const uploaded = await decode(response, UploadedFileSchema, false);
+      const token = uploaded.token ?? endpoint.token;
+      if (!token) throw unexpected(response.status);
+      return token;
     },
 
     async listSubscriptions() {

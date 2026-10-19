@@ -18,6 +18,7 @@ ENV NODE_EXTRA_CA_CERTS=/app/certs/russian_trusted_root_ca.pem
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY assets ./assets
 COPY migrations ./migrations
 COPY testdata/*.json ./testdata/
 COPY certs ./certs
