@@ -6,7 +6,7 @@ import { BAUMANA } from '../../../test/venues.ts';
 import type { ModerationService } from '../../services/moderation.ts';
 import { conflict } from '../../shared/errors.ts';
 
-async function finishedBooking(overrides: Partial<ModerationService> = {}) {
+async function finishedBooking(overrides: Partial<ModerationService> = {}, cancel = true) {
   const world = offersWorld();
   world.user.location = BAUMANA;
   world.user.locationUpdatedAt = world.clock.now();
@@ -24,7 +24,7 @@ async function finishedBooking(overrides: Partial<ModerationService> = {}) {
   world.services.moderation = { ...fakeServices().moderation, createComplaint, ...overrides };
   const chat = botChat({ world, api: { uploadImage: () => Promise.resolve('qr-token') } });
   await world.bookings.create(GUEST_ID, { menuItemId: eclairOffer.item.id }, 'bot');
-  await world.bookings.cancel(GUEST_ID, 31);
+  if (cancel) await world.bookings.cancel(GUEST_ID, 31);
   return { chat, createComplaint };
 }
 
@@ -36,6 +36,21 @@ describe('a problem with a booking in the bot', () => {
     expect(history?.text).toContain('История');
     expect(labels(history)).toEqual(['Проблема с бронью: K7M2QX']);
     expect(payloads(history)).toEqual(['cp:new:31']);
+  });
+
+  it('offers the problem button on the card of an active booking', async () => {
+    const { chat, createComplaint } = await finishedBooking({}, false);
+    const replies = sent(await chat.send('/bookings'));
+    const card = replies[0];
+    expect(payloads(card)).toContain('cp:new:31');
+    const asked = await chat.press('cp:new:31', card?.messageId);
+    expect(answers(asked)[0]?.message?.text).toBe('Что случилось с бронью?');
+    await chat.press('cp:r:31:other', card?.messageId);
+    expect(createComplaint).toHaveBeenCalledWith(GUEST_ID, {
+      venueId: eclairOffer.venue.id,
+      bookingId: 31,
+      reason: 'other',
+    });
   });
 
   it('asks for the reason and files the complaint about that booking', async () => {

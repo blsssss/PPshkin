@@ -99,17 +99,20 @@ function bookingCard({ booking, venue }: BookingView, ctx: BotContext, showQr: b
       bookingValidUntil(formatLocalTime(booking.expiresAt, venue.timezone)),
       ...(venue.isDemo ? [DEMO_VENUE] : []),
     ].join('\n'),
-    buttons: bookingButtons({
-      bookingId: booking.id,
-      showQr,
-      place: placeButtons({
-        location: venue.location,
-        botUsername: ctx.botUsername,
-        miniAppEnabled: ctx.miniAppEnabled,
-        appLabel: BUTTONS.openInApp,
-        startParam: `booking_${booking.id}`,
+    buttons: [
+      ...bookingButtons({
+        bookingId: booking.id,
+        showQr,
+        place: placeButtons({
+          location: venue.location,
+          botUsername: ctx.botUsername,
+          miniAppEnabled: ctx.miniAppEnabled,
+          appLabel: BUTTONS.openInApp,
+          startParam: `booking_${booking.id}`,
+        }),
       }),
-    }),
+      [callback(BUTTONS.problem, payload('cp', 'new', booking.id))],
+    ],
   };
 }
 

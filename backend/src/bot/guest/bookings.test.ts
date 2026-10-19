@@ -17,6 +17,7 @@ const BOOKING_TEXT = [
 
 const ROUTE = { type: 'link', text: 'Маршрут', url: 'https://yandex.ru/maps/?pt=49.1221,55.7887&z=17&l=map' };
 const CANCEL = { type: 'callback', text: 'Отменить бронь', payload: 'bk:cancel:31' };
+const PROBLEM = { type: 'callback', text: 'Проблема с бронью', payload: 'cp:new:31' };
 const SHOW_QR = { type: 'callback', text: 'Показать QR', payload: 'bk:qr:31' };
 const PRESSED = 'Эта кнопка уже нажата';
 
@@ -86,7 +87,11 @@ describe('booking from an offer card', () => {
     expect(chat.world.bookings.qr).toHaveBeenCalledWith(GUEST_ID, 31);
     expect(chat.uploadImage).toHaveBeenCalledWith(SAMPLE_PNG, 'booking-K7M2QX.png', 'image/png');
     const [booking] = sent(replies);
-    expect(booking).toMatchObject({ text: BOOKING_TEXT, images: ['qr-token'], buttons: [[ROUTE], [CANCEL]] });
+    expect(booking).toMatchObject({
+      text: BOOKING_TEXT,
+      images: ['qr-token'],
+      buttons: [[ROUTE], [CANCEL], [PROBLEM]],
+    });
     expect(chat.states.peek(GUEST_ID).offerQueue).toBeNull();
   });
 
@@ -105,6 +110,7 @@ describe('booking from an offer card', () => {
         },
       ],
       [CANCEL],
+      [PROBLEM],
     ]);
   });
 
@@ -131,7 +137,7 @@ describe('booking from an offer card', () => {
     expect(booking).toMatchObject({
       text: BOOKING_TEXT,
       images: [],
-      buttons: [[SHOW_QR], [ROUTE], [CANCEL]],
+      buttons: [[SHOW_QR], [ROUTE], [CANCEL], [PROBLEM]],
     });
     expect(chat.logger.warn).toHaveBeenCalledWith(
       { err: expect.any(MaxApiError) as unknown, userId: GUEST_ID, bookingId: 31 },
@@ -310,7 +316,7 @@ describe('booking cancellation', () => {
     const kept = answers(await chat.press('bk:keep:31', messageId))[0];
     expect(kept?.message).toEqual({
       text: BOOKING_TEXT,
-      buttons: [[SHOW_QR], [ROUTE], [CANCEL]],
+      buttons: [[SHOW_QR], [ROUTE], [CANCEL], [PROBLEM]],
       images: [],
     });
     expect(chat.world.bookings.cancel).not.toHaveBeenCalled();
@@ -369,7 +375,7 @@ describe('«Показать QR»', () => {
 
     expect(answer?.message).toEqual({
       text: BOOKING_TEXT,
-      buttons: [[ROUTE], [CANCEL]],
+      buttons: [[ROUTE], [CANCEL], [PROBLEM]],
       images: ['qr-token'],
     });
   });
@@ -449,6 +455,7 @@ describe('/bookings', () => {
       [{ type: 'callback', text: 'Показать QR', payload: 'bk:qr:37' }],
       [ROUTE],
       [{ type: 'callback', text: 'Отменить бронь', payload: 'bk:cancel:37' }],
+      [{ type: 'callback', text: 'Проблема с бронью', payload: 'cp:new:37' }],
     ]);
     expect(bookings.list).toHaveBeenNthCalledWith(1, GUEST_ID, 'active');
     expect(bookings.list).toHaveBeenNthCalledWith(2, GUEST_ID, 'history');
