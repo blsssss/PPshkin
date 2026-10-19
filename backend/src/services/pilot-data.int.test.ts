@@ -197,6 +197,21 @@ describe('first link of the user', () => {
     expect(await acquisitionOf(GUEST)).toEqual({ acquisition: null, acquired_at: null });
   });
 
+  it('keeps an old user unknown until a tagged link is opened and then records it once', async () => {
+    const world = guestWorld();
+    await seedUser(pool, GUEST_ID);
+    const chat = botChat({ world, pool, createHandler: (deps) => createBot(deps) });
+
+    await chat.send('привет');
+    expect(await acquisitionOf(GUEST_ID)).toEqual({ acquisition: null, acquired_at: null });
+    await chat.start('c_kfu1');
+    const first = await acquisitionOf(GUEST_ID);
+    await chat.start('v_5');
+    expect(first?.acquisition).toBe('c_kfu1');
+    expect(first?.acquired_at).toBeInstanceOf(Date);
+    expect(await acquisitionOf(GUEST_ID)).toEqual(first);
+  });
+
   it('marks a first bot event without a link as organic', async () => {
     const chat = botChat({ world: guestWorld(), pool, createHandler: (deps) => createBot(deps) });
 

@@ -55,6 +55,14 @@ export async function upsert(db: Queryable, identity: UserIdentity): Promise<Use
      on conflict (id) do update
        set first_name = coalesce(excluded.first_name, users.first_name),
            username = coalesce(excluded.username, users.username),
+           acquisition = case
+             when users.acquisition is null and excluded.acquisition <> 'organic' then excluded.acquisition
+             else users.acquisition
+           end,
+           acquired_at = case
+             when users.acquisition is null and excluded.acquisition <> 'organic' then excluded.acquired_at
+             else users.acquired_at
+           end,
            updated_at = case
              when users.first_name is distinct from coalesce(excluded.first_name, users.first_name)
                or users.username is distinct from coalesce(excluded.username, users.username)
