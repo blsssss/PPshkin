@@ -5,6 +5,7 @@ import type { DemoDataset } from './demo/dataset.ts';
 import { createDadataRegistry } from './integrations/dadata/client.ts';
 import { silentNotifications } from './notifications/silent-notifier.ts';
 import type { CompanyRegistry } from './ports/company-registry.ts';
+import type { Messenger } from './ports/messenger.ts';
 import type { Notifications } from './ports/notifier.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
@@ -28,6 +29,7 @@ import { createModerationService } from './services/moderation.ts';
 import { createNotificationSettingsService } from './services/notification-settings.ts';
 import { createProfileService } from './services/profile.ts';
 import { createRecommendationsService } from './services/recommendations.ts';
+import { createReportsService } from './services/reports.ts';
 import { createVenuesService } from './services/venues.ts';
 import type { BackgroundTasks } from './shared/background.ts';
 import type { Clock } from './shared/clock.ts';
@@ -42,6 +44,7 @@ export interface ContainerOptions {
   demoDataset?: DemoDataset | null;
   registry?: CompanyRegistry;
   botUsername?: () => string | null;
+  messenger?: () => Messenger | null;
 }
 
 export function createServices({
@@ -54,6 +57,7 @@ export function createServices({
   demoDataset = null,
   registry = createDadataRegistry({ apiKey: config.DADATA_API_KEY ?? null }),
   botUsername = () => null,
+  messenger = () => null,
 }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
   const bookings = createBookingsService({ pool, clock, consents, notifications });
@@ -101,6 +105,7 @@ export function createServices({
     insights: createInsightsService({ pool, clock, consents }),
     bookings,
     analytics: createAnalyticsService({ pool, clock, bookings }),
+    reports: createReportsService({ pool, clock, bookings, notifications, messenger, background }),
     demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
     notificationSettings: createNotificationSettingsService({ pool, clock }),
     audit: createAuditService({ pool }),

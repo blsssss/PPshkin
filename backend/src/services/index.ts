@@ -18,6 +18,7 @@ import type { ModerationService } from './moderation.ts';
 import type { NotificationSettingsService } from './notification-settings.ts';
 import type { ProfileService } from './profile.ts';
 import type { RecommendationsService } from './recommendations.ts';
+import type { ReportsService } from './reports.ts';
 import type { VenuesService } from './venues.ts';
 
 export interface Services {
@@ -38,6 +39,7 @@ export interface Services {
   insights: InsightsService;
   bookings: BookingsService;
   analytics: AnalyticsService;
+  reports: ReportsService;
   demo: DemoService;
   notificationSettings: NotificationSettingsService;
   audit: AuditService;

@@ -2778,6 +2778,199 @@ components:
       additionalProperties: false
       description: Итоги заведения за период. Предложения и брони относятся к дню, в
         который они созданы. Данных гостей в ответе нет
+    ReportExportAccepted:
+      type: object
+      properties:
+        status:
+          type: string
+          const: sending
+      required:
+        - status
+      additionalProperties: false
+      description: Файл отправляется в чат с ботом
+    VenueReportRow:
+      type: object
+      properties:
+        dealId:
+          type: integer
+        date:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          examples:
+            - 2026-09-25
+          description: День начала горящей позиции по часовому поясу заведения
+        menuItemId:
+          type: integer
+        itemName:
+          type: string
+        listPriceRub:
+          anyOf:
+            - type: integer
+              description: Рубли
+            - type: "null"
+          description: Цена в меню на момент акции; null у старых акций
+        dealPriceRub:
+          type: integer
+          description: Цена горящей позиции
+        source:
+          type: string
+          enum:
+            - manual
+            - pos
+          description: Откуда пришла акция
+        listed:
+          type: integer
+          description: Выставлено порций
+        soldViaApp:
+          type: integer
+          description: Погашено броней
+        reserved:
+          type: integer
+          description: Активных броней
+        writtenOff:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Списано по отметке заведения; null, пока не отмечено
+        unaccounted:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: "Продано на кассе без брони или осталось: listed - soldViaApp -
+            writtenOff у закрытых акций; null до отметки списания"
+        revenueRub:
+          type: integer
+          description: Выручка по погашенным броням
+        discountRub:
+          type: integer
+          description: Сумма скидок по погашенным броням; 0, если цены в меню нет
+      required:
+        - dealId
+        - date
+        - menuItemId
+        - itemName
+        - listPriceRub
+        - dealPriceRub
+        - source
+        - listed
+        - soldViaApp
+        - reserved
+        - writtenOff
+        - unaccounted
+        - revenueRub
+        - discountRub
+      additionalProperties: false
+      description: "Строка отчёта: одна горящая позиция"
+    VenueReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          examples:
+            - 2026-09-25
+        to:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+          examples:
+            - 2026-09-25
+        timezone:
+          type: string
+          description: Часовой пояс заведения, по которому считаются дни
+        listed:
+          type: integer
+          description: Выставлено порций
+        soldViaApp:
+          type: integer
+          description: Погашено броней
+        reserved:
+          type: integer
+          description: Активных броней
+        writtenOff:
+          type: integer
+          description: Списано по отметкам
+        unaccounted:
+          type: integer
+          description: Продано без брони или осталось, у закрытых акций
+        notClosed:
+          type: integer
+          description: Закончившихся позиций без отметки списания
+        soldShare:
+          type: number
+          description: soldViaApp / listed, до сотых; 0 при нуле выставленного
+        writeOffShare:
+          type: number
+          description: writtenOff / listed по акциям с отметкой, до сотых
+        revenueRub:
+          type: integer
+          description: Рубли
+        discountRub:
+          type: integer
+          description: Рубли
+        newGuests:
+          type: integer
+          description: Гости, у которых первая погашенная бронь в заведении попала в период
+        missingListPrice:
+          type: integer
+          description: "Сколько акций без цены в меню: их скидка не считается"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueReportRow"
+      required:
+        - from
+        - to
+        - timezone
+        - listed
+        - soldViaApp
+        - reserved
+        - writtenOff
+        - unaccounted
+        - notClosed
+        - soldShare
+        - writeOffShare
+        - revenueRub
+        - discountRub
+        - newGuests
+        - missingListPrice
+        - rows
+      additionalProperties: false
+      description: Отчёт заведения «выставлено / продано / списано». Позиция относится
+        ко дню своего начала. Данных гостей в ответе нет
+    DealCloseout:
+      type: object
+      properties:
+        dealId:
+          type: integer
+        writtenOff:
+          type: integer
+        closedAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        closedBy:
+          description: Имя сотрудника, который отметил списание
+          type:
+            - string
+            - "null"
+        channel:
+          type: string
+          enum:
+            - bot
+            - miniapp
+      required:
+        - dealId
+        - writtenOff
+        - closedAt
+        - closedBy
+        - channel
+      additionalProperties: false
+      description: Отметка списания по горящей позиции
     AuditEvent:
       type: object
       properties:
@@ -8238,6 +8431,377 @@ paths:
           headers: *a2
         "500":
           description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/reports/day:
+    get:
+      operationId: getVenueDayReport
+      summary: Отчёт заведения за день
+      tags:
+        - venue
+      description: "Отчёт «выставлено / продано / списано» за сутки по часовому поясу
+        заведения, по умолчанию за сегодня. Требует права analytics.view.
+        Горящая позиция относится ко дню своего начала. notClosed показывает
+        закончившиеся позиции без отметки списания. Коды ошибок:
+        validation_failed (400): исправьте поля, перечисленные в errors.
+        venue_not_found (404): заведения ещё нет или оно не из ваших рабочих
+        мест. venue_required (400): у вас несколько заведений, передайте venueId
+        из GET /api/v1/me/workplaces. venue_forbidden (403): роль не позволяет
+        это действие."
+      parameters:
+        - schema:
+            format: date
+            type: string
+          example: 2026-09-25
+          in: query
+          name: date
+          required: false
+          description: День YYYY-MM-DD по часовому поясу заведения, по умолчанию сегодня
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+      security: *a4
+      responses:
+        "200":
+          description: Отчёт за день
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueReport"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/reports:
+    get:
+      operationId: getVenueReport
+      summary: Отчёт заведения за период
+      tags:
+        - venue
+      description: "Отчёт «выставлено / продано / списано» за период from - to
+        включительно, не длиннее 92 дней. Требует права analytics.view. Коды
+        ошибок: validation_failed (400): исправьте поля, перечисленные в errors.
+        invalid_period (400): from позже to или период длиннее 92 дней.
+        venue_not_found (404): заведения ещё нет или оно не из ваших рабочих
+        мест. venue_required (400): у вас несколько заведений, передайте venueId
+        из GET /api/v1/me/workplaces. venue_forbidden (403): роль не позволяет
+        это действие."
+      parameters:
+        - schema:
+            type: string
+            format: date
+          example: 2026-09-25
+          in: query
+          name: from
+          required: true
+          description: Первый день периода YYYY-MM-DD по часовому поясу заведения
+        - schema:
+            type: string
+            format: date
+          example: 2026-09-25
+          in: query
+          name: to
+          required: true
+          description: Последний день периода включительно
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+      security: *a4
+      responses:
+        "200":
+          description: Отчёт за период
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueReport"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/deals/{id}/closeout:
+    put:
+      operationId: closeOutDeal
+      summary: Отметить списание по горящей позиции
+      tags:
+        - venue
+      description: "Сохраняет, сколько порций закончившейся горящей позиции списали.
+        Отметку можно менять 48 часов после первой. Требует права deal.edit.
+        Коды ошибок: validation_failed (400): исправьте поля, перечисленные в
+        errors. venue_not_found (404): заведения ещё нет или оно не из ваших
+        рабочих мест. venue_required (400): у вас несколько заведений, передайте
+        venueId из GET /api/v1/me/workplaces. venue_forbidden (403): роль не
+        позволяет это действие. deal_not_found (404): позиции нет в этом
+        заведении. deal_not_finished (409): позиция ещё идёт, дождитесь
+        окончания. closeout_locked (409): с первой отметки прошло больше 48
+        часов. writeoff_too_large (422): списание больше, чем осталось
+        непроданных и незабронированных порций."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                writtenOff:
+                  type: integer
+                  minimum: 0
+                  maximum: 1000
+                  description: Сколько порций списали
+              required:
+                - writtenOff
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Отметка сохранена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealCloseout"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/reports/export:
+    post:
+      operationId: exportVenueReport
+      summary: Отправить файл отчёта в чат с ботом
+      tags:
+        - venue
+      description: "Собирает CSV или PDF за период и отправляет файлом в чат с ботом.
+        Требует права analytics.view. Скачивания в мини-приложении нет: токен
+        API передаётся только заголовком. Коды ошибок: validation_failed (400):
+        исправьте поля, перечисленные в errors. invalid_period (400): from позже
+        to или период длиннее 92 дней. venue_not_found (404): заведения ещё нет
+        или оно не из ваших рабочих мест. venue_required (400): у вас несколько
+        заведений, передайте venueId из GET /api/v1/me/workplaces.
+        venue_forbidden (403): роль не позволяет это действие.
+        messenger_unavailable (503): бот не запущен, файл отправить нельзя,
+        повторите позже."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from:
+                  type: string
+                  format: date
+                  description: Первый день периода YYYY-MM-DD по часовому поясу заведения
+                  example: 2026-09-25
+                to:
+                  type: string
+                  format: date
+                  description: Последний день периода включительно
+                  example: 2026-09-25
+                format:
+                  type: string
+                  enum:
+                    - csv
+                    - pdf
+                  description: Формат файла, который придёт в чат с ботом
+              required:
+                - from
+                - to
+                - format
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+      security: *a4
+      responses:
+        "202":
+          description: Файл отправляется
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportExportAccepted"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
           content:
             application/problem+json:
               schema:

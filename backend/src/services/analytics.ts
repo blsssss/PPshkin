@@ -78,7 +78,7 @@ interface ResolvedPeriod {
   days: number;
 }
 
-function assertDates(period: AnalyticsPeriod): void {
+export function assertDates(period: AnalyticsPeriod): void {
   const problems: ErrorDetail[] = (['from', 'to'] as const)
     .filter((field) => {
       const value = period[field];
@@ -88,7 +88,7 @@ function assertDates(period: AnalyticsPeriod): void {
   if (problems.length > 0) throw badRequest('validation_failed', 'Request validation failed', problems);
 }
 
-function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
+export function resolvePeriod(period: AnalyticsPeriod, today: string): ResolvedPeriod {
   const to = period.to ?? today;
   const from = period.from ?? addDays(to, 1 - DEFAULT_ANALYTICS_DAYS);
   const days = (Date.parse(to) - Date.parse(from)) / DAY_MS + 1;

@@ -125,6 +125,17 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       expireDue: notStubbed('bookings.expireDue'),
     },
     analytics: { get: notStubbed('analytics.get') },
+    reports: {
+      day: notStubbed('reports.day'),
+      period: notStubbed('reports.period'),
+      closeOut: notStubbed('reports.closeOut'),
+      exportToChat: notStubbed('reports.exportToChat'),
+      build: notStubbed('reports.build'),
+      file: notStubbed('reports.file'),
+      queueDayClose: notStubbed('reports.queueDayClose'),
+      queueWeekly: notStubbed('reports.queueWeekly'),
+      venuesWithNotClosedStreak: notStubbed('reports.venuesWithNotClosedStreak'),
+    },
     demo: {
       enabled: false,
       seed: notStubbed('demo.seed'),

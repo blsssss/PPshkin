@@ -47,7 +47,8 @@ describe('the companies migration', () => {
     const zerno = await insertVenue('Зерно', 101);
     const pekarnya = await insertVenue('Пекарня', 102);
 
-    expect(await migrate(isolated, all)).toEqual([COMPANIES_MIGRATION]);
+    const through = all.filter((candidate) => candidate.version <= COMPANIES_MIGRATION);
+    expect(await migrate(isolated, through)).toEqual([COMPANIES_MIGRATION]);
 
     const { rows: venues } = await isolated.query<{
       id: number;
