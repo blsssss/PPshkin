@@ -14,6 +14,8 @@ import { Field } from '../../shared/ui/Field.tsx';
 import { Label } from '../../shared/ui/Label.tsx';
 import { Notice } from '../../shared/ui/Notice.tsx';
 import { Page } from '../../shared/ui/Page.tsx';
+import { Photo } from '../../shared/ui/Photo.tsx';
+import { PhotoField } from '../../shared/ui/PhotoField.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import { ScreenState } from '../../shared/ui/ScreenState.tsx';
 import { Skeleton } from '../../shared/ui/Skeleton.tsx';
@@ -40,6 +42,7 @@ import {
   fetchImport,
   importKey,
   useDeleteItem,
+  useItemPhoto,
   useSaveItem,
   useToggleAvailability,
   useVenue,
@@ -89,6 +92,7 @@ function MenuRow({ item }: { item: MenuItem }) {
   const toggle = useToggleAvailability();
   return (
     <li className={item.isAvailable ? styles.item : `${styles.item} ${styles.hidden}`}>
+      <Photo url={item.photoUrl} alt={item.name} shape="thumb" />
       <div className={styles.itemColumn}>
         <button
           type="button"
@@ -336,6 +340,20 @@ function sameItemForm(a: ItemForm, b: ItemForm): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function ItemPhoto({ item }: { item: MenuItem }) {
+  const photo = useItemPhoto(item.id);
+  return (
+    <PhotoField
+      label="Фото позиции"
+      url={item.photoUrl}
+      alt={item.name}
+      hint="Фото увидят гости в подборке, горящих позициях и меню заведения"
+      onUpload={photo.upload}
+      onRemove={photo.remove}
+    />
+  );
+}
+
 function ItemEditor({ item }: { item: MenuItem | null }) {
   const navigate = useNavigate();
   const leaveTo = useLeave();
@@ -417,6 +435,11 @@ function ItemEditor({ item }: { item: MenuItem | null }) {
             ? 'Калорийность указана заведением'
             : 'Калорийность оценена автоматически, проверьте её'}
         </p>
+      )}
+      {item === null ? (
+        <p className={styles.muted}>Фото можно добавить, когда позиция сохранена</p>
+      ) : (
+        <ItemPhoto item={item} />
       )}
       <ItemFields form={form} errors={errors} onChange={change} />
       <label className={styles.switchRowInline}>

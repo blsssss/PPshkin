@@ -148,6 +148,58 @@ export function useDeleteItem() {
   });
 }
 
+function imageForm(file: File): FormData {
+  const form = new FormData();
+  form.append('image', file);
+  return form;
+}
+
+export function useVenuePhoto() {
+  const queryClient = useQueryClient();
+  const store = (venue: Venue) => {
+    queryClient.setQueryData(VENUE_KEY, venue);
+  };
+  const upload = useMutation({
+    mutationFn: async (file: File) =>
+      unwrap(
+        await api.PUT('/api/v1/venue/photo', {
+          body: { image: '' },
+          bodySerializer: () => imageForm(file),
+        }),
+      ),
+    onSuccess: store,
+  });
+  const remove = useMutation({
+    mutationFn: async () => unwrap(await api.DELETE('/api/v1/venue/photo')),
+    onSuccess: store,
+  });
+  return { upload: upload.mutateAsync, remove: remove.mutateAsync };
+}
+
+export function useItemPhoto(id: number) {
+  const queryClient = useQueryClient();
+  const store = (item: MenuItem) => {
+    queryClient.setQueryData<MenuItem[]>(MENU_KEY, (items) => replaceItem(items, item));
+  };
+  const upload = useMutation({
+    mutationFn: async (file: File) =>
+      unwrap(
+        await api.PUT('/api/v1/venue/menu/items/{id}/photo', {
+          params: { path: { id } },
+          body: { image: '' },
+          bodySerializer: () => imageForm(file),
+        }),
+      ),
+    onSuccess: store,
+  });
+  const remove = useMutation({
+    mutationFn: async () =>
+      unwrap(await api.DELETE('/api/v1/venue/menu/items/{id}/photo', { params: { path: { id } } })),
+    onSuccess: store,
+  });
+  return { upload: upload.mutateAsync, remove: remove.mutateAsync };
+}
+
 export async function startTextImport(text: string): Promise<MenuImport> {
   return unwrap(await api.POST('/api/v1/venue/menu/imports/text', { body: { text } }));
 }

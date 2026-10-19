@@ -20,6 +20,7 @@ const VENUE: Venue = {
   closesAt: '22:00',
   timezone: 'Europe/Moscow',
   isDemo: false,
+  photoUrl: null,
 };
 
 function row(patch: Partial<Schemas['VenueReportRow']> = {}): Schemas['VenueReportRow'] {

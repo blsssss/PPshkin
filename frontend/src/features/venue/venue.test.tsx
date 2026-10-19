@@ -18,6 +18,7 @@ const VENUE: Venue = {
   closesAt: '00:00',
   timezone: 'Europe/Moscow',
   isDemo: true,
+  photoUrl: null,
 };
 
 function item(id: number, patch: Partial<MenuItem> = {}): MenuItem {
@@ -35,6 +36,7 @@ function item(id: number, patch: Partial<MenuItem> = {}): MenuItem {
     nutritionSource: 'venue',
     tags: [],
     isAvailable: true,
+    photoUrl: null,
     ...patch,
   };
 }

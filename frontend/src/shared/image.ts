@@ -9,8 +9,8 @@ export class ImageDecodeError extends Error {
   }
 }
 
-export function needsConversion(file: Blob): boolean {
-  return !ACCEPTED_TYPES.has(file.type) || file.size > MAX_UPLOAD_BYTES;
+export function needsConversion(file: Blob, maxBytes = MAX_UPLOAD_BYTES): boolean {
+  return !ACCEPTED_TYPES.has(file.type) || file.size > maxBytes;
 }
 
 export function fitSize(width: number, height: number, maxSide: number): { width: number; height: number } {
@@ -31,8 +31,8 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-export async function prepareImage(file: File, maxSide: number): Promise<File> {
-  if (!needsConversion(file)) return file;
+export async function prepareImage(file: File, maxSide: number, maxBytes = MAX_UPLOAD_BYTES): Promise<File> {
+  if (!needsConversion(file, maxBytes)) return file;
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);

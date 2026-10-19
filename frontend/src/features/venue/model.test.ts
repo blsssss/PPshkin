@@ -37,6 +37,7 @@ const ITEM: MenuItem = {
   nutritionSource: 'venue',
   tags: ['coffee'],
   isAvailable: true,
+  photoUrl: null,
 };
 
 type Parsed = MenuImport['items'][number];

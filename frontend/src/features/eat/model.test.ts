@@ -26,6 +26,7 @@ const VENUE: Venue = {
   closesAt: '22:00',
   timezone: 'Europe/Moscow',
   isDemo: true,
+  photoUrl: null,
 };
 
 const DEAL: Deal = {

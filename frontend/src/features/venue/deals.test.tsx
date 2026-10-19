@@ -23,6 +23,7 @@ const VENUE: Venue = {
   closesAt: '22:00',
   timezone: 'Europe/Moscow',
   isDemo: false,
+  photoUrl: null,
 };
 
 const ITEM: MenuItem = {
@@ -39,6 +40,7 @@ const ITEM: MenuItem = {
   nutritionSource: 'venue',
   tags: [],
   isAvailable: true,
+  photoUrl: null,
 };
 
 function deal(patch: Partial<Deal> = {}): Deal {
