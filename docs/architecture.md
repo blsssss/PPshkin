@@ -259,13 +259,19 @@ sequenceDiagram
 
 ## 7. Модель данных
 
-Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql), [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql), [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql), [0007_session_epoch.sql](../backend/migrations/0007_session_epoch.sql), [0008_audit_retention.sql](../backend/migrations/0008_audit_retention.sql) и [0009_moderation.sql](../backend/migrations/0009_moderation.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
+Схема задаётся миграциями [0001_init.sql](../backend/migrations/0001_init.sql), [0002_offer_feedback.sql](../backend/migrations/0002_offer_feedback.sql), [0003_demo_copies.sql](../backend/migrations/0003_demo_copies.sql), [0004_notifications.sql](../backend/migrations/0004_notifications.sql), [0005_notification_settings.sql](../backend/migrations/0005_notification_settings.sql), [0006_pilot_metrics.sql](../backend/migrations/0006_pilot_metrics.sql), [0007_session_epoch.sql](../backend/migrations/0007_session_epoch.sql), [0008_audit_retention.sql](../backend/migrations/0008_audit_retention.sql), [0009_moderation.sql](../backend/migrations/0009_moderation.sql) и [0010_companies.sql](../backend/migrations/0010_companies.sql). Служебную таблицу `schema_migrations` (версия, контрольная сумма, время применения) создаёт при первом запуске `backend/src/db/migrate.ts`.
 
 ```mermaid
 erDiagram
   users ||--o{ consents : "user_id"
   users ||--o{ meals : "user_id"
   users |o--o| venues : "owner_id"
+  users |o--o{ companies : "created_by"
+  companies ||--o{ memberships : "company_id"
+  users ||--o{ memberships : "user_id"
+  companies ||--o{ company_invites : "company_id"
+  companies |o--o{ venues : "company_id"
+  users |o--o{ bookings : "redeemed_by"
   users |o--o{ offers : "user_id"
   users |o--o{ bookings : "user_id"
   users ||--o| chat_states : "user_id"
@@ -330,9 +336,51 @@ erDiagram
     timestamptz eaten_at
     timestamptz created_at
   }
+  companies {
+    bigserial id PK
+    text kind
+    text inn UK
+    text ogrn
+    text kpp
+    text name
+    text address
+    text okved
+    text registry_status
+    timestamptz registry_checked_at
+    text verification
+    text verification_note
+    timestamptz verified_at
+    bigint created_by FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  memberships {
+    bigserial id PK
+    bigint company_id FK
+    bigint user_id FK
+    text role
+    bigint venue_id FK
+    bigint invited_by FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  company_invites {
+    bigserial id PK
+    bigint company_id FK
+    bigint venue_id FK
+    text role
+    text token_hash UK
+    bigint created_by FK
+    timestamptz expires_at
+    bigint accepted_by FK
+    timestamptz accepted_at
+    timestamptz revoked_at
+    timestamptz created_at
+  }
   venues {
     bigserial id PK
     bigint owner_id FK
+    bigint company_id FK
     text name
     text address
     text category
@@ -486,7 +534,8 @@ erDiagram
 Ключевые ограничения:
 
 - `consents`: одно действующее согласие каждого вида на пользователя (уникальный индекс по `user_id, kind` для строк без `revoked_at`); `kind` это `personal_data` или `personalized_offers`, `channel` это `bot` или `miniapp`.
-- `venues`: одно заведение на владельца (уникальный индекс по `owner_id`); `demo_source_id` заполняется только у копий демо-заведений (`is_demo`).
+- `venues`: у заведения компании заполнен `company_id`, а `owner_id` пуст; уникальный индекс по `owner_id` остался только для демо-заведений и их копий, `demo_source_id` заполняется только у копий демо-заведений (`is_demo`).
+- `companies`, `memberships`, `company_invites`: компания (юрлицо или ИП) с реквизитами из ЕГРЮЛ и ЕГРИП, членство с ролью `owner`, `manager` или `cashier` (`venue_id` пуст: все заведения компании; у владельца всегда пуст) и приглашение по ссылке. У пользователя одно членство в компании (уникальный `company_id, user_id`), ИНН уникален. В приглашении хранится только `sha256` токена. Проверка компании (`verification`: `unverified`, `pending`, `verified`, `rejected`) и решение модератора лежат в `companies`; `bookings.redeemed_by` хранит сотрудника, который погасил бронь.
 - `deals`, `offers`, `bookings` ссылаются на позицию составным ключом `(venue_id, menu_item_id)`, поэтому позиция другого заведения не может попасть в акцию или бронь.
 - `bookings`: код из алфавита `[A-HJ-NP-Z2-9]{6}` уникален среди активных броней заведения; у гостя одна активная бронь на горящую позицию; `resolved_at` заполнен тогда и только тогда, когда бронь не активна.
 - `audit_events`: запись пишется в той же транзакции, что и действие в заведении (погашение брони, акции, меню, импорт, карточка заведения), с каналом `bot` или `miniapp` в `details`; данных гостя нет, только код брони. Читается через `GET /api/v1/venue/audit`. `users.last_seen_at` обновляется при входе в мини-приложение и событии бота не чаще раза в час.
@@ -519,7 +568,7 @@ erDiagram
 | Демо-токены | заголовок `Authorization: Bearer` | только при `DEMO_MODE=true`: сравнение за постоянное время с `DEMO_GUEST_TOKEN` (`userId -1001`) и `DEMO_VENUE_TOKEN` (`userId -1002`). Демо-учётки нельзя удалить, и они не могут взять копию демо-заведения |
 | Бот | обновления MAX | пользователь определяется платформой MAX, webhook принимается только с верным `X-Max-Bot-Api-Secret` |
 
-Конфигурация отклоняет демо-токены без `DEMO_MODE=true`, демо-режим без токенов и локальные токены с префиксом `local-demo-` при `BOT_MODE=webhook`. Роль заведения не отдельная учётка: любой пользователь становится владельцем, когда создаёт заведение или берёт копию демо-заведения, и методы `/api/v1/venue/*` работают только с его заведением.
+Конфигурация отклоняет демо-токены без `DEMO_MODE=true`, демо-режим без токенов и локальные токены с префиксом `local-demo-` при `BOT_MODE=webhook`. Роль заведения не отдельная учётка: роль определяется членством в компании (`memberships`), токен роль не содержит. Пользователь без рабочих мест становится владельцем новой компании, когда создаёт заведение, а копию демо-заведения берёт как владелец без компании. Методы `/api/v1/venue/*` на каждом запросе находят рабочие места пользователя (`resolveVenueAccess`), выбирают заведение по необязательному `venueId` и проверяют право роли (`domain/roles.ts`), поэтому исключение сотрудника действует со следующего запроса.
 
 ## 10. Ограничения частоты запросов
 
