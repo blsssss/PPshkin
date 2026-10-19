@@ -20,6 +20,7 @@ import { SegmentedControl } from '../../shared/ui/SegmentedControl.tsx';
 import { Skeleton } from '../../shared/ui/Skeleton.tsx';
 import { useToast } from '../../shared/ui/Toast.tsx';
 import { mapsLink } from '../eat/model.ts';
+import { ComplaintSheet } from '../support/ComplaintSheet.tsx';
 import { DealPrice, DemoBadge } from '../eat/parts.tsx';
 import {
   CREATE_ERRORS,
@@ -323,6 +324,33 @@ function FullscreenQr({ booking, onClose }: { booking: Booking; onClose: () => v
   );
 }
 
+function ProblemButton({ booking }: { booking: Booking }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        size="large"
+        variant="secondary"
+        stretched
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Проблема с бронью
+      </Button>
+      <ComplaintSheet
+        open={open}
+        title="Проблема с бронью"
+        venueId={booking.venue.id}
+        bookingId={booking.id}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
 function Resolved({ booking }: { booking: Booking }) {
   const navigate = useNavigate();
   const go = (path: string) => () => {
@@ -330,21 +358,31 @@ function Resolved({ booking }: { booking: Booking }) {
   };
   if (booking.status === 'redeemed') {
     return (
-      <ScreenState
-        status="empty"
-        title="Готово! Бронь получена, блюдо записано в дневник"
-        action={{ label: 'Открыть дневник', onClick: go('/diary') }}
-        secondaryAction={{ label: 'Что поесть дальше', onClick: go('/eat') }}
-      />
+      <>
+        <ScreenState
+          status="empty"
+          title="Готово! Бронь получена, блюдо записано в дневник"
+          action={{ label: 'Открыть дневник', onClick: go('/diary') }}
+          secondaryAction={{ label: 'Что поесть дальше', onClick: go('/eat') }}
+        />
+        <div className={styles.actions}>
+          <ProblemButton booking={booking} />
+        </div>
+      </>
     );
   }
   return (
-    <ScreenState
-      status="empty"
-      title={booking.status === 'expired' ? 'Время брони вышло' : 'Бронь отменена'}
-      action={{ label: booking.status === 'expired' ? 'Найти другое' : 'Что поесть', onClick: go('/eat') }}
-      secondaryAction={{ label: 'Мои брони', onClick: go('/bookings') }}
-    />
+    <>
+      <ScreenState
+        status="empty"
+        title={booking.status === 'expired' ? 'Время брони вышло' : 'Бронь отменена'}
+        action={{ label: booking.status === 'expired' ? 'Найти другое' : 'Что поесть', onClick: go('/eat') }}
+        secondaryAction={{ label: 'Мои брони', onClick: go('/bookings') }}
+      />
+      <div className={styles.actions}>
+        <ProblemButton booking={booking} />
+      </div>
+    </>
   );
 }
 
@@ -409,6 +447,7 @@ function ActiveBooking({ booking, refetch }: { booking: Booking; refetch: () => 
         >
           Отменить бронь
         </Button>
+        <ProblemButton booking={booking} />
       </div>
       <ConfirmSheet
         open={confirm}

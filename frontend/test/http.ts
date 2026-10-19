@@ -42,4 +42,5 @@ export const TEST_USER: UserProfile = {
     personalData: { granted: true, version: '2026-09-25', grantedAt: '2026-09-25T10:00:00.000Z' },
     personalizedOffers: { granted: false, version: null, grantedAt: null },
   },
+  isAdmin: false,
 };

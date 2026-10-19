@@ -59,6 +59,9 @@ const MESSAGES: Record<string, string> = {
   booking_expired: 'Срок брони истёк',
   booking_not_active: 'Бронь уже погашена или отменена',
   invalid_period: 'Неверный период',
+  complaint_exists: 'Жалоба на эту бронь уже отправлена',
+  complaint_limit: 'Сегодня отправлено максимум жалоб, повторите завтра',
+  user_blocked: 'Аккаунт заблокирован, бронирование недоступно. Напишите в поддержку',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
