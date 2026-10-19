@@ -33,6 +33,9 @@ services:
       DEMO_GUEST_TOKEN: ${DEMO_GUEST_TOKEN-local-demo-guest-token-not-secret}
       DEMO_VENUE_TOKEN: ${DEMO_VENUE_TOKEN-local-demo-venue-token-not-secret}
       BOT_MODE: ${BOT_MODE:-off}
+      PHOTOS_DIR: /var/lib/ppshkin/photos
+    volumes:
+      - photos:/var/lib/ppshkin/photos
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     depends_on:
@@ -65,3 +68,4 @@ services:
 
 volumes:
   pgdata:
+  photos:

@@ -41,6 +41,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ppshkin}@db:5432/${POSTGRES_DB:-ppshkin}
       PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
       BOT_MODE: ${BOT_MODE:-webhook}
+      PHOTOS_DIR: /var/lib/ppshkin/photos
+    volumes:
+      - photos:/var/lib/ppshkin/photos
     expose:
       - "3000"
     depends_on:
@@ -166,6 +169,7 @@ volumes:
   caddy_data:
   caddy_config:
   pgdata:
+  photos:
   prometheus_data:
   alertmanager_data:
   grafana_data:
