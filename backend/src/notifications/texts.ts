@@ -232,7 +232,7 @@ export function complaintCreatedMessage(complaint: AdminComplaint, venue: Venue)
       ...(complaint.text === null ? [] : [escapeMarkdown(complaint.text)]),
       formatLocalTime(complaint.createdAt, venue.timezone),
     ],
-    [],
+    [[callback('Разобрать', payload('ad', 'cl'))]],
   );
 }
 

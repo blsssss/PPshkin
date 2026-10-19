@@ -1,12 +1,12 @@
 import type { Booking } from '../../domain/models.ts';
-import type { OutgoingMessage } from '../../ports/messenger.ts';
+import type { Button, OutgoingMessage } from '../../ports/messenger.ts';
 import type { BookingInput, BookingView } from '../../services/bookings.ts';
 import { AppError } from '../../shared/errors.ts';
 import { formatLocalTime } from '../../shared/time.ts';
-import { answerStale, byAction, parseId } from '../callbacks.ts';
+import { answerStale, byAction, parseId, payload } from '../callbacks.ts';
 import type { BotContext, BotKit, BotModule } from '../context.ts';
 import { describeFailure } from '../failures.ts';
-import { command, eatButton, placeButtons } from '../keyboards.ts';
+import { callback, command, eatButton, placeButtons } from '../keyboards.ts';
 import { BUTTONS, DEMO_VENUE, shortDate, venuePlace } from '../texts.ts';
 import { bookingButtons, cancelBookingButtons } from './offer-keyboards.ts';
 import {
@@ -79,6 +79,15 @@ function historyText(views: readonly BookingView[]): string | null {
     )
     .slice(0, HISTORY_LIMIT);
   return lines.length > 0 ? [HISTORY_TITLE, ...lines].join('\n') : null;
+}
+
+function problemButtons(views: readonly BookingView[]): Button[][] {
+  return views
+    .filter(({ booking }) => booking.status !== 'active')
+    .slice(0, HISTORY_LIMIT)
+    .map(({ booking }) => [
+      callback(`${BUTTONS.problem}: ${booking.code}`, payload('cp', 'new', booking.id)),
+    ]);
 }
 
 function bookingCard({ booking, venue }: BookingView, ctx: BotContext, showQr: boolean): OutgoingMessage {
@@ -207,10 +216,14 @@ export function createBookingsModule({ services, messenger, logger }: BotKit): B
 
   async function list(ctx: BotContext): Promise<void> {
     const active = await bookings.list(ctx.user.id, 'active');
-    const history = historyText(await bookings.list(ctx.user.id, 'history'));
+    const finished = await bookings.list(ctx.user.id, 'history');
+    const history = historyText(finished);
     if (active.length === 0) await ctx.reply({ text: NO_ACTIVE_BOOKINGS, buttons: [[eatButton()]] });
     for (const view of active) await ctx.reply(bookingCard(view, ctx, true));
-    if (history !== null) await ctx.reply({ text: history });
+    if (history !== null) {
+      const problems = problemButtons(finished);
+      await ctx.reply({ text: history, ...(problems.length > 0 ? { buttons: problems } : {}) });
+    }
   }
 
   return {

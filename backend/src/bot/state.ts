@@ -28,6 +28,7 @@ const FlowSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('eat_location') }),
   z.object({ name: z.literal('meal_fix'), mealId: z.number().int().positive() }),
   z.object({ name: z.literal('meal_manual') }),
+  z.object({ name: z.literal('admin_block'), venueId: z.number().int().positive() }),
   z.object({ name: z.literal('meal_text_confirm'), text: z.string().min(1), messageId }),
   z.object({
     name: z.literal('meal_candidates'),

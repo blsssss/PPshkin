@@ -4,7 +4,9 @@ import type { Messenger, UpdateHandler } from '../ports/messenger.ts';
 import type { Services } from '../services/index.ts';
 import type { Clock } from '../shared/clock.ts';
 import type { BotKit } from './context.ts';
+import { createAdminModule } from './admin/index.ts';
 import { createBookingsModule } from './guest/bookings.ts';
+import { createComplaintsModule } from './guest/complaints.ts';
 import { createMealsModule } from './guest/meals.ts';
 import { createOffersModule } from './guest/offers.ts';
 import { createOnboardingModule } from './guest/onboarding.ts';
@@ -32,6 +34,7 @@ const GUEST_MODULES = [
   createMealsModule,
   createOffersModule,
   createBookingsModule,
+  createComplaintsModule,
   createProfileModule,
   createNotificationsModule,
   createVenuesModule,
@@ -48,6 +51,7 @@ export function createBot(deps: BotDependencies): UpdateHandler {
   };
   for (const createModule of GUEST_MODULES) registry.add(createModule(kit));
   registry.add(createVenueModule(kit));
+  registry.add(createAdminModule(kit));
   return createRouter({
     db: deps.pool,
     services: deps.services,

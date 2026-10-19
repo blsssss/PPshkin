@@ -62,6 +62,7 @@ export const BUTTONS = {
   route: 'Маршрут',
   venueInApp: 'Меню и все предложения',
   openInApp: 'Открыть в мини-приложении',
+  problem: 'Проблема с бронью',
 } as const;
 
 export const NOTICES = {
@@ -100,6 +101,14 @@ const ERROR_TEXTS: Readonly<Record<string, string>> = {
   demo_account_protected: 'Демо-аккаунт удалить нельзя.',
   demo_diary_exists: 'Пример уже добавлен',
   demo_mode_disabled: 'Демо-режим на сервере выключен.',
+  user_blocked:
+    'Бронирование недоступно: аккаунт заблокирован. Напишите команде проекта, если считаете это ошибкой.',
+  complaint_exists: 'Жалоба на эту бронь уже отправлена.',
+  complaint_limit: 'Сегодня отправлено максимум жалоб, повторите завтра.',
+  already_resolved: 'Решение по жалобе уже принято.',
+  already_blocked: 'Уже заблокировано.',
+  not_blocked: 'Блокировка уже снята.',
+  complaint_not_found: RECORD_GONE,
   validation_failed: 'Проверьте ввод и попробуйте ещё раз.',
   eaten_at_out_of_range: 'Проверьте ввод и попробуйте ещё раз.',
 };
