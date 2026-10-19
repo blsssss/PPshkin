@@ -28,6 +28,23 @@ components:
         - lat
         - lon
       description: Координаты WGS 84
+    RoleInput:
+      type: string
+      enum:
+        - owner
+        - manager
+        - cashier
+      description: "Роль сотрудника: owner - владелец, manager - управляющий, cashier
+        - кассир"
+    VerificationInput:
+      type: string
+      enum:
+        - unverified
+        - pending
+        - verified
+        - rejected
+      description: "Проверка компании: unverified - без реквизитов, pending - на
+        проверке у модератора, verified - подтверждена, rejected - отклонена"
     ComplaintRequestInput:
       type: object
       properties:
@@ -88,6 +105,24 @@ components:
       required:
         - reason
       description: Причина блокировки
+    CompanyDecisionInput:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+            - verified
+            - rejected
+          description: verified - подтвердить, rejected - отклонить
+        note:
+          description: "Причина, до 500 символов; при отклонении обязательна. Типовые
+            причины: Реквизиты не совпадают с заведением; Компания не занимается
+            общепитом; Нет подтверждения полномочий; иначе свободный текст"
+          type: string
+          maxLength: 500
+      required:
+        - decision
+      description: Решение администратора по компании на проверке
     ProfilePatchInput:
       type: object
       properties:
@@ -188,14 +223,6 @@ components:
       required:
         - code
       description: Код брони для погашения
-    RoleInput:
-      type: string
-      enum:
-        - owner
-        - manager
-        - cashier
-      description: "Роль сотрудника: owner - владелец, manager - управляющий, cashier
-        - кассир"
     ManualMealInput:
       type: object
       properties:
@@ -532,402 +559,66 @@ components:
         - lon
       additionalProperties: false
       description: Координаты WGS 84
-    Complaint:
+    Deal:
       type: object
       properties:
         id:
           type: integer
-        venueId:
+        menuItemId:
           type: integer
-        bookingId:
-          anyOf:
-            - type: integer
-            - type: "null"
-        reason:
-          type: string
-          enum:
-            - not_served
-            - price_mismatch
-            - venue_closed
-            - item_missing
-            - quality
-            - wrong_info
-            - other
-          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
-            Цена на кассе другая; venue_closed - Заведение было закрыто;
-            item_missing - Блюда не было в наличии; quality - Качество блюда;
-            wrong_info - Неверные сведения о заведении или меню; other - Другое"
-        status:
-          type: string
-          enum:
-            - open
-            - resolved
-            - rejected
-          description: open - ждёт решения, resolved - решена, rejected - отклонена
-        createdAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        resolvedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-      required:
-        - id
-        - venueId
-        - bookingId
-        - reason
-        - status
-        - createdAt
-        - resolvedAt
-      additionalProperties: false
-      description: Жалоба гостя
-    ComplaintList:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Complaint"
-          description: Жалобы гостя, сначала новые
-      required:
-        - items
-      additionalProperties: false
-    AdminComplaint:
-      type: object
-      properties:
-        id:
-          type: integer
-        venueId:
-          type: integer
-        bookingId:
-          anyOf:
-            - type: integer
-            - type: "null"
-        reason:
-          type: string
-          enum:
-            - not_served
-            - price_mismatch
-            - venue_closed
-            - item_missing
-            - quality
-            - wrong_info
-            - other
-          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
-            Цена на кассе другая; venue_closed - Заведение было закрыто;
-            item_missing - Блюда не было в наличии; quality - Качество блюда;
-            wrong_info - Неверные сведения о заведении или меню; other - Другое"
-        status:
-          type: string
-          enum:
-            - open
-            - resolved
-            - rejected
-          description: open - ждёт решения, resolved - решена, rejected - отклонена
-        createdAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        resolvedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-        text:
-          description: Пояснение гостя
-          type:
-            - string
-            - "null"
-        venueName:
-          type: string
-        bookingCode:
-          type:
-            - string
-            - "null"
         itemName:
-          type:
-            - string
-            - "null"
-        resolution:
-          description: Комментарий администратора к решению
-          type:
-            - string
-            - "null"
-      required:
-        - id
-        - venueId
-        - bookingId
-        - reason
-        - status
-        - createdAt
-        - resolvedAt
-        - text
-        - venueName
-        - bookingCode
-        - itemName
-        - resolution
-      additionalProperties: false
-      description: Жалоба в очереди администратора
-    AdminComplaintList:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/AdminComplaint"
-      required:
-        - items
-      additionalProperties: false
-    BlockState:
-      type: object
-      properties:
-        blocked:
-          type: boolean
-          description: true - заблокировано, false - блокировка снята
-      required:
-        - blocked
-      additionalProperties: false
-      description: Состояние блокировки после действия
-    ConsentState:
-      type: object
-      properties:
-        granted:
-          type: boolean
-          description: true, только если действует согласие на актуальную версию текста
-        version:
-          description: Версия действующего согласия, null если согласия нет. Устаревшая
-            версия означает, что согласие нужно дать заново
-          type:
-            - string
-            - "null"
-        grantedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-          description: Когда дано действующее согласие
-      required:
-        - granted
-        - version
-        - grantedAt
-      additionalProperties: false
-      description: Состояние согласия пользователя
-    ConsentStatus:
-      type: object
-      properties:
-        personalData:
-          $ref: "#/components/schemas/ConsentState"
-        personalizedOffers:
-          $ref: "#/components/schemas/ConsentState"
-      required:
-        - personalData
-        - personalizedOffers
-      additionalProperties: false
-      description: Состояние обоих согласий пользователя
-    ConsentDocument:
-      type: object
-      properties:
-        kind:
+          type: string
+        priceRub:
+          type: integer
+          description: Цена по акции в рублях
+        originalPriceRub:
+          type: integer
+          description: Текущая цена позиции в меню
+        discountPercent:
+          type: integer
+          description: Скидка в процентах от цены в меню
+        quantityTotal:
+          type: integer
+        quantityLeft:
+          type: integer
+        startsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        endsAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        status:
           type: string
           enum:
-            - personal_data
-            - personalized_offers
-          description: personal_data - обработка персональных данных, personalized_offers
-            - персональные предложения
-        version:
-          type: string
-          description: Актуальная версия текста, её передают в PUT /api/v1/consents/{kind}
-        title:
-          type: string
-        text:
-          type: string
-          description: Полный текст согласия, абзацы разделены пустой строкой
-        required:
-          type: boolean
-          description: Без обязательного согласия дневник и профиль не сохраняются
-        granted:
-          type: boolean
-          description: Действует ли согласие пользователя на актуальную версию
-        grantedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-          description: Когда дано действующее согласие
-      required:
-        - kind
-        - version
-        - title
-        - text
-        - required
-        - granted
-        - grantedAt
-      additionalProperties: false
-      description: Текст согласия и его состояние у пользователя
-    UserProfile:
-      type: object
-      properties:
-        id:
-          type: integer
-          description: Идентификатор пользователя в MAX
-        firstName:
-          type:
-            - string
-            - "null"
-        username:
-          type:
-            - string
-            - "null"
-        timezone:
-          type: string
-          description: Часовой пояс IANA, по нему считаются дни дневника
-        kcalTarget:
-          type: integer
-          description: Ориентир калорийности на день, ккал
-        goal:
-          anyOf:
-            - type: string
-              enum:
-                - lose
-                - maintain
-                - gain
-            - type: "null"
-          description: "Цель: lose - снизить вес, maintain - удерживать, gain - набрать,
-            null - не выбрана"
-        dislikedTags:
-          type: array
-          items:
-            type: string
-            enum:
-              - sweet
-              - dessert
-              - pastry
-              - chocolate
-              - fruit
-              - berries
-              - dairy
-              - cheese
-              - eggs
-              - meat
-              - poultry
-              - fish
-              - seafood
-              - vegetarian
-              - vegetables
-              - greens
-              - salad
-              - soup
-              - grain
-              - pasta
-              - rice
-              - potato
-              - bread
-              - fried
-              - grilled
-              - spicy
-              - fast_food
-              - coffee
-              - tea
-              - drink
-              - juice
-              - high_protein
-              - light
-              - hearty
-              - breakfast
-          description: Теги блюд, которые гостю не предлагаются
-        location:
-          anyOf:
-            - $ref: "#/components/schemas/GeoPoint"
-            - type: "null"
-          description: Последнее переданное местоположение с точностью около 1 км
-        locationUpdatedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-          description: Когда передано местоположение
-        consents:
-          $ref: "#/components/schemas/ConsentStatus"
-        isAdmin:
-          type: boolean
-          description: Пользователь указан в ADMIN_USER_IDS и может модерировать
+            - scheduled
+            - active
+            - sold_out
+            - ended
+            - cancelled
+          description: active - продаётся; scheduled - ещё не началась; sold_out - порции
+            закончились; ended - время вышло или заведение закрылось после
+            начала предложения; cancelled - снята заведением
       required:
         - id
-        - firstName
-        - username
-        - timezone
-        - kcalTarget
-        - goal
-        - dislikedTags
-        - location
-        - locationUpdatedAt
-        - consents
-        - isAdmin
+        - menuItemId
+        - itemName
+        - priceRub
+        - originalPriceRub
+        - discountPercent
+        - quantityTotal
+        - quantityLeft
+        - startsAt
+        - endsAt
+        - status
       additionalProperties: false
-      description: Профиль пользователя и состояние его согласий
-    UserLocation:
-      type: object
-      properties:
-        location:
-          $ref: "#/components/schemas/GeoPoint"
-        updatedAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-      required:
-        - location
-        - updatedAt
-      additionalProperties: false
-      description: "Сохранённое местоположение: координаты округлены до 2 знаков, это
-        около 1 км"
-    Session:
-      type: object
-      properties:
-        token:
-          type: string
-          description: "Токен для заголовка Authorization: Bearer"
-        expiresAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        startParam:
-          description: Подписанный параметр startapp, с которым открыто мини-приложение
-          type:
-            - string
-            - "null"
-        user:
-          $ref: "#/components/schemas/UserProfile"
-      required:
-        - token
-        - expiresAt
-        - startParam
-        - user
-      additionalProperties: false
+      description: "Горящее предложение: позиция меню со скидкой, ограниченным
+        количеством и сроком"
     MenuItem:
       type: object
       properties:
@@ -1213,66 +904,6 @@ components:
         - duplicates
       additionalProperties: false
       description: Результат применения импорта меню
-    Deal:
-      type: object
-      properties:
-        id:
-          type: integer
-        menuItemId:
-          type: integer
-        itemName:
-          type: string
-        priceRub:
-          type: integer
-          description: Цена по акции в рублях
-        originalPriceRub:
-          type: integer
-          description: Текущая цена позиции в меню
-        discountPercent:
-          type: integer
-          description: Скидка в процентах от цены в меню
-        quantityTotal:
-          type: integer
-        quantityLeft:
-          type: integer
-        startsAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        endsAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        status:
-          type: string
-          enum:
-            - scheduled
-            - active
-            - sold_out
-            - ended
-            - cancelled
-          description: active - продаётся; scheduled - ещё не началась; sold_out - порции
-            закончились; ended - время вышло или заведение закрылось после
-            начала предложения; cancelled - снята заведением
-      required:
-        - id
-        - menuItemId
-        - itemName
-        - priceRub
-        - originalPriceRub
-        - discountPercent
-        - quantityTotal
-        - quantityLeft
-        - startsAt
-        - endsAt
-        - status
-      additionalProperties: false
-      description: "Горящее предложение: позиция меню со скидкой, ограниченным
-        количеством и сроком"
     Venue:
       type: object
       properties:
@@ -1415,83 +1046,6 @@ components:
         - distanceM
       additionalProperties: false
       description: Горящее предложение в ленте рядом
-    Booking:
-      type: object
-      properties:
-        id:
-          type: integer
-        code:
-          type: string
-          description: "Код брони из 6 символов: латинские буквы без I и O и цифры от 2 до
-            9. Гость называет его на кассе"
-        qrPayload:
-          type: string
-          description: Содержимое QR-кода брони, ppshkin:booking:<code>. Из него можно
-            нарисовать QR на клиенте
-        status:
-          type: string
-          enum:
-            - active
-            - redeemed
-            - cancelled
-            - expired
-          description: active - ждёт гостя до expiresAt; redeemed - погашена заведением;
-            cancelled - отменена гостем; expired - время вышло, порция вернулась
-            в продажу
-        expiresAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        createdAt:
-          type: string
-          format: date-time
-          examples:
-            - 2026-09-25T12:00:00.000Z
-          description: Дата и время в формате ISO 8601, UTC
-        resolvedAt:
-          anyOf:
-            - type: string
-              format: date-time
-              examples:
-                - 2026-09-25T12:00:00.000Z
-              description: Дата и время в формате ISO 8601, UTC
-            - type: "null"
-        dealId:
-          anyOf:
-            - type: integer
-            - type: "null"
-          description: Горящее предложение, по которому зарезервирована порция; null для
-            брони по цене меню
-        item:
-          $ref: "#/components/schemas/MenuItem"
-        venue:
-          $ref: "#/components/schemas/Venue"
-        priceRub:
-          type: integer
-          description: Цена на момент бронирования с учётом горящего предложения
-        kcal:
-          type: integer
-          description: Калорийность порции на момент бронирования
-      required:
-        - id
-        - code
-        - qrPayload
-        - status
-        - expiresAt
-        - createdAt
-        - resolvedAt
-        - dealId
-        - item
-        - venue
-        - priceRub
-        - kcal
-      additionalProperties: false
-      description: Бронь блюда. expiresAt - до какого момента бронь действует,
-        resolvedAt - когда погашена, отменена или истекла. item - текущая
-        позиция меню, она может быть уже убрана из меню. Данных гостя в брони
-        нет
     Role:
       type: string
       enum:
@@ -1806,14 +1360,504 @@ components:
         venueScoped:
           type: boolean
           description: Доступ только к этому заведению, а не ко всем заведениям компании
+        hiddenUntilVerified:
+          type: boolean
+          description: "true: включена обязательная проверка, компания ещё не проверена и
+            гости заведение не видят. Покажите баннер «Заведение появится у
+            гостей после проверки»"
       required:
         - venue
         - company
         - role
         - permissions
         - venueScoped
+        - hiddenUntilVerified
       additionalProperties: false
       description: Заведение, с которым работает пользователь, и его роль
+    Complaint:
+      type: object
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        bookingId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        reason:
+          type: string
+          enum:
+            - not_served
+            - price_mismatch
+            - venue_closed
+            - item_missing
+            - quality
+            - wrong_info
+            - other
+          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
+            Цена на кассе другая; venue_closed - Заведение было закрыто;
+            item_missing - Блюда не было в наличии; quality - Качество блюда;
+            wrong_info - Неверные сведения о заведении или меню; other - Другое"
+        status:
+          type: string
+          enum:
+            - open
+            - resolved
+            - rejected
+          description: open - ждёт решения, resolved - решена, rejected - отклонена
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+      required:
+        - id
+        - venueId
+        - bookingId
+        - reason
+        - status
+        - createdAt
+        - resolvedAt
+      additionalProperties: false
+      description: Жалоба гостя
+    ComplaintList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Complaint"
+          description: Жалобы гостя, сначала новые
+      required:
+        - items
+      additionalProperties: false
+    AdminComplaint:
+      type: object
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        bookingId:
+          anyOf:
+            - type: integer
+            - type: "null"
+        reason:
+          type: string
+          enum:
+            - not_served
+            - price_mismatch
+            - venue_closed
+            - item_missing
+            - quality
+            - wrong_info
+            - other
+          description: "Причина: not_served - Не выдали заказ по брони; price_mismatch -
+            Цена на кассе другая; venue_closed - Заведение было закрыто;
+            item_missing - Блюда не было в наличии; quality - Качество блюда;
+            wrong_info - Неверные сведения о заведении или меню; other - Другое"
+        status:
+          type: string
+          enum:
+            - open
+            - resolved
+            - rejected
+          description: open - ждёт решения, resolved - решена, rejected - отклонена
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+        text:
+          description: Пояснение гостя
+          type:
+            - string
+            - "null"
+        venueName:
+          type: string
+        bookingCode:
+          type:
+            - string
+            - "null"
+        itemName:
+          type:
+            - string
+            - "null"
+        resolution:
+          description: Комментарий администратора к решению
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - venueId
+        - bookingId
+        - reason
+        - status
+        - createdAt
+        - resolvedAt
+        - text
+        - venueName
+        - bookingCode
+        - itemName
+        - resolution
+      additionalProperties: false
+      description: Жалоба в очереди администратора
+    AdminComplaintList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminComplaint"
+      required:
+        - items
+      additionalProperties: false
+    CompanyReviewList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Company"
+          description: Не больше 50 компаний, сначала недавно обновлённые
+      required:
+        - items
+      additionalProperties: false
+    BlockState:
+      type: object
+      properties:
+        blocked:
+          type: boolean
+          description: true - заблокировано, false - блокировка снята
+      required:
+        - blocked
+      additionalProperties: false
+      description: Состояние блокировки после действия
+    ConsentState:
+      type: object
+      properties:
+        granted:
+          type: boolean
+          description: true, только если действует согласие на актуальную версию текста
+        version:
+          description: Версия действующего согласия, null если согласия нет. Устаревшая
+            версия означает, что согласие нужно дать заново
+          type:
+            - string
+            - "null"
+        grantedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда дано действующее согласие
+      required:
+        - granted
+        - version
+        - grantedAt
+      additionalProperties: false
+      description: Состояние согласия пользователя
+    ConsentStatus:
+      type: object
+      properties:
+        personalData:
+          $ref: "#/components/schemas/ConsentState"
+        personalizedOffers:
+          $ref: "#/components/schemas/ConsentState"
+      required:
+        - personalData
+        - personalizedOffers
+      additionalProperties: false
+      description: Состояние обоих согласий пользователя
+    ConsentDocument:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - personal_data
+            - personalized_offers
+          description: personal_data - обработка персональных данных, personalized_offers
+            - персональные предложения
+        version:
+          type: string
+          description: Актуальная версия текста, её передают в PUT /api/v1/consents/{kind}
+        title:
+          type: string
+        text:
+          type: string
+          description: Полный текст согласия, абзацы разделены пустой строкой
+        required:
+          type: boolean
+          description: Без обязательного согласия дневник и профиль не сохраняются
+        granted:
+          type: boolean
+          description: Действует ли согласие пользователя на актуальную версию
+        grantedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда дано действующее согласие
+      required:
+        - kind
+        - version
+        - title
+        - text
+        - required
+        - granted
+        - grantedAt
+      additionalProperties: false
+      description: Текст согласия и его состояние у пользователя
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор пользователя в MAX
+        firstName:
+          type:
+            - string
+            - "null"
+        username:
+          type:
+            - string
+            - "null"
+        timezone:
+          type: string
+          description: Часовой пояс IANA, по нему считаются дни дневника
+        kcalTarget:
+          type: integer
+          description: Ориентир калорийности на день, ккал
+        goal:
+          anyOf:
+            - type: string
+              enum:
+                - lose
+                - maintain
+                - gain
+            - type: "null"
+          description: "Цель: lose - снизить вес, maintain - удерживать, gain - набрать,
+            null - не выбрана"
+        dislikedTags:
+          type: array
+          items:
+            type: string
+            enum:
+              - sweet
+              - dessert
+              - pastry
+              - chocolate
+              - fruit
+              - berries
+              - dairy
+              - cheese
+              - eggs
+              - meat
+              - poultry
+              - fish
+              - seafood
+              - vegetarian
+              - vegetables
+              - greens
+              - salad
+              - soup
+              - grain
+              - pasta
+              - rice
+              - potato
+              - bread
+              - fried
+              - grilled
+              - spicy
+              - fast_food
+              - coffee
+              - tea
+              - drink
+              - juice
+              - high_protein
+              - light
+              - hearty
+              - breakfast
+          description: Теги блюд, которые гостю не предлагаются
+        location:
+          anyOf:
+            - $ref: "#/components/schemas/GeoPoint"
+            - type: "null"
+          description: Последнее переданное местоположение с точностью около 1 км
+        locationUpdatedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+          description: Когда передано местоположение
+        consents:
+          $ref: "#/components/schemas/ConsentStatus"
+        isAdmin:
+          type: boolean
+          description: Пользователь указан в ADMIN_USER_IDS и может модерировать
+      required:
+        - id
+        - firstName
+        - username
+        - timezone
+        - kcalTarget
+        - goal
+        - dislikedTags
+        - location
+        - locationUpdatedAt
+        - consents
+        - isAdmin
+      additionalProperties: false
+      description: Профиль пользователя и состояние его согласий
+    UserLocation:
+      type: object
+      properties:
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        updatedAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+      required:
+        - location
+        - updatedAt
+      additionalProperties: false
+      description: "Сохранённое местоположение: координаты округлены до 2 знаков, это
+        около 1 км"
+    Session:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "Токен для заголовка Authorization: Bearer"
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        startParam:
+          description: Подписанный параметр startapp, с которым открыто мини-приложение
+          type:
+            - string
+            - "null"
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required:
+        - token
+        - expiresAt
+        - startParam
+        - user
+      additionalProperties: false
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          description: "Код брони из 6 символов: латинские буквы без I и O и цифры от 2 до
+            9. Гость называет его на кассе"
+        qrPayload:
+          type: string
+          description: Содержимое QR-кода брони, ppshkin:booking:<code>. Из него можно
+            нарисовать QR на клиенте
+        status:
+          type: string
+          enum:
+            - active
+            - redeemed
+            - cancelled
+            - expired
+          description: active - ждёт гостя до expiresAt; redeemed - погашена заведением;
+            cancelled - отменена гостем; expired - время вышло, порция вернулась
+            в продажу
+        expiresAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        createdAt:
+          type: string
+          format: date-time
+          examples:
+            - 2026-09-25T12:00:00.000Z
+          description: Дата и время в формате ISO 8601, UTC
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              examples:
+                - 2026-09-25T12:00:00.000Z
+              description: Дата и время в формате ISO 8601, UTC
+            - type: "null"
+        dealId:
+          anyOf:
+            - type: integer
+            - type: "null"
+          description: Горящее предложение, по которому зарезервирована порция; null для
+            брони по цене меню
+        item:
+          $ref: "#/components/schemas/MenuItem"
+        venue:
+          $ref: "#/components/schemas/Venue"
+        priceRub:
+          type: integer
+          description: Цена на момент бронирования с учётом горящего предложения
+        kcal:
+          type: integer
+          description: Калорийность порции на момент бронирования
+      required:
+        - id
+        - code
+        - qrPayload
+        - status
+        - expiresAt
+        - createdAt
+        - resolvedAt
+        - dealId
+        - item
+        - venue
+        - priceRub
+        - kcal
+      additionalProperties: false
+      description: Бронь блюда. expiresAt - до какого момента бронь действует,
+        resolvedAt - когда погашена, отменена или истекла. item - текущая
+        позиция меню, она может быть уже убрана из меню. Данных гостя в брони
+        нет
     DemoDiaryResult:
       type: object
       properties:
@@ -9069,6 +9113,198 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/admin/companies:
+    get:
+      operationId: listCompaniesForReview
+      summary: Компании на проверке
+      tags:
+        - admin
+      description: "Не больше 50 компаний. По умолчанию только ожидающие решения
+        (pending). Коды ошибок: validation_failed (400): исправьте поля,
+        перечисленные в errors. not_found (404): вы не администратор, метод
+        скрыт."
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/VerificationInput"
+          in: query
+          name: verification
+          required: false
+      security: *a4
+      responses:
+        "200":
+          description: Компании
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyReviewList"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/companies/{id}/verification:
+    post:
+      operationId: decideCompanyVerification
+      summary: Подтвердить или отклонить компанию
+      tags:
+        - admin
+      description: "Меняет verification, verification_note и verified_at, владельцы
+        компании получают сообщение с итогом. При отклонении note обязателен:
+        его увидит владелец. Коды ошибок: validation_failed (400): исправьте
+        поля, перечисленные в errors. not_found (404): вы не администратор,
+        метод скрыт. company_not_found (404): компании нет. not_pending (409):
+        компания не ждёт решения, обновите список."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyDecisionInput"
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Компания
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/admin/companies/{id}/invites:
+    post:
+      operationId: createOwnerInviteAsAdmin
+      summary: Приглашение владельца компании
+      tags:
+        - admin
+      description: "Для компании, которая осталась без владельца. Роль owner,
+        приглашение на всю компанию, действует 72 часа. Ссылки показываются один
+        раз. Коды ошибок: not_found (404): вы не администратор, метод скрыт.
+        company_not_found (404): компании нет. invite_limit (409): не больше 20
+        действующих приглашений на компанию. bot_unavailable (503): бот не
+        запущен, ссылки собрать нельзя."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "201":
+          description: Приглашение создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedInvite"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/admin/complaints:
     get:
       operationId: listComplaintsForReview
@@ -9485,4 +9721,5 @@ tags:
   - name: complaints
     description: Жалобы гостя на заведения и брони
   - name: admin
-    description: "Модерация: жалобы и блокировки, только для администраторов"
+    description: "Модерация: проверка компаний, жалобы и блокировки, только для
+      администраторов"

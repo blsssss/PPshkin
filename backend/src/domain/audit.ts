@@ -13,6 +13,9 @@ export type AuditAction =
   | 'staff.join'
   | 'staff.update'
   | 'staff.remove'
+  | 'admin.company.verify'
+  | 'admin.company.reject'
+  | 'admin.company.invite'
   | 'admin.complaint.resolve'
   | 'admin.venue.block'
   | 'admin.venue.unblock'
@@ -20,7 +23,7 @@ export type AuditAction =
   | 'admin.user.unblock';
 
 export type AuditTarget =
-  'booking' | 'deal' | 'menu_item' | 'menu_import' | 'venue' | 'staff' | 'complaint' | 'user';
+  'booking' | 'deal' | 'menu_item' | 'menu_import' | 'venue' | 'staff' | 'complaint' | 'user' | 'company';
 
 export type AuditChannel = 'bot' | 'miniapp' | 'api';
 

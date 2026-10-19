@@ -18,6 +18,7 @@ import { createBookingsService } from './bookings.ts';
 import { createConsentsService } from './consents.ts';
 import { createDiaryService } from './diary.ts';
 import { createModerationService, type ModerationService } from './moderation.ts';
+import type { NotClosedStreak, ReportsService } from './reports.ts';
 import { createVenuesService } from './venues.ts';
 
 const pool = testPool();
@@ -48,6 +49,17 @@ const consents = createConsentsService({ pool, clock });
 const bookings = createBookingsService({ pool, clock, consents, notifications: outbox });
 const account = createAccountService({ pool, clock, notifications: outbox });
 const venuesService = createVenuesService({ pool, clock });
+const companies = {
+  createOwnerInviteAsAdmin: () => Promise.reject(new Error('companies are not used here')),
+  listForVerification: () => Promise.reject(new Error('companies are not used here')),
+  findView: () => Promise.reject(new Error('companies are not used here')),
+};
+let streaks: NotClosedStreak[] = [];
+const reports = {
+  venuesWithNotClosedStreak: vi.fn<ReportsService['venuesWithNotClosedStreak']>(() =>
+    Promise.resolve(streaks),
+  ),
+};
 const audit = createAuditService({ pool });
 const diary = createDiaryService({
   pool,
@@ -95,8 +107,17 @@ beforeEach(async () => {
   await resetDatabase(pool);
   clock.set(START);
   codes = 0;
+  streaks = [];
+  reports.venuesWithNotClosedStreak.mockClear();
   sendToUser.mockClear();
-  moderation = createModerationService({ pool, clock, notifications: outbox, adminIds: [ADMIN] });
+  moderation = createModerationService({
+    pool,
+    clock,
+    notifications: outbox,
+    adminIds: [ADMIN],
+    companies,
+    reports,
+  });
   await seedUser(pool, ADMIN);
   venue = await seedVenue(pool, OWNER);
   eclair = await seedMenuItem(pool, venue.id, { name: 'Эклер', priceRub: 200 });
@@ -199,6 +220,8 @@ describe('blocking a venue', () => {
       pool,
       clock,
       adminIds: [ADMIN],
+      companies,
+      reports,
       notifications: {
         enqueue: () => Promise.reject(new Error('queue is down')),
         flush: () => undefined,
@@ -453,6 +476,25 @@ describe('moderation signals', () => {
     expect(await moderation.signals()).toEqual([]);
     await bookingsOf(await seedMenuItem(pool, venue.id, { name: 'Тарт', priceRub: 250 }), 0, 1);
     expect(await moderation.signals()).toMatchObject([{ venueId: venue.id, reasons: ['low_redeem_rate'] }]);
+  });
+
+  it('flags three days in a row with unredeemed bookings and not two', async () => {
+    streaks = [{ venueId: venue.id, days: ['2026-09-24', '2026-09-23'] }];
+    expect(await moderation.signals()).toEqual([]);
+    streaks = [{ venueId: venue.id, days: ['2026-09-24', '2026-09-23', '2026-09-22'] }];
+    expect(await moderation.signals()).toMatchObject([
+      { venueId: venue.id, reasons: ['not_closed_streak'], notClosedDays: 3 },
+    ]);
+    expect(reports.venuesWithNotClosedStreak).toHaveBeenLastCalledWith(clock.now(), 3);
+  });
+
+  it('ignores a streak of a venue that is blocked or unknown', async () => {
+    streaks = [
+      { venueId: venue.id, days: ['2026-09-24', '2026-09-23', '2026-09-22'] },
+      { venueId: 99_999, days: ['2026-09-24', '2026-09-23', '2026-09-22'] },
+    ];
+    await moderation.blockVenue(ADMIN, venue.id, 'тест', 'api');
+    expect(await moderation.signals()).toEqual([]);
   });
 
   it('does not flag a redeem rate of 0.3 and skips blocked venues', async () => {

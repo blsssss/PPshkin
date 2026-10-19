@@ -5,12 +5,16 @@ import { notFound } from '../../shared/errors.ts';
 import { bearerSecurity, requireAuth, userId } from '../auth.ts';
 import { describeErrors, ERROR_NOTES } from '../error-notes.ts';
 import { errorResponses, IdParams, success } from '../schemas/common.ts';
+import { CompanySchema, CreatedInviteSchema, toCompany, toCreatedInvite } from '../schemas/companies.ts';
 import {
   AdminComplaintListSchema,
   AdminComplaintQuery,
   AdminComplaintSchema,
   BlockBody,
   BlockStateSchema,
+  CompanyDecisionBody,
+  CompanyReviewListSchema,
+  CompanyReviewQuery,
   ResolutionBody,
   toAdminComplaint,
 } from '../schemas/moderation.ts';
@@ -26,6 +30,94 @@ export const adminRoutes: FastifyPluginCallbackZod<{ moderation: ModerationServi
     await requireAuth(request, reply);
     if (!moderation.isAdmin(userId(request))) throw notFound('not_found', 'Not found');
   }
+
+  app.get(
+    '/admin/companies',
+    {
+      preValidation: requireAdmin,
+      schema: {
+        operationId: 'listCompaniesForReview',
+        tags: ['admin'],
+        summary: 'Компании на проверке',
+        description: [
+          'Не больше 50 компаний. По умолчанию только ожидающие решения (pending).',
+          describeErrors(ERROR_NOTES.validationFailed, NOT_ADMIN),
+        ].join(' '),
+        security: bearerSecurity,
+        querystring: CompanyReviewQuery,
+        response: { 200: success('Компании', CompanyReviewListSchema), ...errorResponses(400, 401, 404) },
+      },
+    },
+    async (request) => ({
+      items: (await moderation.listCompaniesForReview(userId(request), request.query.verification)).map(
+        toCompany,
+      ),
+    }),
+  );
+
+  app.post(
+    '/admin/companies/:id/verification',
+    {
+      preValidation: requireAdmin,
+      schema: {
+        operationId: 'decideCompanyVerification',
+        tags: ['admin'],
+        summary: 'Подтвердить или отклонить компанию',
+        description: [
+          'Меняет verification, verification_note и verified_at, владельцы компании получают сообщение с итогом. При отклонении note обязателен: его увидит владелец.',
+          describeErrors(
+            ERROR_NOTES.validationFailed,
+            NOT_ADMIN,
+            'company_not_found (404): компании нет.',
+            'not_pending (409): компания не ждёт решения, обновите список.',
+          ),
+        ].join(' '),
+        security: bearerSecurity,
+        params: IdParams,
+        body: CompanyDecisionBody,
+        response: { 200: success('Компания', CompanySchema), ...errorResponses(400, 401, 404, 409) },
+      },
+    },
+    async (request) =>
+      toCompany(
+        await moderation.decideCompanyVerification(userId(request), request.params.id, request.body, 'api'),
+      ),
+  );
+
+  app.post(
+    '/admin/companies/:id/invites',
+    {
+      preValidation: requireAdmin,
+      schema: {
+        operationId: 'createOwnerInviteAsAdmin',
+        tags: ['admin'],
+        summary: 'Приглашение владельца компании',
+        description: [
+          'Для компании, которая осталась без владельца. Роль owner, приглашение на всю компанию, действует 72 часа. Ссылки показываются один раз.',
+          describeErrors(
+            NOT_ADMIN,
+            'company_not_found (404): компании нет.',
+            'invite_limit (409): не больше 20 действующих приглашений на компанию.',
+            'bot_unavailable (503): бот не запущен, ссылки собрать нельзя.',
+          ),
+        ].join(' '),
+        security: bearerSecurity,
+        params: IdParams,
+        response: {
+          201: success('Приглашение создано', CreatedInviteSchema),
+          ...errorResponses(401, 404, 409, 503),
+        },
+      },
+    },
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(
+          toCreatedInvite(
+            await moderation.createOwnerInviteAsAdmin(userId(request), request.params.id, 'api'),
+          ),
+        ),
+  );
 
   app.get(
     '/admin/complaints',

@@ -75,8 +75,11 @@ export async function setUserBlock(
   ]);
 }
 
-export async function venueSignalStats(db: Queryable, since: Date): Promise<VenueSignalStats[]> {
-  const { rows } = await db.query<VenueSignalStats>(
+export async function venueSignalStats(
+  db: Queryable,
+  since: Date,
+): Promise<Omit<VenueSignalStats, 'notClosedDays'>[]> {
+  const { rows } = await db.query<Omit<VenueSignalStats, 'notClosedDays'>>(
     `select v.id as "venueId", v.name,
             (select count(*)::int from complaints c
               where c.venue_id = v.id and c.status = 'open' and c.created_at >= $1) as "openComplaints",

@@ -3,13 +3,17 @@ import { callback, command } from '../bot/keyboards.ts';
 import { bold, dayProgress, distance } from '../bot/texts.ts';
 import { ROLE_LABELS } from '../bot/venue/texts.ts';
 import { dealOverAt } from '../domain/deals.ts';
+import { okvedMatches } from '../domain/inn.ts';
 import type { Booking, Company, Deal, Venue } from '../domain/models.ts';
 import type { Role } from '../domain/roles.ts';
 import {
   COMPLAINT_REASON_TEXTS,
+  EGRUL_URL,
+  SIGNAL_NOT_CLOSED_DAYS,
   SIGNAL_OPEN_COMPLAINTS,
   SIGNAL_REDEEM_RATE,
   SIGNAL_WINDOW_DAYS,
+  SUPPORT_CONTACT_URL,
   VENUE_BLOCKED_GUEST_TEXT,
   type AdminComplaint,
   type VenueSignal,
@@ -263,6 +267,9 @@ export function signalsMessage(signals: readonly VenueSignal[]): OutgoingMessage
                 `погашено ${Math.round(signal.redeemRate * 100)}% из ${signal.bookings} броней (порог ${Math.round(SIGNAL_REDEEM_RATE * 100)}%)`,
               ]
             : []),
+          ...(signal.reasons.includes('not_closed_streak')
+            ? [`${signal.notClosedDays} дн. подряд есть непогашенные брони (порог ${SIGNAL_NOT_CLOSED_DAYS})`]
+            : []),
         ];
         return `- ${escapeMarkdown(signal.name)}: ${facts.join(', ')}`;
       }),
@@ -330,14 +337,75 @@ export function staffRemovedMessage(companyName: string, venueName: string | nul
   );
 }
 
-export function companyPendingMessage(company: Company): OutgoingMessage {
+export interface CompanyReviewNotice {
+  company: Company;
+  managerName: string | null;
+  submitter: { id: number; firstName: string | null } | null;
+  venues: readonly { id: number; name: string }[];
+}
+
+const COMPANY_BUTTONS = {
+  verify: 'Подтвердить',
+  reject: 'Отклонить',
+  ownerInvite: 'Создать приглашение владельца',
+} as const;
+
+export function companyPendingMessage({
+  company,
+  managerName,
+  submitter,
+  venues,
+}: CompanyReviewNotice): OutgoingMessage {
+  const okvedLine =
+    company.okved === null
+      ? 'ОКВЭД не указан'
+      : `ОКВЭД ${company.okved}${okvedMatches(company.okved) ? '' : ' (не относится к общепиту)'}`;
   return message(
     [
       bold('Компания на проверку'),
       escapeMarkdown(company.name),
       `ИНН ${company.inn ?? 'не указан'}${company.ogrn === null ? '' : `, ОГРН ${company.ogrn}`}`,
-      ...(company.okved === null ? [] : [`ОКВЭД ${company.okved}`]),
+      `Статус в реестре: ${company.registryStatus ?? 'не получен'}`,
+      okvedLine,
+      `Руководитель: ${managerName === null ? 'не указан' : escapeMarkdown(managerName)}`,
+      `Подал: ${submitter === null ? 'неизвестно' : `${escapeMarkdown(submitter.firstName ?? 'без имени')}, id ${String(submitter.id)}`}`,
+      `Заведения: ${venues.length === 0 ? 'пока нет' : venues.map((venue) => escapeMarkdown(venue.name)).join(', ')}`,
+      `Сверка вручную: ${EGRUL_URL}`,
+    ],
+    [
+      [
+        callback(COMPANY_BUTTONS.verify, payload('ad', 'cv', company.id)),
+        callback(COMPANY_BUTTONS.reject, payload('ad', 'cr', company.id)),
+      ],
+    ],
+  );
+}
+
+export function companyVerifiedMessage(company: Company): OutgoingMessage {
+  return message(
+    [bold('Компания проверена, заведение видно гостям'), `«${escapeMarkdown(company.name)}»`],
+    [],
+  );
+}
+
+export function companyRejectedMessage(company: Company): OutgoingMessage {
+  return message(
+    [
+      bold(
+        `Компания не прошла проверку: ${escapeMarkdown(company.verificationNote ?? 'причина не указана')}`,
+      ),
+      `«${escapeMarkdown(company.name)}». Если считаете, что это ошибка, напишите команде: ${SUPPORT_CONTACT_URL}`,
     ],
     [],
+  );
+}
+
+export function companyOwnerlessMessage(company: Company): OutgoingMessage {
+  return message(
+    [
+      bold('Компания осталась без владельца'),
+      `«${escapeMarkdown(company.name)}», ИНН ${company.inn ?? 'не указан'}. Создайте приглашение владельца и передайте его заведению.`,
+    ],
+    [[callback(COMPANY_BUTTONS.ownerInvite, payload('ad', 'oi', company.id))]],
   );
 }

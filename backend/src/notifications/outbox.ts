@@ -43,7 +43,10 @@ import { addDays } from '../shared/time.ts';
 import type { NotificationStats } from './stats.ts';
 import {
   accountInactiveMessage,
+  companyOwnerlessMessage,
   companyPendingMessage,
+  companyRejectedMessage,
+  companyVerifiedMessage,
   staffJoinedMessage,
   staffRemovedMessage,
   bookingCancelledMessage,
@@ -299,13 +302,34 @@ export function createOutbox({
     return send(staffJoinedMessage(user?.firstName ?? null, member.role, company.name, scope));
   }
 
-  async function composeCompanyPending(subject: NotificationSubject): Promise<Composed> {
+  async function composeCompany(kind: string, subject: NotificationSubject): Promise<Composed> {
     const id = idOf(subject, 'companyId');
     const company = id === null ? null : await companies.findById(pool, id);
     if (!company) return skip('company is gone');
-    return company.verification === 'pending'
-      ? send(companyPendingMessage(company))
-      : skip('company is no longer pending');
+    if (kind === 'company_pending') {
+      if (company.verification !== 'pending') return skip('company is no longer pending');
+      const [card, venueList] = await Promise.all([
+        companies.findReviewCard(pool, company.id),
+        companies.listVenues(pool, company.id),
+      ]);
+      return send(
+        companyPendingMessage({
+          company,
+          managerName: card?.managerName ?? null,
+          submitter: card?.submitter ?? null,
+          venues: venueList,
+        }),
+      );
+    }
+    if (kind === 'company_ownerless') {
+      return (await companies.listOwnerIds(pool, company.id)).length === 0
+        ? send(companyOwnerlessMessage(company))
+        : skip('company has an owner again');
+    }
+    if (company.verification === 'verified') return send(companyVerifiedMessage(company));
+    return company.verification === 'rejected'
+      ? send(companyRejectedMessage(company))
+      : skip('company is pending again');
   }
 
   function compose(
@@ -346,7 +370,9 @@ export function createOutbox({
       case 'staff_removed':
         return composeStaff(kind, subject);
       case 'company_pending':
-        return composeCompanyPending(subject);
+      case 'company_decided':
+      case 'company_ownerless':
+        return composeCompany(kind, subject);
     }
   }
 

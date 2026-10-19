@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { withTransaction, type Pool, type PoolClient, type Queryable } from '../db/pool.ts';
-import type { AuditAction } from '../domain/audit.ts';
+import type { AuditAction, AuditChannel } from '../domain/audit.ts';
 import { innKind, isOgrnFormat, isValidInn, okvedMatches } from '../domain/inn.ts';
-import type { Company, CompanyInvite, Membership } from '../domain/models.ts';
+import type { Company, CompanyInvite, CompanyVerification, Membership } from '../domain/models.ts';
 import { can, canInviteRole, canManageRole, type Role } from '../domain/roles.ts';
 import type { CompanyRegistry, RegistryCompany } from '../ports/company-registry.ts';
 import type { Notifications } from '../ports/notifier.ts';
@@ -78,6 +78,9 @@ export interface CompaniesService {
   revokeInvite(userId: number, companyId: number, inviteId: number): Promise<void>;
   previewInvite(token: string): Promise<InvitePreview>;
   acceptInvite(userId: number, token: string): Promise<AcceptedInvite>;
+  createOwnerInviteAsAdmin(adminId: number, companyId: number, channel: AuditChannel): Promise<CreatedInvite>;
+  listForVerification(verification: CompanyVerification, limit: number): Promise<CompanyView[]>;
+  findView(companyId: number): Promise<CompanyView | null>;
 }
 
 interface CompaniesDependencies {
@@ -86,6 +89,7 @@ interface CompaniesDependencies {
   registry: CompanyRegistry;
   notifications: Notifications;
   adminIds: readonly number[];
+  verificationRequired?: boolean;
   botUsername: () => string | null;
 }
 
@@ -145,6 +149,7 @@ function requisitesOf(
       okved: null,
       registryStatus: null,
       registryCheckedAt: null,
+      managerName: null,
     };
   }
   return {
@@ -157,6 +162,7 @@ function requisitesOf(
     okved: found.okved,
     registryStatus: found.status,
     registryCheckedAt: now,
+    managerName: found.managerName?.slice(0, 300) ?? null,
   };
 }
 
@@ -170,6 +176,7 @@ export function createCompaniesService({
   registry,
   notifications,
   adminIds,
+  verificationRequired = false,
   botUsername,
 }: CompaniesDependencies): CompaniesService {
   async function requireMember(db: Queryable, companyId: number, userId: number): Promise<Membership> {
@@ -299,7 +306,7 @@ export function createCompaniesService({
   }
 
   return {
-    workplaces: (userId) => listWorkplaces(pool, userId),
+    workplaces: (userId) => listWorkplaces(pool, userId, verificationRequired),
 
     async lookup(_userId, inn) {
       if (!isValidInn(inn)) throw unprocessable('inn_invalid', 'The INN has a wrong length or check digits');
@@ -366,7 +373,7 @@ export function createCompaniesService({
           const owner = await companies.findByInn(client, inn);
           if (owner && owner.id !== companyId) throw companyExists();
           const now = clock.now();
-          const changed = await companies.applyRequisites(client, companyId, requisites, now);
+          const changed = await companies.applyRequisites(client, companyId, requisites, userId, now);
           await announcePending(client, companyId, now);
           return { company: changed, member };
         });
@@ -570,6 +577,56 @@ export function createCompaniesService({
       };
     },
 
+    async createOwnerInviteAsAdmin(adminId, companyId, channel) {
+      const created = await withTransaction(pool, async (client) => {
+        await lockedCompany(client, companyId);
+        const now = clock.now();
+        if ((await invites.countActive(client, companyId, now)) >= ACTIVE_INVITE_LIMIT) {
+          throw conflict('invite_limit', `A company can have at most ${ACTIVE_INVITE_LIMIT} active invites`);
+        }
+        const token = newToken();
+        const invite = await invites.insert(
+          client,
+          {
+            companyId,
+            venueId: null,
+            role: 'owner',
+            tokenHash: hashToken(token),
+            createdBy: adminId,
+            expiresAt: new Date(now.getTime() + INVITE_TTL_MS),
+          },
+          now,
+        );
+        await audit.record(
+          client,
+          {
+            venueId: null,
+            companyId,
+            actorUserId: adminId,
+            action: 'admin.company.invite',
+            target: { type: 'company', id: companyId },
+            channel,
+            details: { inviteId: invite.id, role: 'owner' },
+          },
+          now,
+        );
+        return { invite, token };
+      });
+      return { ...created, ...inviteLinks(created.token) };
+    },
+
+    async listForVerification(verification, limit) {
+      const found = await companies.listByVerification(pool, verification, limit);
+      return Promise.all(
+        found.map(async (company) => ({ company, venues: await companies.listVenues(pool, company.id) })),
+      );
+    },
+
+    async findView(companyId) {
+      const company = await companies.findById(pool, companyId);
+      return company ? { company, venues: await companies.listVenues(pool, company.id) } : null;
+    },
+
     async acceptInvite(userId, token) {
       const accepted = await withTransaction(pool, async (client) => {
         const now = clock.now();
@@ -615,7 +672,7 @@ export function createCompaniesService({
         return { company, invite };
       });
       notifications.flush();
-      const places = await listWorkplaces(pool, userId);
+      const places = await listWorkplaces(pool, userId, verificationRequired);
       const workplace = places.find((place) => place.company?.id === accepted.company.id);
       if (!workplace) throw venueMissing();
       return {

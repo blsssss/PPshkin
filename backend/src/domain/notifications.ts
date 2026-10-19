@@ -29,6 +29,8 @@ const NOTIFICATION_KINDS = [
   'staff_joined',
   'staff_removed',
   'company_pending',
+  'company_decided',
+  'company_ownerless',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -63,7 +65,9 @@ export type NotificationEvent =
       inviterId: number | null;
     }
   | { kind: 'staff_removed'; companyId: number; userId: number; venueId: number | null }
-  | { kind: 'company_pending'; companyId: number; adminId: number };
+  | { kind: 'company_pending'; companyId: number; adminId: number }
+  | { kind: 'company_decided'; companyId: number; ownerId: number }
+  | { kind: 'company_ownerless'; companyId: number; adminId: number };
 
 export type NotificationSubject =
   | { bookingId: number }
@@ -227,10 +231,18 @@ export function notificationTarget(event: NotificationEvent, now: Date): Notific
         expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
       };
     case 'company_pending':
+    case 'company_ownerless':
       return {
         subject: { companyId: event.companyId },
         subjectKey: `${String(event.companyId)}:${now.toISOString()}`,
         audience: { kind: 'guest', userId: event.adminId },
+        expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
+      };
+    case 'company_decided':
+      return {
+        subject: { companyId: event.companyId },
+        subjectKey: `${String(event.companyId)}:${now.toISOString()}`,
+        audience: { kind: 'guest', userId: event.ownerId },
         expiresAt: after(now, MENU_AND_REPORT_TTL_MS),
       };
   }
@@ -451,6 +463,20 @@ export const NOTIFICATION_KIND_DESCRIPTIONS: Record<NotificationKind, KindDescri
   },
   company_pending: {
     label: 'Компания на проверку',
+    hint: 'Только для администраторов',
+    audience: 'guest',
+    editable: false,
+    urgent: true,
+  },
+  company_decided: {
+    label: 'Итог проверки компании',
+    hint: 'Компания проверена или отклонена',
+    audience: 'venue',
+    editable: false,
+    urgent: true,
+  },
+  company_ownerless: {
+    label: 'Компания без владельца',
     hint: 'Только для администраторов',
     audience: 'guest',
     editable: false,

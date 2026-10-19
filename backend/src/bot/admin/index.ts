@@ -1,4 +1,11 @@
-import { COMPLAINT_REASON_TEXTS, BLOCK_REASON_LIMIT, type AdminComplaint } from '../../domain/moderation.ts';
+import {
+  BLOCK_REASON_LIMIT,
+  COMPANY_NOTE_LIMIT,
+  COMPANY_REJECTION_OTHER,
+  COMPANY_REJECTION_REASONS,
+  COMPLAINT_REASON_TEXTS,
+  type AdminComplaint,
+} from '../../domain/moderation.ts';
 import type { OutgoingMessage } from '../../ports/messenger.ts';
 import { formatLocalTime } from '../../shared/time.ts';
 import { answerStale, byAction, parseId, payload } from '../callbacks.ts';
@@ -24,6 +31,12 @@ const ADMIN_TEXTS = {
   tooLong: `Причина длиннее ${String(BLOCK_REASON_LIMIT)} символов, сократите её.`,
   cancelled: 'Блокировка отменена.',
   blocked: 'Заведение заблокировано: оно скрыто от гостей, брони отменены, владелец получил причину.',
+  verified: 'Компания подтверждена, владельцы получили сообщение.',
+  rejected: 'Компания отклонена, владельцы получили причину.',
+  pickReason: 'Выберите причину отказа.',
+  askNote: `Напишите причину отказа, до ${String(COMPANY_NOTE_LIMIT)} символов. Её увидят владельцы компании.`,
+  noteTooLong: `Причина длиннее ${String(COMPANY_NOTE_LIMIT)} символов, сократите её.`,
+  rejectCancelled: 'Отказ отменён.',
 } as const;
 
 const COMPLAINTS_PAGE = 5;
@@ -69,6 +82,93 @@ export function createAdminModule({ services }: BotKit): BotModule {
       if (failure.kind !== 'known') throw error;
       await ctx.reply(failure.message);
     }
+  }
+
+  function decideCompany(ctx: BotContext, id: number, decision: 'verified' | 'rejected', note?: string) {
+    return guard(ctx, async () => {
+      await moderation.decideCompanyVerification(ctx.user.id, id, { decision, note }, 'bot');
+      await ctx.saveState({ ...ctx.state, flow: null });
+      await ctx.answer({
+        message: { text: decision === 'verified' ? ADMIN_TEXTS.verified : ADMIN_TEXTS.rejected },
+      });
+    });
+  }
+
+  function verifyCompany(ctx: BotContext, [value]: string[]): Promise<void> {
+    const id = parseId(value);
+    return id === null ? answerStale(ctx) : decideCompany(ctx, id, 'verified');
+  }
+
+  function askRejection(ctx: BotContext, [value]: string[]): Promise<void> {
+    return guard(ctx, async () => {
+      const id = parseId(value);
+      if (id === null) {
+        await answerStale(ctx);
+        return;
+      }
+      await ctx.answer({
+        message: {
+          text: ADMIN_TEXTS.pickReason,
+          buttons: [
+            ...COMPANY_REJECTION_REASONS.map((reason, index) => [
+              callback(reason, payload('ad', 'rr', id, index)),
+            ]),
+            [callback(COMPANY_REJECTION_OTHER, payload('ad', 'ro', id))],
+          ],
+        },
+      });
+    });
+  }
+
+  function rejectWithReason(ctx: BotContext, [value, index]: string[]): Promise<void> {
+    const id = parseId(value);
+    const reason = COMPANY_REJECTION_REASONS[Number(index)];
+    return id === null || reason === undefined
+      ? answerStale(ctx)
+      : decideCompany(ctx, id, 'rejected', reason);
+  }
+
+  function askOtherReason(ctx: BotContext, [value]: string[]): Promise<void> {
+    return guard(ctx, async () => {
+      const companyId = parseId(value);
+      if (companyId === null) {
+        await answerStale(ctx);
+        return;
+      }
+      await ctx.saveState({
+        ...ctx.state,
+        flow: startFlow({ name: 'admin_reject', companyId }, ctx.now),
+      });
+      await ctx.answer({
+        message: {
+          text: ADMIN_TEXTS.askNote,
+          buttons: [[callback(ADMIN_BUTTONS.cancel, payload('ad', 'rc'))]],
+        },
+      });
+    });
+  }
+
+  function cancelRejection(ctx: BotContext): Promise<void> {
+    return guard(ctx, async () => {
+      await ctx.saveState({ ...ctx.state, flow: null });
+      await ctx.answer({ message: { text: ADMIN_TEXTS.rejectCancelled } });
+    });
+  }
+
+  function ownerInvite(ctx: BotContext, [value]: string[]): Promise<void> {
+    return guard(ctx, async () => {
+      const id = parseId(value);
+      if (id === null) {
+        await answerStale(ctx);
+        return;
+      }
+      const created = await moderation.createOwnerInviteAsAdmin(ctx.user.id, id, 'bot');
+      await ctx.answer({
+        message: {
+          text: `Приглашение владельца действует 72 часа и принимается один раз. Передайте ссылку заведению: ${created.botLink}`,
+        },
+      });
+    });
   }
 
   const guard = (ctx: BotContext, run: () => Promise<void>) => guarded(ctx, run, () => answerStale(ctx));
@@ -167,6 +267,34 @@ export function createAdminModule({ services }: BotKit): BotModule {
     return true;
   }
 
+  async function onRejectionNote(ctx: BotContext, message: MessageInput): Promise<boolean> {
+    const flow = ctx.state.flow;
+    if (flow?.name !== 'admin_reject') return false;
+    const note = message.text?.trim() ?? '';
+    if (note.length === 0 || message.text?.startsWith('/') === true) return false;
+    if (note.length > COMPANY_NOTE_LIMIT) {
+      await ctx.reply({ text: ADMIN_TEXTS.noteTooLong });
+      return true;
+    }
+    await guarded(
+      ctx,
+      async () => {
+        await moderation.decideCompanyVerification(
+          ctx.user.id,
+          flow.companyId,
+          { decision: 'rejected', note },
+          'bot',
+        );
+        await ctx.saveState({ ...ctx.state, flow: null });
+        await ctx.reply({ text: ADMIN_TEXTS.rejected });
+      },
+      async () => {
+        await ctx.saveState({ ...ctx.state, flow: null });
+      },
+    );
+    return true;
+  }
+
   return {
     commands: { admin: home },
     callbacks: {
@@ -176,8 +304,14 @@ export function createAdminModule({ services }: BotKit): BotModule {
         no: decide('rejected'),
         bv: askBlock,
         bc: cancelBlock,
+        cv: verifyCompany,
+        cr: askRejection,
+        rr: rejectWithReason,
+        ro: askOtherReason,
+        rc: cancelRejection,
+        oi: ownerInvite,
       }),
     },
-    flows: { admin_block: onReason },
+    flows: { admin_block: onReason, admin_reject: onRejectionNote },
   };
 }

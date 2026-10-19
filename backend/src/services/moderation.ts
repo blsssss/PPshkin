@@ -1,11 +1,15 @@
 import { withTransaction, type Pool, type Queryable } from '../db/pool.ts';
 import type { AuditChannel } from '../domain/audit.ts';
+import type { CompanyVerification } from '../domain/models.ts';
 import {
+  COMPANY_NOTE_LIMIT,
   COMPLAINTS_PER_DAY,
   COMPLAINT_TEXT_LIMIT,
+  SIGNAL_NOT_CLOSED_DAYS,
   SIGNAL_WINDOW_DAYS,
   venueSignals,
   type AdminComplaint,
+  type CompanyDecision,
   type Complaint,
   type ComplaintDecision,
   type ComplaintReason,
@@ -15,11 +19,14 @@ import {
 import type { Notifications } from '../ports/notifier.ts';
 import * as audit from '../repositories/audit.ts';
 import * as bookings from '../repositories/bookings.ts';
+import * as companies from '../repositories/companies.ts';
 import * as complaints from '../repositories/complaints.ts';
 import * as moderation from '../repositories/moderation.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
 import type { Clock } from '../shared/clock.ts';
+import type { CompaniesService, CompanyView, CreatedInvite } from './companies.ts';
+import type { ReportsService } from './reports.ts';
 import { badRequest, conflict, forbidden, notFound } from '../shared/errors.ts';
 
 export interface ComplaintInput {
@@ -31,6 +38,14 @@ export interface ComplaintInput {
 
 export interface ModerationService {
   isAdmin(userId: number): boolean;
+  listCompaniesForReview(adminId: number, verification: CompanyVerification): Promise<CompanyView[]>;
+  decideCompanyVerification(
+    adminId: number,
+    companyId: number,
+    decision: { decision: CompanyDecision; note?: string | undefined },
+    channel: AuditChannel,
+  ): Promise<CompanyView>;
+  createOwnerInviteAsAdmin(adminId: number, companyId: number, channel: AuditChannel): Promise<CreatedInvite>;
   createComplaint(userId: number, input: ComplaintInput): Promise<Complaint>;
   listComplaints(userId: number): Promise<Complaint[]>;
   listForReview(adminId: number, status: ComplaintStatus | null): Promise<AdminComplaint[]>;
@@ -52,6 +67,8 @@ export interface ModerationDependencies {
   clock: Clock;
   notifications: Notifications;
   adminIds: readonly number[];
+  companies: Pick<CompaniesService, 'createOwnerInviteAsAdmin' | 'listForVerification' | 'findView'>;
+  reports: Pick<ReportsService, 'venuesWithNotClosedStreak'>;
 }
 
 export const REVIEW_LIMIT = 50;
@@ -83,6 +100,8 @@ export function createModerationService({
   clock,
   notifications,
   adminIds,
+  companies: companyViews,
+  reports,
 }: ModerationDependencies): ModerationService {
   const admins = new Set(adminIds);
   const isAdmin = (userId: number) => admins.has(userId);
@@ -99,6 +118,65 @@ export function createModerationService({
 
   return {
     isAdmin,
+
+    async listCompaniesForReview(adminId, verification) {
+      requireAdmin(adminId);
+      return companyViews.listForVerification(verification, REVIEW_LIMIT);
+    },
+
+    async decideCompanyVerification(adminId, companyId, input, channel) {
+      requireAdmin(adminId);
+      const note = input.note?.trim() ?? '';
+      if (note.length > COMPANY_NOTE_LIMIT || (input.decision === 'rejected' && note.length === 0)) {
+        throw badRequest('validation_failed', 'Request validation failed', [
+          {
+            path: 'note',
+            message:
+              note.length > COMPANY_NOTE_LIMIT
+                ? `must be at most ${String(COMPANY_NOTE_LIMIT)} characters`
+                : 'a rejection needs a reason',
+          },
+        ]);
+      }
+      const now = clock.now();
+      await withTransaction(pool, async (client) => {
+        const current = await companies.lockById(client, companyId);
+        if (!current) throw notFound('company_not_found', 'Company not found');
+        if (current.verification !== 'pending') {
+          throw conflict('not_pending', 'The company is not waiting for a decision');
+        }
+        await companies.decide(client, companyId, {
+          verification: input.decision,
+          note: note.length === 0 ? null : note,
+          at: now,
+        });
+        await audit.record(
+          client,
+          {
+            venueId: null,
+            companyId,
+            actorUserId: adminId,
+            action: input.decision === 'verified' ? 'admin.company.verify' : 'admin.company.reject',
+            target: { type: 'company', id: companyId },
+            channel,
+            details: note.length === 0 ? {} : { note },
+          },
+          now,
+        );
+        for (const ownerId of await companies.listOwnerIds(client, companyId)) {
+          await notifications.enqueue(client, { kind: 'company_decided', companyId, ownerId }, now);
+        }
+      });
+      notifications.flush();
+      const view = await companyViews.findView(companyId);
+      if (!view) throw notFound('company_not_found', 'Company not found');
+      return view;
+    },
+
+    async createOwnerInviteAsAdmin(adminId, companyId, channel) {
+      requireAdmin(adminId);
+      return companyViews.createOwnerInviteAsAdmin(adminId, companyId, channel);
+    },
 
     async createComplaint(userId, input) {
       const now = clock.now();
@@ -318,8 +396,18 @@ export function createModerationService({
     },
 
     async signals() {
-      const since = new Date(clock.now().getTime() - SIGNAL_WINDOW_DAYS * DAY_MS);
-      return venueSignals(await moderation.venueSignalStats(pool, since));
+      const now = clock.now();
+      const since = new Date(now.getTime() - SIGNAL_WINDOW_DAYS * DAY_MS);
+      const streaks = new Map(
+        (await reports.venuesWithNotClosedStreak(now, SIGNAL_NOT_CLOSED_DAYS)).map((streak) => [
+          streak.venueId,
+          streak.days.length,
+        ]),
+      );
+      const stats = await moderation.venueSignalStats(pool, since);
+      return venueSignals(
+        stats.map((entry) => ({ ...entry, notClosedDays: streaks.get(entry.venueId) ?? 0 })),
+      );
     },
   };
 }

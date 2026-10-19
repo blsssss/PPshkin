@@ -54,6 +54,7 @@ export interface Requisites {
   okved: string | null;
   registryStatus: RegistryStatus | null;
   registryCheckedAt: Date | null;
+  managerName: string | null;
 }
 
 export async function insert(
@@ -66,8 +67,8 @@ export async function insert(
   const row = await one<CompanyRow>(
     db,
     `insert into companies (name, created_by, kind, inn, ogrn, kpp, address, okved, registry_status,
-                            registry_checked_at, verification, created_at, updated_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+                            registry_checked_at, manager_name, submitted_by, verification, created_at, updated_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $2, $12, $13, $13)
      returning ${COMPANY_COLUMNS}`,
     [
       requisites?.name ?? name,
@@ -80,6 +81,7 @@ export async function insert(
       requisites?.okved ?? null,
       requisites?.registryStatus ?? null,
       requisites?.registryCheckedAt ?? null,
+      requisites?.managerName ?? null,
       requisites ? 'pending' : 'unverified',
       now,
     ],
@@ -112,14 +114,16 @@ export async function applyRequisites(
   db: Queryable,
   id: number,
   requisites: Requisites,
+  submittedBy: number,
   now: Date,
 ): Promise<Company> {
   const row = await one<CompanyRow>(
     db,
     `update companies
         set kind = $2, inn = $3, ogrn = $4, kpp = $5, name = $6, address = $7, okved = $8,
-            registry_status = $9, registry_checked_at = $10, verification = 'pending',
-            verification_note = null, verified_at = null, updated_at = $11
+            registry_status = $9, registry_checked_at = $10, manager_name = $11,
+            submitted_by = $12, verification = 'pending', verification_note = null, verified_at = null,
+            updated_at = $13
       where id = $1
       returning ${COMPANY_COLUMNS}`,
     [
@@ -133,10 +137,80 @@ export async function applyRequisites(
       requisites.okved,
       requisites.registryStatus,
       requisites.registryCheckedAt,
+      requisites.managerName,
+      submittedBy,
       now,
     ],
   );
   return mapCompany(row);
+}
+
+export async function listByVerification(
+  db: Queryable,
+  verification: Company['verification'],
+  limit: number,
+): Promise<Company[]> {
+  const { rows } = await db.query<CompanyRow>(
+    `select ${COMPANY_COLUMNS} from companies where verification = $1 order by updated_at desc, id desc limit $2`,
+    [verification, limit],
+  );
+  return rows.map(mapCompany);
+}
+
+export interface Decision {
+  verification: 'verified' | 'rejected';
+  note: string | null;
+  at: Date;
+}
+
+export async function decide(db: Queryable, id: number, decision: Decision): Promise<Company> {
+  const row = await one<CompanyRow>(
+    db,
+    `update companies
+        set verification = $2, verification_note = $3, verified_at = $4, updated_at = $5
+      where id = $1
+      returning ${COMPANY_COLUMNS}`,
+    [
+      id,
+      decision.verification,
+      decision.note,
+      decision.verification === 'verified' ? decision.at : null,
+      decision.at,
+    ],
+  );
+  return mapCompany(row);
+}
+
+export interface ReviewCard {
+  managerName: string | null;
+  submitter: { id: number; firstName: string | null } | null;
+}
+
+export async function findReviewCard(db: Queryable, id: number): Promise<ReviewCard | null> {
+  const row = await maybeOne<{
+    manager_name: string | null;
+    submitter_id: number | null;
+    submitter_name: string | null;
+  }>(
+    db,
+    `select c.manager_name, u.id as submitter_id, u.first_name as submitter_name
+       from companies c left join users u on u.id = c.submitted_by
+      where c.id = $1`,
+    [id],
+  );
+  if (!row) return null;
+  return {
+    managerName: row.manager_name,
+    submitter: row.submitter_id === null ? null : { id: row.submitter_id, firstName: row.submitter_name },
+  };
+}
+
+export async function listOwnerIds(db: Queryable, companyId: number): Promise<number[]> {
+  const { rows } = await db.query<{ user_id: number }>(
+    `select user_id from memberships where company_id = $1 and role = 'owner' order by user_id`,
+    [companyId],
+  );
+  return rows.map((row) => row.user_id);
 }
 
 export async function listVenues(db: Queryable, companyId: number): Promise<{ id: number; name: string }[]> {

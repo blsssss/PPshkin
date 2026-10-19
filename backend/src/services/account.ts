@@ -18,11 +18,17 @@ export interface AccountDependencies {
   pool: Pool;
   clock: Clock;
   notifications: Notifications;
+  adminIds?: readonly number[];
 }
 
 const isDemoAccount = (userId: number) => userId < 0;
 
-export function createAccountService({ pool, clock, notifications }: AccountDependencies): AccountService {
+export function createAccountService({
+  pool,
+  clock,
+  notifications,
+  adminIds = [],
+}: AccountDependencies): AccountService {
   return {
     soleOwnerships: (userId) => companies.soleOwnerCompanies(pool, userId),
 
@@ -33,6 +39,7 @@ export function createAccountService({ pool, clock, notifications }: AccountDepe
       const now = clock.now();
       const cancelled = await withTransaction(pool, async (client) => {
         await users.lock(client, userId);
+        const ownerless = await companies.soleOwnerCompanies(client, userId);
         const released = await bookings.cancelActiveForUser(client, userId, now);
         const places = await venues.findByIds(client, [
           ...new Set(released.map((booking) => booking.venueId)),
@@ -46,9 +53,18 @@ export function createAccountService({ pool, clock, notifications }: AccountDepe
         await account.eraseOfferExplanations(client, userId);
         await account.removeDemoVenueCopies(client, userId);
         await users.remove(client, userId);
-        return released;
+        for (const company of ownerless) {
+          for (const adminId of adminIds) {
+            await notifications.enqueue(
+              client,
+              { kind: 'company_ownerless', companyId: company.id, adminId },
+              now,
+            );
+          }
+        }
+        return { released, announced: ownerless.length > 0 && adminIds.length > 0 };
       });
-      if (cancelled.length > 0) notifications.flush();
+      if (cancelled.released.length > 0 || cancelled.announced) notifications.flush();
     },
   };
 }

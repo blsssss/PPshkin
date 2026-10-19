@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectContract } from '../../../test/contract.ts';
 import { bearer, buildTestApp, fakeServices } from '../../../test/services.ts';
+import type { Company } from '../../domain/models.ts';
 import type { AdminComplaint } from '../../domain/moderation.ts';
 import type { ModerationService } from '../../services/moderation.ts';
 import { conflict } from '../../shared/errors.ts';
@@ -32,7 +33,29 @@ const complaint: AdminComplaint = {
   resolution: null,
 };
 
+const pendingCompany: Company = {
+  id: 3,
+  kind: 'legal',
+  inn: '7707083893',
+  ogrn: '1027700132195',
+  kpp: null,
+  name: 'ООО "Зерно"',
+  address: null,
+  okved: '56.10',
+  registryStatus: 'ACTIVE',
+  registryCheckedAt: null,
+  verification: 'pending',
+  verificationNote: null,
+  verifiedAt: null,
+  createdBy: 9,
+  createdAt: new Date('2026-09-26T09:00:00Z'),
+  updatedAt: new Date('2026-09-26T09:00:00Z'),
+};
+
 const ROUTES = [
+  ['GET', '/api/v1/admin/companies', '/api/v1/admin/companies'],
+  ['POST', '/api/v1/admin/companies/3/verification', '/api/v1/admin/companies/{id}/verification'],
+  ['POST', '/api/v1/admin/companies/3/invites', '/api/v1/admin/companies/{id}/invites'],
   ['GET', '/api/v1/admin/complaints', '/api/v1/admin/complaints'],
   ['POST', '/api/v1/admin/complaints/5/resolution', '/api/v1/admin/complaints/{id}/resolution'],
   ['POST', '/api/v1/admin/venues/7/block', '/api/v1/admin/venues/{id}/block'],
@@ -68,6 +91,104 @@ describe('admin routes', () => {
       expectContract(response, method, path);
       expect(response.json()).toMatchObject({ code: 'not_found' });
     }
+  });
+
+  it('lists companies waiting for a decision and rejects an unknown filter', async () => {
+    const listCompaniesForReview = vi.fn<ModerationService['listCompaniesForReview']>(() =>
+      Promise.resolve([{ company: pendingCompany, venues: [{ id: 7, name: 'Зерно' }] }]),
+    );
+    const server = await appWith({ listCompaniesForReview });
+    const response = await server.inject({ method: 'GET', url: '/api/v1/admin/companies', headers: admin });
+    expect(response.statusCode).toBe(200);
+    expectContract(response, 'GET', '/api/v1/admin/companies');
+    expect(response.json()).toMatchObject({
+      items: [{ id: 3, inn: '7707083893', verification: 'pending', venues: [{ id: 7, name: 'Зерно' }] }],
+    });
+    expect(listCompaniesForReview).toHaveBeenCalledWith(ADMIN_ID, 'pending');
+    await server.inject({
+      method: 'GET',
+      url: '/api/v1/admin/companies?verification=verified',
+      headers: admin,
+    });
+    expect(listCompaniesForReview).toHaveBeenLastCalledWith(ADMIN_ID, 'verified');
+    const bad = await server.inject({
+      method: 'GET',
+      url: '/api/v1/admin/companies?verification=done',
+      headers: admin,
+    });
+    expect(bad.statusCode).toBe(400);
+    expectContract(bad, 'GET', '/api/v1/admin/companies');
+  });
+
+  it('decides a company, validates the body and answers 409 not_pending for a repeat', async () => {
+    const decideCompanyVerification = vi.fn<ModerationService['decideCompanyVerification']>(() =>
+      Promise.resolve({ company: { ...pendingCompany, verification: 'verified' }, venues: [] }),
+    );
+    const server = await appWith({ decideCompanyVerification });
+    const url = '/api/v1/admin/companies/3/verification';
+    const path = '/api/v1/admin/companies/{id}/verification';
+    const response = await server.inject({
+      method: 'POST',
+      url,
+      headers: admin,
+      payload: { decision: 'verified' },
+    });
+    expect(response.statusCode).toBe(200);
+    expectContract(response, 'POST', path);
+    expect(response.json()).toMatchObject({ id: 3, verification: 'verified' });
+    expect(decideCompanyVerification).toHaveBeenCalledWith(ADMIN_ID, 3, { decision: 'verified' }, 'api');
+    for (const payload of [{ decision: 'pending' }, { decision: 'rejected', note: 'я'.repeat(501) }, {}]) {
+      const invalid = await server.inject({ method: 'POST', url, headers: admin, payload });
+      expect(invalid.statusCode).toBe(400);
+      expectContract(invalid, 'POST', path);
+    }
+
+    await server.close();
+    const repeated = await appWith({
+      decideCompanyVerification: () => Promise.reject(conflict('not_pending', 'decided')),
+    });
+    const conflicting = await repeated.inject({
+      method: 'POST',
+      url,
+      headers: admin,
+      payload: { decision: 'rejected', note: 'Нет подтверждения полномочий' },
+    });
+    expect(conflicting.statusCode).toBe(409);
+    expect(conflicting.json()).toMatchObject({ code: 'not_pending' });
+    expectContract(conflicting, 'POST', path);
+  });
+
+  it('issues an owner invite for a company', async () => {
+    const createOwnerInviteAsAdmin = vi.fn<ModerationService['createOwnerInviteAsAdmin']>(() =>
+      Promise.resolve({
+        invite: {
+          id: 4,
+          companyId: 3,
+          venueId: null,
+          role: 'owner',
+          createdBy: ADMIN_ID,
+          createdByName: null,
+          expiresAt: new Date('2026-09-29T10:00:00Z'),
+          acceptedBy: null,
+          acceptedAt: null,
+          revokedAt: null,
+          createdAt: new Date('2026-09-26T10:00:00Z'),
+        },
+        token: 'T'.repeat(24),
+        startappLink: 'https://max.ru/ppshkin_bot?startapp=join_x',
+        botLink: 'https://max.ru/ppshkin_bot?start=j_x',
+      }),
+    );
+    const server = await appWith({ createOwnerInviteAsAdmin });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/v1/admin/companies/3/invites',
+      headers: admin,
+    });
+    expect(response.statusCode).toBe(201);
+    expectContract(response, 'POST', '/api/v1/admin/companies/{id}/invites');
+    expect(response.json()).toMatchObject({ role: 'owner', botLink: 'https://max.ru/ppshkin_bot?start=j_x' });
+    expect(createOwnerInviteAsAdmin).toHaveBeenCalledWith(ADMIN_ID, 3, 'api');
   });
 
   it('lists complaints waiting for a decision', async () => {

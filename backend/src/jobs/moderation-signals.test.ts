@@ -11,6 +11,7 @@ const signal: VenueSignal = {
   openComplaints: 3,
   bookings: 12,
   redeemRate: 0.25,
+  notClosedDays: 0,
 };
 
 const NOW = new Date('2026-09-25T07:00:00Z');
@@ -45,5 +46,23 @@ describe('moderationSignalsJob', () => {
     expect(text).toContain('Кофейня');
     expect(text).toContain('открытых жалоб: 3');
     expect(text).toContain('погашено 25% из 12 броней');
+    expect(text).not.toContain('непогашенные');
+  });
+
+  it('names the streak of days with unredeemed bookings', async () => {
+    const { job, sendToUser } = jobWith([
+      {
+        ...signal,
+        reasons: ['not_closed_streak'],
+        openComplaints: 0,
+        bookings: 2,
+        redeemRate: null,
+        notClosedDays: 3,
+      },
+    ]);
+    await job.run(NOW);
+    const text = sendToUser.mock.calls[0]?.[1].text ?? '';
+    expect(text).toContain('3 дн. подряд есть непогашенные брони (порог 3)');
+    expect(text).not.toContain('открытых жалоб');
   });
 });

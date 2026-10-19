@@ -5,11 +5,15 @@ import {
   COMPLAINT_REASONS,
   COMPLAINT_REASON_TEXTS,
   COMPLAINT_STATUSES,
+  COMPANY_DECISIONS,
+  COMPANY_NOTE_LIMIT,
+  COMPANY_REJECTION_REASONS,
   COMPLAINT_TEXT_LIMIT,
   type AdminComplaint,
   type Complaint,
 } from '../../domain/moderation.ts';
 import { IsoDateTime, iso, isoOrNull } from './common.ts';
+import { CompanySchema, VerificationSchema } from './companies.ts';
 
 const Id = z.number().int().positive();
 
@@ -83,6 +87,28 @@ export const BlockBody = z
       .describe(`Причина блокировки, до ${String(BLOCK_REASON_LIMIT)} символов`),
   })
   .meta({ id: 'BlockRequest', description: 'Причина блокировки' });
+
+export const CompanyReviewQuery = z.object({
+  verification: VerificationSchema.default('pending').describe('Какие компании показать'),
+});
+
+export const CompanyReviewListSchema = z
+  .object({ items: z.array(CompanySchema).describe('Не больше 50 компаний, сначала недавно обновлённые') })
+  .meta({ id: 'CompanyReviewList' });
+
+export const CompanyDecisionBody = z
+  .object({
+    decision: z.enum(COMPANY_DECISIONS).describe('verified - подтвердить, rejected - отклонить'),
+    note: z
+      .string()
+      .trim()
+      .max(COMPANY_NOTE_LIMIT)
+      .optional()
+      .describe(
+        `Причина, до ${String(COMPANY_NOTE_LIMIT)} символов; при отклонении обязательна. Типовые причины: ${COMPANY_REJECTION_REASONS.join('; ')}; иначе свободный текст`,
+      ),
+  })
+  .meta({ id: 'CompanyDecision', description: 'Решение администратора по компании на проверке' });
 
 export const BlockStateSchema = z
   .object({ blocked: z.boolean().describe('true - заблокировано, false - блокировка снята') })

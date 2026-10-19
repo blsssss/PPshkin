@@ -4,7 +4,7 @@ import { fakeServices } from '../../../test/services.ts';
 import type { AdminComplaint } from '../../domain/moderation.ts';
 import type { ModerationService } from '../../services/moderation.ts';
 import { conflict } from '../../shared/errors.ts';
-import { BLOCK_REASON_LIMIT } from '../../domain/moderation.ts';
+import { BLOCK_REASON_LIMIT, COMPANY_NOTE_LIMIT } from '../../domain/moderation.ts';
 
 const complaint: AdminComplaint = {
   id: 5,
@@ -134,5 +134,95 @@ describe('blocking a venue from the bot', () => {
     const replies = await chat.press('ad:bv:7', 'mid.0');
     expect(answers(replies)[0]?.notification).toBe('Кнопка устарела');
     expect(moderation.blockVenue).not.toHaveBeenCalled();
+  });
+});
+
+describe('company verification from the bot', () => {
+  const decided = { company: {} as never, venues: [] };
+
+  it('verifies a company from the card button', async () => {
+    const decideCompanyVerification = vi.fn(() => Promise.resolve(decided));
+    const { chat } = adminChat({ decideCompanyVerification });
+    const replies = await chat.press('ad:cv:3', 'mid.0');
+    expect(decideCompanyVerification).toHaveBeenCalledWith(GUEST_ID, 3, { decision: 'verified' }, 'bot');
+    expect(texts(replies)).toEqual(['Компания подтверждена, владельцы получили сообщение.']);
+  });
+
+  it('offers the rejection reasons and rejects with the chosen one', async () => {
+    const decideCompanyVerification = vi.fn(() => Promise.resolve(decided));
+    const { chat } = adminChat({ decideCompanyVerification });
+    const menu = answers(await chat.press('ad:cr:3', 'mid.0'))[0]?.message;
+    expect(labels(menu)).toEqual([
+      'Реквизиты не совпадают с заведением',
+      'Компания не занимается общепитом',
+      'Нет подтверждения полномочий',
+      'Другое',
+    ]);
+    expect(payloads(menu)).toEqual(['ad:rr:3:0', 'ad:rr:3:1', 'ad:rr:3:2', 'ad:ro:3']);
+    await chat.press('ad:rr:3:1', 'mid.0');
+    expect(decideCompanyVerification).toHaveBeenCalledWith(
+      GUEST_ID,
+      3,
+      { decision: 'rejected', note: 'Компания не занимается общепитом' },
+      'bot',
+    );
+  });
+
+  it('takes a free reason of up to 500 characters for the other option', async () => {
+    const decideCompanyVerification = vi.fn(() => Promise.resolve(decided));
+    const { chat } = adminChat({ decideCompanyVerification });
+    await chat.press('ad:ro:3', 'mid.0');
+    expect(chat.states.peek(GUEST_ID).flow).toMatchObject({ name: 'admin_reject', companyId: 3 });
+    const long = await chat.send('я'.repeat(COMPANY_NOTE_LIMIT + 1));
+    expect(texts(long)[0]).toContain('сократите');
+    expect(decideCompanyVerification).not.toHaveBeenCalled();
+    const done = await chat.send('  Нет вывески  ');
+    expect(decideCompanyVerification).toHaveBeenCalledWith(
+      GUEST_ID,
+      3,
+      { decision: 'rejected', note: 'Нет вывески' },
+      'bot',
+    );
+    expect(texts(done)[0]).toContain('Компания отклонена');
+    expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+  });
+
+  it('lets the administrator cancel the free reason', async () => {
+    const decideCompanyVerification = vi.fn(() => Promise.resolve(decided));
+    const { chat } = adminChat({ decideCompanyVerification });
+    await chat.press('ad:ro:3', 'mid.0');
+    await chat.press('ad:rc');
+    expect(chat.states.peek(GUEST_ID).flow).toBeNull();
+    expect(decideCompanyVerification).not.toHaveBeenCalled();
+  });
+
+  it('explains a company that is no longer pending', async () => {
+    const { chat } = adminChat({
+      decideCompanyVerification: () => Promise.reject(conflict('not_pending', 'decided')),
+    });
+    expect(texts(await chat.press('ad:cv:3', 'mid.0'))).toContain('Решение по компании уже принято.');
+  });
+
+  it('sends the owner invite link for a company without an owner', async () => {
+    const createOwnerInviteAsAdmin = vi.fn(() =>
+      Promise.resolve({
+        invite: {} as never,
+        token: 'T',
+        startappLink: 'https://max.ru/ppshkin_bot?startapp=join_T',
+        botLink: 'https://max.ru/ppshkin_bot?start=j_T',
+      }),
+    );
+    const { chat } = adminChat({ createOwnerInviteAsAdmin });
+    const replies = await chat.press('ad:oi:3', 'mid.0');
+    expect(createOwnerInviteAsAdmin).toHaveBeenCalledWith(GUEST_ID, 3, 'bot');
+    expect(texts(replies)[0]).toContain('https://max.ru/ppshkin_bot?start=j_T');
+  });
+
+  it('ignores the company buttons pressed by someone who is not an administrator', async () => {
+    const decideCompanyVerification = vi.fn(() => Promise.resolve(decided));
+    const { chat } = adminChat({ decideCompanyVerification }, false);
+    const replies = await chat.press('ad:cv:3', 'mid.0');
+    expect(answers(replies)[0]?.notification).toBe('Кнопка устарела');
+    expect(decideCompanyVerification).not.toHaveBeenCalled();
   });
 });

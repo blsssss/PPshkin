@@ -60,7 +60,30 @@ export function createServices({
   messenger = () => null,
 }: ContainerOptions): Services {
   const consents = createConsentsService({ pool, clock });
-  const bookings = createBookingsService({ pool, clock, consents, notifications });
+  const bookings = createBookingsService({
+    pool,
+    clock,
+    consents,
+    notifications,
+    verificationRequired: config.VENUE_VERIFICATION_REQUIRED,
+  });
+  const companies = createCompaniesService({
+    pool,
+    clock,
+    registry,
+    notifications,
+    adminIds: config.ADMIN_USER_IDS,
+    verificationRequired: config.VENUE_VERIFICATION_REQUIRED,
+    botUsername,
+  });
+  const reports = createReportsService({
+    pool,
+    clock,
+    bookings,
+    notifications,
+    messenger,
+    background,
+  });
   return {
     health: createHealthService(pool),
     metrics: createMetricsService(pool, clock),
@@ -80,16 +103,9 @@ export function createServices({
     ),
     profile: createProfileService({ pool, clock, consents }),
     consents,
-    companies: createCompaniesService({
-      pool,
-      clock,
-      registry,
-      notifications,
-      adminIds: config.ADMIN_USER_IDS,
-      botUsername,
-    }),
+    companies,
     diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
-    account: createAccountService({ pool, clock, notifications }),
+    account: createAccountService({ pool, clock, notifications, adminIds: config.ADMIN_USER_IDS }),
     venues: createVenuesService({ pool, clock }),
     menu: createMenuService({ pool, clock }),
     menuImports: createMenuImportsService({
@@ -100,15 +116,33 @@ export function createServices({
       notifications,
     }),
     deals: createDealsService({ pool, clock }),
-    catalog: createCatalogService({ pool, clock, demoMode: config.DEMO_MODE }),
-    recommendations: createRecommendationsService({ pool, clock, consents, demoMode: config.DEMO_MODE }),
+    catalog: createCatalogService({
+      pool,
+      clock,
+      demoMode: config.DEMO_MODE,
+      verificationRequired: config.VENUE_VERIFICATION_REQUIRED,
+    }),
+    recommendations: createRecommendationsService({
+      pool,
+      clock,
+      consents,
+      demoMode: config.DEMO_MODE,
+      verificationRequired: config.VENUE_VERIFICATION_REQUIRED,
+    }),
     insights: createInsightsService({ pool, clock, consents }),
     bookings,
     analytics: createAnalyticsService({ pool, clock, bookings }),
-    reports: createReportsService({ pool, clock, bookings, notifications, messenger, background }),
+    reports,
     demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
     notificationSettings: createNotificationSettingsService({ pool, clock }),
     audit: createAuditService({ pool }),
-    moderation: createModerationService({ pool, clock, notifications, adminIds: config.ADMIN_USER_IDS }),
+    moderation: createModerationService({
+      pool,
+      clock,
+      notifications,
+      adminIds: config.ADMIN_USER_IDS,
+      companies,
+      reports,
+    }),
   };
 }

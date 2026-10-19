@@ -72,6 +72,9 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
       listInvites: notStubbed('companies.listInvites'),
       revokeInvite: notStubbed('companies.revokeInvite'),
       previewInvite: notStubbed('companies.previewInvite'),
+      createOwnerInviteAsAdmin: notStubbed('companies.createOwnerInviteAsAdmin'),
+      listForVerification: notStubbed('companies.listForVerification'),
+      findView: notStubbed('companies.findView'),
       acceptInvite: notStubbed('companies.acceptInvite'),
     },
     venues: {
@@ -150,6 +153,9 @@ export function fakeServices(overrides: Partial<Services> = {}): Services {
     audit: { list: notStubbed('audit.list') },
     moderation: {
       isAdmin: () => false,
+      listCompaniesForReview: notStubbed('moderation.listCompaniesForReview'),
+      decideCompanyVerification: notStubbed('moderation.decideCompanyVerification'),
+      createOwnerInviteAsAdmin: notStubbed('moderation.createOwnerInviteAsAdmin'),
       createComplaint: notStubbed('moderation.createComplaint'),
       listComplaints: notStubbed('moderation.listComplaints'),
       listForReview: notStubbed('moderation.listForReview'),

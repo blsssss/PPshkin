@@ -34,6 +34,21 @@ export const SIGNAL_OPEN_COMPLAINTS = 3;
 export const SIGNAL_REDEEM_RATE = 0.3;
 export const SIGNAL_MIN_BOOKINGS = 10;
 
+export const SIGNAL_NOT_CLOSED_DAYS = 3;
+
+export const COMPANY_NOTE_LIMIT = 500;
+export const COMPANY_REJECTION_REASONS = [
+  'Реквизиты не совпадают с заведением',
+  'Компания не занимается общепитом',
+  'Нет подтверждения полномочий',
+] as const;
+export const COMPANY_REJECTION_OTHER = 'Другое';
+export const COMPANY_DECISIONS = ['verified', 'rejected'] as const;
+export type CompanyDecision = (typeof COMPANY_DECISIONS)[number];
+
+export const EGRUL_URL = 'https://egrul.nalog.ru';
+export const SUPPORT_CONTACT_URL = 'https://max.ru/t516_hakaton_max_bot';
+
 export const VENUE_BLOCKED_GUEST_TEXT = 'Бронь отменена: заведение временно недоступно';
 
 export interface VenueSignalStats {
@@ -42,9 +57,10 @@ export interface VenueSignalStats {
   openComplaints: number;
   bookings: number;
   redeemed: number;
+  notClosedDays: number;
 }
 
-export type SignalReason = 'open_complaints' | 'low_redeem_rate';
+export type SignalReason = 'open_complaints' | 'low_redeem_rate' | 'not_closed_streak';
 
 export interface VenueSignal {
   venueId: number;
@@ -53,6 +69,7 @@ export interface VenueSignal {
   openComplaints: number;
   bookings: number;
   redeemRate: number | null;
+  notClosedDays: number;
 }
 
 export function venueSignal(stats: VenueSignalStats): VenueSignal | null {
@@ -60,6 +77,7 @@ export function venueSignal(stats: VenueSignalStats): VenueSignal | null {
   const reasons: SignalReason[] = [];
   if (stats.openComplaints >= SIGNAL_OPEN_COMPLAINTS) reasons.push('open_complaints');
   if (redeemRate !== null && redeemRate < SIGNAL_REDEEM_RATE) reasons.push('low_redeem_rate');
+  if (stats.notClosedDays >= SIGNAL_NOT_CLOSED_DAYS) reasons.push('not_closed_streak');
   if (reasons.length === 0) return null;
   return {
     venueId: stats.venueId,
@@ -68,6 +86,7 @@ export function venueSignal(stats: VenueSignalStats): VenueSignal | null {
     openComplaints: stats.openComplaints,
     bookings: stats.bookings,
     redeemRate,
+    notClosedDays: stats.notClosedDays,
   };
 }
 

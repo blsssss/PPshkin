@@ -12,14 +12,14 @@ import type {
 import { IsoDateTime, iso } from './common.ts';
 import { toVenue, VenueSchema } from './venues.ts';
 
-const VERIFICATIONS = ['unverified', 'pending', 'verified', 'rejected'] as const;
+export const VERIFICATIONS = ['unverified', 'pending', 'verified', 'rejected'] as const;
 
 const RoleSchema = z.enum(ROLES).meta({
   id: 'Role',
   description: 'Роль сотрудника: owner - владелец, manager - управляющий, cashier - кассир',
 });
 
-const VerificationSchema = z.enum(VERIFICATIONS).meta({
+export const VerificationSchema = z.enum(VERIFICATIONS).meta({
   id: 'Verification',
   description:
     'Проверка компании: unverified - без реквизитов, pending - на проверке у модератора, verified - подтверждена, rejected - отклонена',
@@ -170,6 +170,11 @@ export const WorkplaceSchema = z
       .array(z.enum(PERMISSIONS))
       .describe('Права роли, их же проверяет сервер на каждом запросе'),
     venueScoped: z.boolean().describe('Доступ только к этому заведению, а не ко всем заведениям компании'),
+    hiddenUntilVerified: z
+      .boolean()
+      .describe(
+        'true: включена обязательная проверка, компания ещё не проверена и гости заведение не видят. Покажите баннер «Заведение появится у гостей после проверки»',
+      ),
   })
   .meta({ id: 'Workplace', description: 'Заведение, с которым работает пользователь, и его роль' });
 
@@ -257,5 +262,6 @@ export function toWorkplace(place: Workplace): z.infer<typeof WorkplaceSchema> {
     role: place.role,
     permissions: [...place.permissions],
     venueScoped: place.venueScoped,
+    hiddenUntilVerified: place.hiddenUntilVerified,
   };
 }

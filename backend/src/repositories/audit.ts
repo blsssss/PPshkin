@@ -4,6 +4,7 @@ import type { AuditAction, AuditChannel, AuditTarget } from '../domain/audit.ts'
 
 export interface AuditEntry {
   venueId: number | null;
+  companyId?: number | null;
   actorUserId: number;
   action: AuditAction;
   target: { type: AuditTarget; id: number | null };
@@ -32,10 +33,11 @@ export interface AuditPage {
 
 export async function record(db: Queryable, entry: AuditEntry, now: Date): Promise<void> {
   await db.query(
-    `insert into audit_events (venue_id, actor_user_id, action, target_type, target_id, details, created_at)
-     values ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+    `insert into audit_events (venue_id, company_id, actor_user_id, action, target_type, target_id, details, created_at)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
     [
       entry.venueId,
+      entry.companyId ?? null,
       entry.actorUserId,
       entry.action,
       entry.target.type,
