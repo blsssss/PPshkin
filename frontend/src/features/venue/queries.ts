@@ -8,6 +8,7 @@ import { api } from '../../api/index.ts';
 import type { MenuImport, MenuItem, MenuItemInput, Venue, VenueInput } from './model.ts';
 
 const VENUE_KEY = ['venue'] as const;
+const WORKPLACES_KEY = ['me', 'workplaces'] as const;
 export const MENU_KEY = ['venue', 'menu'] as const;
 
 export function importKey(id: number) {
@@ -26,6 +27,14 @@ export function useVenue() {
       }
     },
   });
+}
+
+export function useHiddenUntilVerified(venueId: number): boolean {
+  const workplaces = useQuery({
+    queryKey: WORKPLACES_KEY,
+    queryFn: async () => unwrap(await api.GET('/api/v1/me/workplaces')).items,
+  });
+  return workplaces.data?.some((place) => place.venue.id === venueId && place.hiddenUntilVerified) ?? false;
 }
 
 export function useReloadVenue(): () => Promise<void> {
