@@ -7,6 +7,7 @@ import { formatDistance, formatKcal } from '../../shared/format.ts';
 import { Chip, ChipRow } from '../../shared/ui/Chip.tsx';
 import { cx } from '../../shared/ui/cx.ts';
 import { Notice } from '../../shared/ui/Notice.tsx';
+import { Photo } from '../../shared/ui/Photo.tsx';
 import { Page } from '../../shared/ui/Page.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import { ScreenState } from '../../shared/ui/ScreenState.tsx';
@@ -181,6 +182,7 @@ export function DealsScreen() {
                 void navigate(`/venues/${venue.id}`);
               }}
             >
+              <Photo url={item.photoUrl ?? venue.photoUrl} alt="" shape="wide" />
               <span className={styles.dish}>{deal.itemName}</span>
               <span className={styles.venueLine}>
                 {venue.name}
@@ -297,6 +299,7 @@ export function VenuesScreen() {
                 void navigate(`/venues/${venue.id}`);
               }}
             >
+              <Photo url={venue.photoUrl} alt="" shape="wide" />
               <span className={styles.venueName}>{venue.name}</span>
               <span className={styles.venueMeta}>
                 {VENUE_CATEGORY_LABELS[venue.category]}

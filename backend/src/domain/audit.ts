@@ -8,6 +8,8 @@ export type AuditAction =
   | 'menu_item.archive'
   | 'menu_import.apply'
   | 'venue.update'
+  | 'venue.photo'
+  | 'menu_item.photo'
   | 'staff.invite'
   | 'staff.invite_revoke'
   | 'staff.join'

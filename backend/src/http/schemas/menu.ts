@@ -7,6 +7,17 @@ const Tags = z.array(z.enum(TAGS));
 const Grams = z.number().describe('Граммы на порцию');
 const NullableGrams = Grams.nullable();
 
+export const PhotoUrl = z
+  .string()
+  .nullable()
+  .describe(
+    'Путь к фото без авторизации: /api/v1/photos/{хэш}.webp, размер карточки 640 px; полный размер 1280 px по тому же пути с ?size=large. null - фото нет, оставьте прежний вид карточки',
+  );
+
+export function photoUrl(key: string | null): string | null {
+  return key === null ? null : `/api/v1/photos/${key}.webp`;
+}
+
 export const MenuItemSchema = z
   .object({
     id: z.number().int(),
@@ -24,6 +35,7 @@ export const MenuItemSchema = z
       .describe('venue - калорийность указало заведение, estimate - оценка при распознавании меню'),
     tags: Tags,
     isAvailable: z.boolean().describe('false - позиция скрыта от гостей, но остаётся в меню заведения'),
+    photoUrl: PhotoUrl,
   })
   .meta({ id: 'MenuItem', description: 'Позиция меню заведения' });
 
@@ -125,6 +137,7 @@ export function toMenuItem(item: MenuItem): z.infer<typeof MenuItemSchema> {
     nutritionSource: item.nutritionSource,
     tags: item.tags,
     isAvailable: item.isAvailable,
+    photoUrl: photoUrl(item.photoKey),
   };
 }
 

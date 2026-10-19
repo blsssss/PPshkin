@@ -20,7 +20,7 @@ const AuditEventSchema = z
     action: z
       .string()
       .describe(
-        'Действие: booking.redeem, deal.create, deal.update, deal.cancel, menu_item.create, menu_item.update, menu_item.archive, menu_import.apply, venue.update',
+        'Действие: booking.redeem, deal.create, deal.update, deal.cancel, menu_item.create, menu_item.update, menu_item.archive, menu_import.apply, venue.update, venue.photo, menu_item.photo',
       ),
     actor: z
       .object({

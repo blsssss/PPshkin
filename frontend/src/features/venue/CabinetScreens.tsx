@@ -17,6 +17,8 @@ import { Field } from '../../shared/ui/Field.tsx';
 import { Label } from '../../shared/ui/Label.tsx';
 import { Notice } from '../../shared/ui/Notice.tsx';
 import { Page } from '../../shared/ui/Page.tsx';
+import { Photo } from '../../shared/ui/Photo.tsx';
+import { PhotoField } from '../../shared/ui/PhotoField.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import { ScreenState, type ScreenAction } from '../../shared/ui/ScreenState.tsx';
 import { ShareButton } from '../../shared/ui/ShareButton.tsx';
@@ -45,6 +47,7 @@ import {
   useReloadVenue,
   useSaveVenue,
   useVenue,
+  useVenuePhoto,
   useVenueMenu,
   useVenueNotFoundRedirect,
 } from './queries.ts';
@@ -103,6 +106,7 @@ function VenueHome({ venue }: { venue: Venue }) {
     <>
       {hidden && <Notice>Заведение появится у гостей после проверки</Notice>}
       <section className={styles.head} aria-label="Заведение">
+        <Photo url={venue.photoUrl} alt={venue.name} />
         <p className={styles.meta}>
           {VENUE_CATEGORY_LABELS[venue.category]}, {venue.address}
         </p>
@@ -228,6 +232,20 @@ function sameForm(a: VenueForm, b: VenueForm): boolean {
   return (Object.keys(a) as VenueField[]).every((key) => a[key] === b[key]);
 }
 
+function VenuePhoto({ venue }: { venue: Venue }) {
+  const photo = useVenuePhoto();
+  return (
+    <PhotoField
+      label="Фото заведения"
+      url={venue.photoUrl}
+      alt={venue.name}
+      hint="Фото увидят гости в списке заведений и на карточке заведения"
+      onUpload={photo.upload}
+      onRemove={photo.remove}
+    />
+  );
+}
+
 function VenueSettingsForm({ venue }: { venue: Venue | null }) {
   const leave = useLeave();
   const toast = useToast();
@@ -307,6 +325,7 @@ function VenueSettingsForm({ venue }: { venue: Venue | null }) {
 
   return (
     <>
+      {venue !== null && <VenuePhoto venue={venue} />}
       <Field
         label="Название"
         value={form.name}

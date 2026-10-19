@@ -1,3 +1,4 @@
+import { memoryPhotoStorage } from '../../test/photo-storage.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedBooking, seedOffer } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
@@ -111,7 +112,7 @@ beforeAll(async () => {
       expiresAt: at('2026-09-26T09:00:00Z'),
     });
   }
-  await createMenuService({ pool, clock }).update(
+  await createMenuService({ pool, clock, storage: memoryPhotoStorage() }).update(
     { userId: OWNER },
     achma.id,
     { name: 'Ачма с сыром' },

@@ -718,6 +718,13 @@ components:
         isAvailable:
           type: boolean
           description: false - позиция скрыта от гостей, но остаётся в меню заведения
+        photoUrl:
+          description: "Путь к фото без авторизации: /api/v1/photos/{хэш}.webp, размер
+            карточки 640 px; полный размер 1280 px по тому же пути с
+            ?size=large. null - фото нет, оставьте прежний вид карточки"
+          type:
+            - string
+            - "null"
       required:
         - id
         - name
@@ -732,6 +739,7 @@ components:
         - nutritionSource
         - tags
         - isAvailable
+        - photoUrl
       additionalProperties: false
       description: Позиция меню заведения
     ParsedMenuItem:
@@ -936,6 +944,13 @@ components:
         isDemo:
           type: boolean
           description: "Тестовое заведение: покажите пометку «Заведение и меню тестовые»"
+        photoUrl:
+          description: "Путь к фото без авторизации: /api/v1/photos/{хэш}.webp, размер
+            карточки 640 px; полный размер 1280 px по тому же пути с
+            ?size=large. null - фото нет, оставьте прежний вид карточки"
+          type:
+            - string
+            - "null"
       required:
         - id
         - name
@@ -946,6 +961,7 @@ components:
         - closesAt
         - timezone
         - isDemo
+        - photoUrl
       additionalProperties: false
       description: Заведение
     VenueCard:
@@ -3024,7 +3040,7 @@ components:
           type: string
           description: "Действие: booking.redeem, deal.create, deal.update, deal.cancel,
             menu_item.create, menu_item.update, menu_item.archive,
-            menu_import.apply, venue.update"
+            menu_import.apply, venue.update, venue.photo, menu_item.photo"
         actor:
           anyOf:
             - type: object
@@ -6328,6 +6344,423 @@ paths:
           headers: *a3
         "403":
           description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/photo:
+    put:
+      operationId: setVenuePhoto
+      summary: Загрузить или заменить фото заведения
+      tags:
+        - venue
+      description: "Фото в multipart/form-data, поле image: JPEG, PNG или WebP до 5
+        МБ, тип определяется по содержимому. На сервере фото перекодируется в
+        WebP без метаданных (EXIF и GPS удаляются), делаются размеры 640 и 1280
+        px по ширине. Новое фото заменяет прежнее. Нужно право venue.edit. Коды
+        ошибок: image_required, image_empty, invalid_multipart (400, приложите
+        одно фото в поле image), image_too_large, upload_too_many_parts (413,
+        пришлите одно фото до 5 МБ), multipart_required, unsupported_image_type
+        (415, пришлите JPEG, PNG или WebP), image_unreadable (422, файл не
+        удалось разобрать или сторона меньше 100 px), venue_not_found (404,
+        заведения ещё нет или оно не из ваших рабочих мест), venue_required
+        (400, у вас несколько заведений, передайте venueId), venue_forbidden
+        (403, роль не позволяет это действие)."
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Фото JPEG, PNG или WebP до 10 МБ
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+      security: *a4
+      responses:
+        "200":
+          description: Заведение с адресом фото в photoUrl
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: removeVenuePhoto
+      summary: Удалить фото заведения
+      tags:
+        - venue
+      description: "Файл удаляется с сервера, если им не пользуется другая запись. Без
+        фото операция ничего не меняет. Нужно право venue.edit. Коды ошибок:
+        venue_not_found (404, заведения ещё нет или оно не из ваших рабочих
+        мест), venue_required (400, у вас несколько заведений, передайте
+        venueId), venue_forbidden (403, роль не позволяет это действие)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+      security: *a4
+      responses:
+        "200":
+          description: Заведение, photoUrl равен null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/venue/menu/items/{id}/photo:
+    put:
+      operationId: setMenuItemPhoto
+      summary: Загрузить или заменить фото позиции меню
+      tags:
+        - venue
+      description: "Фото в multipart/form-data, поле image: JPEG, PNG или WebP до 5
+        МБ, тип определяется по содержимому. На сервере фото перекодируется в
+        WebP без метаданных (EXIF и GPS удаляются), делаются размеры 640 и 1280
+        px по ширине. Новое фото заменяет прежнее. Фото показывается и в горящем
+        предложении на эту позицию. Нужно право menu.edit. Коды ошибок:
+        menu_item_not_found (404, позиции нет или она из другого заведения),
+        image_required, image_empty, invalid_multipart (400, приложите одно фото
+        в поле image), image_too_large, upload_too_many_parts (413, пришлите
+        одно фото до 5 МБ), multipart_required, unsupported_image_type (415,
+        пришлите JPEG, PNG или WebP), image_unreadable (422, файл не удалось
+        разобрать или сторона меньше 100 px), venue_not_found (404, заведения
+        ещё нет или оно не из ваших рабочих мест), venue_required (400, у вас
+        несколько заведений, передайте venueId), venue_forbidden (403, роль не
+        позволяет это действие)."
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Фото JPEG, PNG или WebP до 10 МБ
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Позиция с адресом фото в photoUrl
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Payload Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: removeMenuItemPhoto
+      summary: Удалить фото позиции меню
+      tags:
+        - venue
+      description: "Файл удаляется с сервера, если им не пользуется другая запись.
+        Нужно право menu.edit. Коды ошибок: menu_item_not_found (404, позиции
+        нет или она из другого заведения), venue_not_found (404, заведения ещё
+        нет или оно не из ваших рабочих мест), venue_required (400, у вас
+        несколько заведений, передайте venueId), venue_forbidden (403, роль не
+        позволяет это действие)."
+      parameters:
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: query
+          name: venueId
+          required: false
+          description: Заведение, с которым работает сотрудник; обязателен, если у
+            пользователя несколько рабочих мест
+        - schema:
+            type: integer
+            exclusiveMinimum: 0
+          in: path
+          name: id
+          required: true
+      security: *a4
+      responses:
+        "200":
+          description: Позиция, photoUrl равен null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a3
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          headers: *a2
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/photos/{file}:
+    get:
+      operationId: getPhoto
+      summary: Фото заведения или позиции меню
+      tags:
+        - photos
+      description: "Открытый метод без авторизации: фото еды и интерьера не
+        персональные данные. Адрес берите из поля photoUrl, путь содержит только
+        хэш содержимого и не раскрывает идентификаторы заведений. Ответ
+        кэшируется на год (Cache-Control: public, max-age=31536000, immutable):
+        при замене фото адрес меняется. Коды ошибок: photo_not_found (404, фото
+        удалено или адрес неверный), validation_failed (400, адрес не из
+        photoUrl или неизвестный size)."
+      parameters:
+        - schema:
+            default: card
+            type: string
+            enum:
+              - card
+              - large
+          in: query
+          name: size
+          required: false
+          description: card - 640 px по ширине, large - 1280 px
+        - schema:
+            type: string
+            pattern: ^[0-9a-f]{64}\.webp$
+          in: path
+          name: file
+          required: true
+          description: Хэш фото из photoUrl и расширение .webp
+      responses:
+        "200":
+          description: Изображение WebP
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Bad Request
           content:
             application/problem+json:
               schema:
@@ -9708,6 +10141,8 @@ tags:
     description: Дневник питания
   - name: venue
     description: Кабинет заведения
+  - name: photos
+    description: Фото заведений и позиций меню
   - name: company
     description: Компании, сотрудники и приглашения
   - name: catalog

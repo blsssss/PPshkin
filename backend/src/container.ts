@@ -2,11 +2,14 @@ import { deriveSessionSecret } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Pool } from './db/pool.ts';
 import type { DemoDataset } from './demo/dataset.ts';
+import { createDemoPhotos } from './demo/photos.ts';
+import { createDiskPhotoStorage } from './photos/disk-storage.ts';
 import { createDadataRegistry } from './integrations/dadata/client.ts';
 import { silentNotifications } from './notifications/silent-notifier.ts';
 import type { CompanyRegistry } from './ports/company-registry.ts';
 import type { Messenger } from './ports/messenger.ts';
 import type { Notifications } from './ports/notifier.ts';
+import type { PhotoStorage } from './ports/photo-storage.ts';
 import type { Recognition } from './ports/recognition.ts';
 import { createAccountService } from './services/account.ts';
 import { createAnalyticsService } from './services/analytics.ts';
@@ -27,6 +30,7 @@ import { createMenuService } from './services/menu.ts';
 import { createMetricsService } from './services/metrics.ts';
 import { createModerationService } from './services/moderation.ts';
 import { createNotificationSettingsService } from './services/notification-settings.ts';
+import { createPhotosService } from './services/photos.ts';
 import { createProfileService } from './services/profile.ts';
 import { createRecommendationsService } from './services/recommendations.ts';
 import { createReportsService } from './services/reports.ts';
@@ -40,6 +44,7 @@ export interface ContainerOptions {
   clock: Clock;
   recognition: Recognition;
   background: BackgroundTasks;
+  storage?: PhotoStorage;
   notifications?: Notifications;
   demoDataset?: DemoDataset | null;
   registry?: CompanyRegistry;
@@ -53,6 +58,7 @@ export function createServices({
   clock,
   recognition,
   background,
+  storage = createDiskPhotoStorage(config.PHOTOS_DIR),
   notifications = silentNotifications,
   demoDataset = null,
   registry = createDadataRegistry({ apiKey: config.DADATA_API_KEY ?? null }),
@@ -107,7 +113,8 @@ export function createServices({
     diary: createDiaryService({ pool, dishes: recognition.dishes, clock, consents }),
     account: createAccountService({ pool, clock, notifications, adminIds: config.ADMIN_USER_IDS }),
     venues: createVenuesService({ pool, clock }),
-    menu: createMenuService({ pool, clock }),
+    menu: createMenuService({ pool, clock, storage }),
+    photos: createPhotosService({ pool, clock, storage }),
     menuImports: createMenuImportsService({
       pool,
       clock,
@@ -133,7 +140,13 @@ export function createServices({
     bookings,
     analytics: createAnalyticsService({ pool, clock, bookings }),
     reports,
-    demo: createDemoService({ pool, clock, consents, dataset: demoDataset }),
+    demo: createDemoService({
+      pool,
+      clock,
+      consents,
+      dataset: demoDataset,
+      photos: demoDataset ? createDemoPhotos(storage) : null,
+    }),
     notificationSettings: createNotificationSettingsService({ pool, clock }),
     audit: createAuditService({ pool }),
     moderation: createModerationService({

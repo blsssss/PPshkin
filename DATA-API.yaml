@@ -195,7 +195,7 @@ checks:
     expect:
       - status: 200
         contentType: application/json
-        requiredFields: [venue, menu, deals]
+        requiredFields: [venue, menu, deals, venue.photoUrl, "menu[].photoUrl"]
   - id: guest-booking-create
     title: Бронь капучино в кофейне «Пенка»
     method: POST
@@ -254,7 +254,7 @@ checks:
     expect:
       - status: 200
         contentType: application/json
-        requiredFields: [id, name, isDemo]
+        requiredFields: [id, name, isDemo, photoUrl]
   - id: venue-menu
     title: Меню заведения
     method: GET

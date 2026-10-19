@@ -1,3 +1,4 @@
+import { memoryPhotoStorage } from '../../test/photo-storage.ts';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedBooking, seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
@@ -20,7 +21,7 @@ const pool = testPool();
 const START = '2026-09-25T09:00:00Z';
 const clock = fixedClock(START);
 const consents = createConsentsService({ pool, clock });
-const menu = createMenuService({ pool, clock });
+const menu = createMenuService({ pool, clock, storage: memoryPhotoStorage() });
 
 const OWNER = 202;
 const OTHER_OWNER = 303;

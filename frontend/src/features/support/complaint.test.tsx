@@ -20,6 +20,7 @@ const VENUE: Schemas['Venue'] = {
   closesAt: '22:00',
   timezone: 'Europe/Moscow',
   isDemo: true,
+  photoUrl: null,
 };
 
 const ITEM: Schemas['MenuItem'] = {
@@ -36,6 +37,7 @@ const ITEM: Schemas['MenuItem'] = {
   nutritionSource: 'venue',
   tags: ['dessert'],
   isAvailable: true,
+  photoUrl: null,
 };
 
 const BOOKING: Booking = {

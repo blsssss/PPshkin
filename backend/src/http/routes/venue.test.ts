@@ -63,6 +63,7 @@ const menuItemDto = {
   nutritionSource: 'venue',
   tags: ['dessert', 'sweet'],
   isAvailable: true,
+  photoUrl: null,
 };
 
 const dealDto = {
@@ -198,6 +199,7 @@ describe('venue profile routes', () => {
       closesAt: '22:00',
       timezone: 'Europe/Moscow',
       isDemo: false,
+      photoUrl: null,
     });
     expect(create).toHaveBeenCalledWith(
       OWNER_ID,

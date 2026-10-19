@@ -75,6 +75,7 @@ export interface Venue {
   closesAt: string;
   timezone: string;
   isDemo: boolean;
+  photoKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +92,7 @@ export interface MenuItem extends Macros {
   nutritionSource: NutritionSource;
   tags: Tag[];
   isAvailable: boolean;
+  photoKey: string | null;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

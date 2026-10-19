@@ -16,6 +16,7 @@ import type { MenuService } from './menu.ts';
 import type { MetricsService } from './metrics.ts';
 import type { ModerationService } from './moderation.ts';
 import type { NotificationSettingsService } from './notification-settings.ts';
+import type { PhotosService } from './photos.ts';
 import type { ProfileService } from './profile.ts';
 import type { RecommendationsService } from './recommendations.ts';
 import type { ReportsService } from './reports.ts';
@@ -33,6 +34,7 @@ export interface Services {
   venues: VenuesService;
   menu: MenuService;
   menuImports: MenuImportsService;
+  photos: PhotosService;
   deals: DealsService;
   catalog: CatalogService;
   recommendations: RecommendationsService;

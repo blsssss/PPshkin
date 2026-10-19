@@ -1,0 +1,19 @@
+.photo {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--ppsh-panel);
+}
+
+.wide {
+  aspect-ratio: 16 / 9;
+}
+
+.thumb {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  aspect-ratio: auto;
+}

@@ -27,6 +27,7 @@ import * as meals from '../repositories/meals.ts';
 import * as menuItems from '../repositories/menu-items.ts';
 import * as users from '../repositories/users.ts';
 import * as venues from '../repositories/venues.ts';
+import type { DemoPhotos } from '../demo/photos.ts';
 import type { Clock } from '../shared/clock.ts';
 import { conflict, forbidden, notFound } from '../shared/errors.ts';
 import { addDays, dayRange, localDate } from '../shared/time.ts';
@@ -62,6 +63,7 @@ export interface DemoDependencies {
   clock: Clock;
   consents: Pick<ConsentsService, 'requirePersonalData'>;
   dataset: DemoDataset | null;
+  photos?: DemoPhotos | null;
 }
 
 interface PricedItem {
@@ -286,7 +288,12 @@ async function seedAccounts(db: Queryable, dataset: DemoDataset, now: Date): Pro
   await users.setLocation(db, DEMO_ACCOUNTS.guest.userId, location, now);
 }
 
-async function seedCatalog(db: Queryable, dataset: DemoDataset, now: Date): Promise<void> {
+async function seedCatalog(
+  db: Queryable,
+  dataset: DemoDataset,
+  photos: DemoPhotos | null,
+  now: Date,
+): Promise<void> {
   const items = dataset.venues.flatMap((venue) => venue.menu.map((item) => ({ ...item, venueId: venue.id })));
   const venueIds = dataset.venues.map((venue) => venue.id);
   const ownerIds = dataset.venues.flatMap((venue) => (venue.ownerId === null ? [] : [venue.ownerId]));
@@ -299,9 +306,27 @@ async function seedCatalog(db: Queryable, dataset: DemoDataset, now: Date): Prom
     items.map((item) => item.id),
     now,
   );
+  if (!photos) return;
+  const keys = await photos.keys();
+  await demo.setPhotoKeys(
+    db,
+    'venues',
+    dataset.venues.map((venue) => ({ id: venue.id, key: keys.venue[venue.category] })),
+  );
+  await demo.setPhotoKeys(
+    db,
+    'menu_items',
+    items.map((item) => ({ id: item.id, key: keys.item[item.category] })),
+  );
 }
 
-export function createDemoService({ pool, clock, consents, dataset }: DemoDependencies): DemoService {
+export function createDemoService({
+  pool,
+  clock,
+  consents,
+  dataset,
+  photos = null,
+}: DemoDependencies): DemoService {
   function requireDataset(): DemoDataset {
     if (!dataset) throw demoModeDisabled();
     return dataset;
@@ -323,7 +348,7 @@ export function createDemoService({ pool, clock, consents, dataset }: DemoDepend
     seed: () =>
       lockedTransaction(async (db, data, now) => {
         await seedAccounts(db, data, now);
-        await seedCatalog(db, data, now);
+        await seedCatalog(db, data, photos, now);
         return refreshWithin(db, data, now);
       }),
 

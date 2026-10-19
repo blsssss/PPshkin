@@ -49,6 +49,7 @@ describe('venues repository', () => {
       companyId: company.id,
       ...fields,
       isDemo: false,
+      photoKey: null,
       createdAt,
       updatedAt: createdAt,
     });

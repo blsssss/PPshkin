@@ -15,12 +15,13 @@ export interface VenueRow {
   closes_at: string;
   timezone: string;
   is_demo: boolean;
+  photo_key: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export const VENUE_COLUMNS = `id, owner_id, company_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
-  created_at, updated_at`;
+  photo_key, created_at, updated_at`;
 
 export function mapVenue(row: VenueRow): Venue {
   return {
@@ -35,6 +36,7 @@ export function mapVenue(row: VenueRow): Venue {
     closesAt: row.closes_at.slice(0, 5),
     timezone: row.timezone,
     isDemo: row.is_demo,
+    photoKey: row.photo_key,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -114,6 +116,20 @@ export async function update(db: Queryable, id: number, changes: VenueChanges, n
       changes.timezone ?? null,
       now,
     ],
+  );
+  return mapVenue(row);
+}
+
+export async function setPhotoKey(
+  db: Queryable,
+  id: number,
+  photoKey: string | null,
+  now: Date,
+): Promise<Venue> {
+  const row = await one<VenueRow>(
+    db,
+    `update venues set photo_key = $2, updated_at = $3 where id = $1 returning ${VENUE_COLUMNS}`,
+    [id, photoKey, now],
   );
   return mapVenue(row);
 }
@@ -206,8 +222,8 @@ export async function insertDemoCopy(
   const row = await maybeOne<VenueRow>(
     db,
     `insert into venues (owner_id, name, address, category, lat, lon, opens_at, closes_at, timezone, is_demo,
-                         demo_source_id, created_at, updated_at)
-     select $2, name, address, category, lat, lon, opens_at, closes_at, timezone, true, id, $3, $3
+                         demo_source_id, photo_key, created_at, updated_at)
+     select $2, name, address, category, lat, lon, opens_at, closes_at, timezone, true, id, photo_key, $3, $3
        from venues
       where id = $1
      on conflict (owner_id) where owner_id is not null do nothing

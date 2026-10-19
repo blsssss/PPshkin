@@ -9,6 +9,7 @@ import { formatDistance, formatKcal, formatPrice } from '../../shared/format.ts'
 import { distanceMeters, useDevicePoint } from '../../shared/geo/devicePoint.ts';
 import { Label } from '../../shared/ui/Label.tsx';
 import { Page } from '../../shared/ui/Page.tsx';
+import { Photo } from '../../shared/ui/Photo.tsx';
 import { ScreenHeader } from '../../shared/ui/ScreenHeader.tsx';
 import { ScreenState } from '../../shared/ui/ScreenState.tsx';
 import { ShareButton } from '../../shared/ui/ShareButton.tsx';
@@ -86,6 +87,7 @@ export function VenueScreen() {
       {data !== undefined && (
         <>
           <section className={styles.venueHead}>
+            <Photo url={data.venue.photoUrl} alt="" size="large" shape="wide" />
             <p className={styles.venueMeta}>
               {VENUE_CATEGORY_LABELS[data.venue.category]}, {data.venue.address}
             </p>
@@ -125,6 +127,11 @@ export function VenueScreen() {
               <div className={styles.cards}>
                 {data.deals.map((deal) => (
                   <article key={deal.id} className={styles.card} aria-label={deal.itemName}>
+                    <Photo
+                      url={data.menu.find((entry) => entry.id === deal.menuItemId)?.photoUrl}
+                      alt=""
+                      shape="wide"
+                    />
                     <p className={styles.dish}>{deal.itemName}</p>
                     <DealPrice deal={deal} venue={data.venue} priceRub={deal.priceRub} now={now} />
                     <Button
@@ -158,6 +165,7 @@ export function VenueScreen() {
                 <ul className={styles.menu}>
                   {items.map((item) => (
                     <li key={item.id} className={styles.menuItem}>
+                      <Photo url={item.photoUrl} alt="" shape="wide" />
                       <div className={styles.menuHead}>
                         <span className={styles.menuName}>{item.name}</span>
                         <span className={styles.price}>{formatPrice(item.priceRub)}</span>

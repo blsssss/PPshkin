@@ -80,6 +80,7 @@ describe('catalog routes', () => {
             closesAt: '22:00',
             timezone: 'Europe/Moscow',
             isDemo: false,
+            photoUrl: null,
           },
           distanceM: 420,
           openNow: true,

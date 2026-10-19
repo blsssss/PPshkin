@@ -23,6 +23,8 @@ COPY migrations ./migrations
 COPY testdata/*.json ./testdata/
 COPY certs ./certs
 COPY package.json ./
+ENV PHOTOS_DIR=/var/lib/ppshkin/photos
+RUN mkdir -p /var/lib/ppshkin/photos && chown node:node /var/lib/ppshkin/photos
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:3000/health || exit 1

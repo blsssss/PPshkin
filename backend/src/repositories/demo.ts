@@ -253,3 +253,16 @@ export async function insertHistoryBooking(db: Queryable, booking: HistoryBookin
     ],
   );
 }
+
+export async function setPhotoKeys(
+  db: Queryable,
+  table: 'venues' | 'menu_items',
+  photos: readonly { id: number; key: string }[],
+): Promise<void> {
+  await db.query(
+    `update ${table} t set photo_key = p.key
+       from jsonb_to_recordset($1::jsonb) as p (id bigint, key text)
+      where t.id = p.id and t.photo_key is distinct from p.key`,
+    [jsonb(photos)],
+  );
+}

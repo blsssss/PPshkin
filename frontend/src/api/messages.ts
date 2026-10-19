@@ -17,6 +17,7 @@ const MESSAGES: Record<string, string> = {
   image_empty: 'Выберите фото',
   invalid_multipart: 'Не удалось отправить фото, попробуйте ещё раз',
   image_too_large: 'Фото больше 10 МБ, выберите файл поменьше',
+  image_unreadable: 'Не удалось прочитать фото или оно слишком маленькое, выберите другое',
   upload_too_many_parts: 'Отправьте одно фото за раз',
   unsupported_image_type: 'Нужен файл JPEG, PNG или WebP',
   multipart_required: 'Нужен файл JPEG, PNG или WebP',

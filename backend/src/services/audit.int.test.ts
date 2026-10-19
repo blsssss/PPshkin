@@ -1,3 +1,4 @@
+import { memoryPhotoStorage } from '../../test/photo-storage.ts';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedGuest } from '../../test/bookings.ts';
 import { fixedClock } from '../../test/clock.ts';
@@ -27,7 +28,7 @@ const notifications = recordingNotifications().notifications;
 const consents = createConsentsService({ pool, clock });
 const bookings = createBookingsService({ pool, clock, consents, notifications });
 const deals = createDealsService({ pool, clock });
-const menu = createMenuService({ pool, clock });
+const menu = createMenuService({ pool, clock, storage: memoryPhotoStorage() });
 const venues = createVenuesService({ pool, clock });
 const menus: MenuParser = {
   fromPhoto: () => Promise.reject(new Error('photos are not used here')),

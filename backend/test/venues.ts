@@ -26,6 +26,7 @@ export const sampleVenue: Venue = {
   closesAt: '22:00',
   timezone: 'Europe/Moscow',
   isDemo: false,
+  photoKey: null,
   createdAt: SEEDED_AT,
   updatedAt: SEEDED_AT,
 };
@@ -45,6 +46,7 @@ export const sampleMenuItem: MenuItem = {
   nutritionSource: 'venue',
   tags: ['dessert', 'sweet'],
   isAvailable: true,
+  photoKey: null,
   archivedAt: null,
   createdAt: SEEDED_AT,
   updatedAt: SEEDED_AT,

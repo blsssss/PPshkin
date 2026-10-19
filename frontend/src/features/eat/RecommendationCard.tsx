@@ -2,6 +2,7 @@ import { Button } from '@maxhub/max-ui';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { formatDistance, formatKcal } from '../../shared/format.ts';
+import { Photo } from '../../shared/ui/Photo.tsx';
 import { VENUE_CATEGORY_LABELS } from '../../shared/vocabulary.ts';
 import { bookingLink, type RecommendationItem } from './model.ts';
 import { DealPrice, DemoBadge } from './parts.tsx';
@@ -68,6 +69,7 @@ export function RecommendationCard({
   const navigate = useNavigate();
   return (
     <article className={styles.card} aria-label={item.item.name}>
+      <Photo url={item.item.photoUrl ?? item.venue.photoUrl} alt="" shape="wide" />
       <h3 className={styles.headline}>{item.headline}</h3>
       <p className={styles.dish}>{item.item.name}</p>
       <p className={styles.venueLine}>
