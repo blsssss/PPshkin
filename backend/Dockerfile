@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine3.24 AS base
+FROM node:24.22.1-alpine3.24 AS base
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 
@@ -11,7 +11,7 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:24.21.0-alpine3.24 AS runtime
+FROM node:24.22.1-alpine3.24 AS runtime
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 ENV NODE_ENV=production
 ENV NODE_EXTRA_CA_CERTS=/app/certs/russian_trusted_root_ca.pem
